@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mc2"
+version = "0.1.1"
+authors = [
+  { name="Hendrik Vater", email="vater@lea.uni-paderborn.de" },
+]
+description = "Drafts for magnet-challenge-2"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+]
+dependencies = [
+    "numpy>=2.2.4",
+    "matplotlib>=3.10.1",
+    "tqdm>=4.66.4",
+    "jax[cuda12]==0.5.3; sys_platform == 'linux'",
+    "jax==0.5.3; sys_platform == 'win32'",
+    "jaxlib==0.5.3",
+    "equinox==0.12.1",
+    "diffrax==0.7.0",
+    "optax==0.2.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/hvater/DMPE"
+
+[tool.setuptools.packages.find]
+where = ["."]  # list of folders that contain the packages (["."] by default)
+include = ["src*"]  # package names should match these glob patterns (["*"] by default)
+
+[tool.pytest.ini_options]
+pythonpath = [
+    "."
+]
