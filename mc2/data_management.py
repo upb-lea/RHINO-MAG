@@ -124,6 +124,8 @@ class MaterialSet(eqx.Module):
         """Filter the material set by frequencies."""
         filtered_frequency_sets = []
 
+        frequencies = jnp.array(frequencies)
+
         for frequency_set in self.frequency_sets:
             if frequency_set.frequency in frequencies:
                 filtered_frequency_sets.append(frequency_set)
@@ -195,7 +197,7 @@ class DataSet(eqx.Module):
 
     def filter_frequencies(self, frequencies: list[float]) -> "DataSet":
         """Filter the dataset by frequencies."""
-        return DataSet(material_set.filter_frequencies(frequencies) for material_set in self.material_sets)
+        return DataSet([material_set.filter_frequencies(frequencies) for material_set in self.material_sets])
 
     def filter_materials(self, material_names: list[str]) -> "DataSet":
         """Filter the dataset by material names."""
