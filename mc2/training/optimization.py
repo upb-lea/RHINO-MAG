@@ -4,14 +4,12 @@ Admittedly, it could be very specific for each model, but this is the starting p
 which to build. Might be fused with the models themselves sooner or later.
 """
 
-from typing import TYPE_CHECKING, Tuple
+from typing import Tuple
 
 import jax
 import jax.numpy as jnp
 import equinox as eqx
-
-if TYPE_CHECKING:
-    import optax
+import optax
 
 
 @eqx.filter_value_and_grad
