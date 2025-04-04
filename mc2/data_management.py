@@ -31,3 +31,38 @@ class FrequencySet(eqx.Module):
             B=jnp.array(data_dict["B"]),
             T=jnp.array(data_dict["T"]),
         )
+
+
+class MaterialSet(eqx.Module):
+    """Class to store measurement data for a single material but with variable
+    frequencies and temperatures.
+
+    Args:
+        material_name (str): Name of the material as a scalar string.
+        frequency_sets (list[FrequencySet]): List of FrequencySet objects.
+        frequencies (jax.Array): Frequencies in Hz as a 1D array.
+    """
+
+    material_name: str
+    frequency_sets: list[FrequencySet]
+    frequencies: jax.Array
+
+    @classmethod
+    def from_dict(cls, data_dict: dict) -> "MaterialSet":
+        """Create a MaterialSet from a dictionary."""
+        return cls(
+            material_name=data_dict["material_name"],
+            frequency_sets=[FrequencySet.from_dict(fs) for fs in data_dict["frequency_sets"]],
+        )
+
+    def __getitem__(self, idx: int) -> FrequencySet:
+        """Return the frequency set at the given index."""
+        return self.frequency_sets[idx]
+
+    def __iter__(self):
+        """Return an iterator over the frequency sets."""
+        return iter(self.frequency_sets)
+
+    def get_at_frequency(self, idx: float) -> FrequencySet:
+        """Return the frequency set at the given index."""
+        return self.frequency_sets[jnp.where(self.frequencies == idx)[0][0]]
