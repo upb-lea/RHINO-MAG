@@ -4,7 +4,6 @@ from typing import List
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 
 ## Start inspect files ############################################################################
@@ -136,29 +135,3 @@ def load_and_process_single_from_full_file_overview(
 
 
 ## End loading data ###############################################################################
-
-## Start plotting data ############################################################################
-
-
-def plot_single_sequence(H, B, T, t=None):
-    fig, axs = plt.subplots(2, 1, figsize=(10, 10), sharex=True)
-
-    fig.suptitle("Temperature: " + str(T) + " C°")
-    if t is None:
-        axs[0].plot(H)
-        axs[1].plot(B)
-    else:
-        axs[0].plot(t, H)
-        axs[1].plot(t, B)
-
-    axs[0].set_ylabel("H in A/m")
-    axs[1].set_ylabel("B in T")
-
-    for ax in axs:
-        ax.set_xlabel("time in mu s")
-        ax.grid()
-    fig.tight_layout()
-    return fig
-
-
-## End plotting data ##############################################################################
