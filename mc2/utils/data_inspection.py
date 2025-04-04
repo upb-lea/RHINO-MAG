@@ -53,7 +53,7 @@ def get_file_overview(raw_data_path: pathlib.Path, material_names: List[str], fr
 
 
 def filter_file_overview(
-    file_overiew: pd.DataFrame,
+    file_overview: pd.DataFrame,
     material_name: str | List[str] | None = None,
     data_type: str | List[str] | None = None,
     set_idx: int | List[int] | None = None,
@@ -72,14 +72,14 @@ def filter_file_overview(
     }.items():
         if filter_value is not None:
             if not isinstance(filter_value, list):
-                file_overiew = file_overiew[file_overiew[key] == filter_value]
+                file_overview = file_overview[file_overview[key] == filter_value]
             else:
                 if filter_value is not None:
-                    file_overiew = file_overiew[file_overiew[key].isin(filter_value)]
+                    file_overview = file_overview[file_overview[key].isin(filter_value)]
         else:
             continue
 
-    return file_overiew
+    return file_overview
 
 
 ## End inspect files ##############################################################################
