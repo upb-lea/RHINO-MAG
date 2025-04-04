@@ -10,12 +10,11 @@ def plot_single_sequence(B, H, T, t=None, fig=None, axs=None):
         axs[0].plot(B)
         axs[1].plot(H)
 
-        for ax in axs:
-            ax.set_xlabel("Time in s")
-
     else:
         axs[0].plot(t, B)
         axs[1].plot(t, H)
+        for ax in axs:
+            ax.set_xlabel("Time in s")
 
     axs[0].set_ylabel("B in T")
     axs[1].set_ylabel("H in A/m")
