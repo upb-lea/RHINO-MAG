@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.data_management import DataSet
+from mc2.data_management import FrequencySet
 
 
 @eqx.filter_jit
@@ -48,7 +48,7 @@ def sample_batch_indices(
 
 @eqx.filter_jit
 def load_batches(
-    dataset: DataSet, n_sequence_indices: jax.Array, starting_points: jax.Array, training_sequence_length: int
+    dataset: FrequencySet, n_sequence_indices: jax.Array, starting_points: jax.Array, training_sequence_length: int
 ):
     """Load batches of data from the dataset according to the sampled indices.
 
@@ -75,7 +75,7 @@ def load_batches(
 
 @eqx.filter_jit
 def draw_data_uniformly(
-    dataset: DataSet, training_sequence_length: int, training_batch_size: int, loader_key: jax.Array
+    dataset: FrequencySet, training_sequence_length: int, training_batch_size: int, loader_key: jax.Array
 ):
     """Draw data uniformly from the dataset.
 
