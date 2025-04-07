@@ -15,7 +15,7 @@ def get_available_material_names(raw_data_path: pathlib.Path) -> List[str]:
     all_materials = []
 
     for material_path in all_file_paths:
-        material_name = material_path.split("/")[-1].split("_")[0]
+        material_name = pathlib.Path(material_path).parts[-1].split("_")[0]
         if material_name not in all_materials:
             all_materials.append(material_name)
 
@@ -39,7 +39,7 @@ def get_file_overview(raw_data_path: pathlib.Path, material_names: List[str], fr
     }
 
     for material_path in all_file_paths:
-        material_name = material_path.split("/")[-1].split("_")[0]
+        material_name = pathlib.Path(material_path).parts[-1].split("_")[0]
         set_idx = int(material_path.split("_")[1])
         data_type = material_path.split("_")[-1].split(".")[0]
 
