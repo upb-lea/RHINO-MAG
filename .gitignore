@@ -173,6 +173,13 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-# repo specific
+# datasets
 data/raw
 data/processed
+
+# ignore png and model files in the dev folders
+dev/**/*.png
+dev/**/*.eqx
+
+# ignore model files in the data folders
+data/**/*.eqx
