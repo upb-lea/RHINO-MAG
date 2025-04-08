@@ -1,17 +1,36 @@
 import jax
 import jax.numpy as jnp
+import jax.nn as jnn
 import diffrax
 import equinox as eqx
-from mc2.models.MLP import MLP
+
+
+class StateSpaceMLP(eqx.Module):
+    mlp: eqx.nn.MLP
+
+    def __init__(self, obs_dim, action_dim, width_size, depth, *, key, **kwargs):
+        super().__init__(**kwargs)
+        self.mlp = eqx.nn.MLP(
+            in_size=(obs_dim + action_dim),
+            out_size=obs_dim,
+            width_size=width_size,
+            depth=depth,
+            activation=jnn.leaky_relu,
+            key=key,
+        )
+
+    def __call__(self, obs, action):
+        obs_action = jnp.hstack([obs, action])
+        return self.mlp(obs_action)
 
 
 class NeuralODE(eqx.Module):
-    func: MLP
+    func: StateSpaceMLP
     _solver: diffrax.AbstractSolver
 
     def __init__(self, solver, obs_dim, action_dim, width_size, depth, *, key, **kwargs):
         super().__init__(**kwargs)
-        self.func = MLP(obs_dim, action_dim, width_size, depth, key=key)
+        self.func = StateSpaceMLP(obs_dim, action_dim, width_size, depth, key=key)
         self._solver = solver
 
     def __call__(self, init_obs, actions, tau):
@@ -41,11 +60,11 @@ class NeuralODE(eqx.Module):
 
 
 class NeuralEulerODE(eqx.Module):
-    func: MLP
+    func: StateSpaceMLP
 
     def __init__(self, obs_dim, action_dim, width_size, depth, *, key, **kwargs):
         super().__init__(**kwargs)
-        self.func = MLP(obs_dim, action_dim, width_size, depth, key=key)
+        self.func = StateSpaceMLP(obs_dim, action_dim, width_size, depth, key=key)
 
     def step(self, obs, action, tau):
         next_obs = obs + tau * self.func(obs, action)
