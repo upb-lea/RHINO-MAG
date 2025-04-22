@@ -7,6 +7,7 @@ We will need to invert the model to get B to H in the future.
 from copy import deepcopy
 
 import jax
+import jax.nn as jnn
 import jax.numpy as jnp
 import equinox as eqx
 
@@ -38,7 +39,8 @@ def hysteron_operator(H, initial_field, initial_output, alpha_beta, T):
     beta = alpha_beta[1]
 
     def true_fun(H, initial_field, initial_output, alpha, beta, T):
-        return initial_field
+        jax.debug.print("THIS SHOULD NOT HAPPEN")
+        return jnp.ones(initial_field.shape)
 
     def false_fun(H, initial_field, initial_output, alpha, beta, T):
         def _true_fun(H, initial_output, alpha, beta, T):
@@ -54,23 +56,54 @@ def hysteron_operator(H, initial_field, initial_output, alpha_beta, T):
 
 class DifferentiablePreisach(eqx.Module):
     hysteron_density: HysteronDensity
+    A: jax.Array
 
     def __init__(self, width_size, depth, *, model_key, **kwargs):
         super().__init__(**kwargs)
+
+        poly_params, nn_key = jax.random.split(model_key)
+        # self.A = jax.random.uniform(poly_params, shape=(3,), minval=-1.0, maxval=1.0, dtype=jnp.float32)
+        self.A = jnp.array([10.0, 0.0, 0.0], dtype=jnp.float32)
+
         self.hysteron_density = HysteronDensity(
             width_size=width_size,
             depth=depth,
-            key=model_key,
+            key=nn_key,
         )
 
     @eqx.filter_jit
-    def __call__(self, H, initial_field, initial_operator_values, alpha_beta_grid, T=1e-2):
+    def __call__(self, H, initial_field, initial_operator_values, alpha_beta_grid, T=1):
         hysteron_density_values = jax.vmap(self.hysteron_density)(alpha_beta_grid)
         hysteron_operator_values = jax.vmap(hysteron_operator, in_axes=(None, None, 0, 0, None))(
-            H, initial_field, initial_operator_values, hysteron_density_values, T
+            H, initial_field, initial_operator_values, alpha_beta_grid, T
         )
 
-        return jnp.mean(hysteron_density_values * hysteron_operator_values)[None], hysteron_operator_values
+        est_B = jnp.mean(hysteron_density_values * hysteron_operator_values)[None]
+        est_B = self.A[0] * est_B + self.A[1] * H + self.A[2]
+
+        return est_B, hysteron_operator_values
+
+
+class ArrayPreisach(eqx.Module):
+    hysteron_density: jax.Array
+    A: jax.Array
+
+    def __init__(self, hysteron_density, **kwargs):
+        super().__init__(**kwargs)
+        self.hysteron_density = hysteron_density
+        self.A = jnp.array([10.0, 0.0, 0.0], dtype=jnp.float32)
+
+    @eqx.filter_jit
+    def __call__(self, H, initial_field, initial_operator_values, alpha_beta_grid, T=1):
+        hysteron_density_values = self.hysteron_density
+        hysteron_operator_values = jax.vmap(hysteron_operator, in_axes=(None, None, 0, 0, None))(
+            H, initial_field, initial_operator_values, alpha_beta_grid, T
+        )
+
+        est_B = jnp.mean(hysteron_density_values * hysteron_operator_values)[None]
+        est_B = self.A[0] * est_B + self.A[1] * H + self.A[2]
+
+        return est_B, hysteron_operator_values
 
 
 def update_state(H, carry):
@@ -82,7 +115,7 @@ def update_state(H, carry):
             # positive direction and sign change -> update initial states
             positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
             initial_operator_values = last_operator_values
-            intitial_field = last_H
+            initial_field = last_H
             positive_direction = jnp.array([False])
             return positive_direction, initial_field, initial_operator_values
 
@@ -99,7 +132,7 @@ def update_state(H, carry):
             # negative direction and sign change -> update initial states
             positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
             initial_operator_values = last_operator_values
-            intitial_field = last_H
+            initial_field = last_H
             positive_direction = jnp.array([True])
 
             return positive_direction, initial_field, initial_operator_values
@@ -116,11 +149,14 @@ def update_state(H, carry):
     return jax.lax.cond(positive_direction[0], true_fun, false_fun, H, carry)
 
 
-def estimate_B(H_trajectory, model, alpha_beta_grid):
-    initial_field = jnp.array([-10.1])
-    last_H = deepcopy(initial_field)
+def estimate_B(H_trajectory, model, alpha_beta_grid, initial_field=None, initial_operator_values=None, T=1):
+    """Estimate B from H using the Preisach model."""
+    initial_field = jnp.array([-100.0]) if initial_field is None else initial_field
+    initial_operator_values = (
+        -jnp.ones((alpha_beta_grid.shape[0], 1)) if initial_operator_values is None else initial_operator_values
+    )
 
-    initial_operator_values = -jnp.ones((alpha_beta_grid.shape[0], 1))
+    last_H = deepcopy(initial_field)
     last_operator_values = deepcopy(initial_operator_values)
 
     positive_direction = H_trajectory[0] > initial_field
@@ -136,7 +172,7 @@ def estimate_B(H_trajectory, model, alpha_beta_grid):
             initial_field=initial_field,
             initial_operator_values=initial_operator_values,
             alpha_beta_grid=alpha_beta_grid,
-            T=1,
+            T=T,
         )
 
         last_H = H
