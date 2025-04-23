@@ -22,11 +22,11 @@ from mc2.models.preisach_utils import (
 
 
 class HysteronDensityMLP(eqx.Module):
+    """Simple comfort wrapper for MLP specifically for the hysteron density."""
+
     mlp: eqx.nn.MLP
 
     def __init__(self, width_size: int, depth: int, *, key, **kwargs):
-        """Simple comfort wrapper for MLP specifically for the hysteron density."""
-
         super().__init__(**kwargs)
         self.mlp = eqx.nn.MLP(
             in_size=2,
@@ -46,7 +46,6 @@ class HysteronDensityMLP(eqx.Module):
 @eqx.filter_jit
 def hysteron_operator(
     H: jax.Array,
-    last_H: jax.Array,
     initial_field: jax.Array,
     initial_output: jax.Array,
     alpha_beta: jax.Array,
@@ -54,10 +53,14 @@ def hysteron_operator(
 ) -> jax.Array:
     """Differentiable hysteron operator.
 
-    TODO: The behavior of the operator is bit strange the saturation is not fully reached.
+    TODO 1: The behavior of the operator is bit strange the saturation is not fully reached.
     With very low T values this is not really a problem, since it approximates the standard
     hysteron operator for this case. I am not sure if this is a problem or if we should just
     use the standard hysteron operator in the first place.
+
+    TODO 2: I am not really sure about the case where H == initial_field. It means that the
+    momentary field input is the same as the one at the last direction change of the H field?.
+    Probably should be investigated at some point.
 
     Args:
         H (jax.Array): Current field value.
@@ -74,10 +77,11 @@ def hysteron_operator(
     alpha = alpha_beta[0]
     beta = alpha_beta[1]
 
-    def true_fun(H, last_H, initial_field, initial_output, alpha, beta, T):
-        return last_H
+    def true_fun(H, initial_field, initial_output, alpha, beta, T):
+        """When the last applied field value is the same as the current one, just return"""
+        return initial_output
 
-    def false_fun(H, last_H, initial_field, initial_output, alpha, beta, T):
+    def false_fun(H, initial_field, initial_output, alpha, beta, T):
         def _true_fun(H, initial_output, alpha, beta, T):
             return jax.lax.min(initial_output + (1 + jnp.tanh((H - alpha) / jnp.abs(T))), jnp.array([1.0]))
 
@@ -86,12 +90,15 @@ def hysteron_operator(
 
         return jax.lax.cond((H > initial_field)[0], _true_fun, _false_fun, H, initial_output, alpha, beta, T)
 
-    return jax.lax.cond(
-        (H == initial_field)[0], true_fun, false_fun, H, last_H, initial_field, initial_output, alpha, beta, T
-    )
+    return jax.lax.cond((H == initial_field)[0], true_fun, false_fun, H, initial_field, initial_output, alpha, beta, T)
 
 
 class DifferentiablePreisach(eqx.Module):
+    """Abstract class for the differentiable Preisach model.
+
+    Inherit from this class to specify how the hysteron density is managed.
+    """
+
     hysteron_density: eqx.AbstractVar[jax.Array]
     A: eqx.AbstractVar[jax.Array]
 
@@ -162,8 +169,8 @@ class MLPPreisach(DifferentiablePreisach):
     @eqx.filter_jit
     def predict(self, H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T=1e-3):
         hysteron_density_values = jax.vmap(self.hysteron_density)(alpha_beta_grid)
-        hysteron_operator_values = jax.vmap(hysteron_operator, in_axes=(None, None, None, 0, 0, None))(
-            H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T
+        hysteron_operator_values = jax.vmap(hysteron_operator, in_axes=(None, None, 0, 0, None))(
+            H, initial_field, initial_operator_values, alpha_beta_grid, T
         )
 
         est_B = jnp.mean(hysteron_density_values * hysteron_operator_values)[None]
@@ -218,8 +225,8 @@ class ArrayPreisach(DifferentiablePreisach):
     @eqx.filter_jit
     def predict(self, H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T=1e-3):
         hysteron_density_values = self.hysteron_density
-        hysteron_operator_values = jax.vmap(hysteron_operator, in_axes=(None, None, None, 0, 0, None))(
-            H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T
+        hysteron_operator_values = jax.vmap(hysteron_operator, in_axes=(None, None, 0, 0, None))(
+            H, initial_field, initial_operator_values, alpha_beta_grid, T
         )
 
         est_B = jnp.mean(hysteron_density_values * hysteron_operator_values)[None]
