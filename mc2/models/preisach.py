@@ -12,7 +12,13 @@ import jax.nn as jnn
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.models.preisach_utils import analyticalPreisachFunction2, preisachIntegration, filter_function, filter_grid
+from mc2.models.preisach_utils import (
+    analyticalPreisachFunction2,
+    preisachIntegration,
+    filter_function,
+    filter_grid,
+    update_state,
+)
 
 
 class HysteronDensityMLP(eqx.Module):
@@ -43,7 +49,7 @@ def hysteron_operator(
     last_H: jax.Array,
     initial_field: jax.Array,
     initial_output: jax.Array,
-    alpha_beta: jax.array,
+    alpha_beta: jax.Array,
     T: float,
 ) -> jax.Array:
     """Differentiable hysteron operator.
@@ -86,6 +92,57 @@ def hysteron_operator(
 
 
 class DifferentiablePreisach(eqx.Module):
+    hysteron_density: eqx.AbstractVar[jax.Array]
+    A: eqx.AbstractVar[jax.Array]
+
+    @eqx.filter_jit
+    def __call__(self, H_trajectory, alpha_beta_grid, initial_field=None, initial_operator_values=None, T=1e-3):
+        """Estimate B trajectory from H trajectory using the Preisach model."""
+        initial_field = jnp.array([-100.0]) if initial_field is None else initial_field
+        initial_operator_values = (
+            -jnp.ones((alpha_beta_grid.shape[0], 1)) if initial_operator_values is None else initial_operator_values
+        )
+
+        last_H = deepcopy(initial_field)
+        last_operator_values = deepcopy(initial_operator_values)
+
+        positive_direction = H_trajectory[0] > initial_field
+
+        def body(carry, H):
+            positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
+
+            # update initial_field and initial_operator_values based on sign change
+            positive_direction, initial_field, initial_operator_values = update_state(H, carry)
+
+            B_est_single, operator_values = self.predict(
+                H=H,
+                last_H=last_H,
+                initial_field=initial_field,
+                initial_operator_values=initial_operator_values,
+                alpha_beta_grid=alpha_beta_grid,
+                T=T,
+            )
+
+            last_H = H
+            last_operator_values = operator_values
+
+            return (
+                positive_direction,
+                initial_field,
+                last_H,
+                initial_operator_values,
+                last_operator_values,
+            ), B_est_single
+
+        _, B_est = jax.lax.scan(
+            body,
+            (positive_direction, initial_field, last_H, initial_operator_values, last_operator_values),
+            H_trajectory,
+        )
+        return B_est
+
+
+class MLPPreisach(DifferentiablePreisach):
     hysteron_density: HysteronDensityMLP
     A: jax.Array
 
@@ -103,7 +160,7 @@ class DifferentiablePreisach(eqx.Module):
         )
 
     @eqx.filter_jit
-    def __call__(self, H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T=1e-3):
+    def predict(self, H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T=1e-3):
         hysteron_density_values = jax.vmap(self.hysteron_density)(alpha_beta_grid)
         hysteron_operator_values = jax.vmap(hysteron_operator, in_axes=(None, None, None, 0, 0, None))(
             H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T
@@ -115,7 +172,7 @@ class DifferentiablePreisach(eqx.Module):
         return est_B, hysteron_operator_values
 
 
-class ArrayPreisach(eqx.Module):
+class ArrayPreisach(DifferentiablePreisach):
     hysteron_density: jax.Array
     A: jax.Array
 
@@ -159,7 +216,7 @@ class ArrayPreisach(eqx.Module):
         return cls(preisach), alpha_beta_grid
 
     @eqx.filter_jit
-    def __call__(self, H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T=1e-3):
+    def predict(self, H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T=1e-3):
         hysteron_density_values = self.hysteron_density
         hysteron_operator_values = jax.vmap(hysteron_operator, in_axes=(None, None, None, 0, 0, None))(
             H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T
@@ -169,86 +226,3 @@ class ArrayPreisach(eqx.Module):
         est_B = self.A[0] * est_B + self.A[1] * H + self.A[2]
 
         return est_B, hysteron_operator_values
-
-
-@eqx.filter_jit
-def update_state(H, carry):
-
-    def true_fun(H, carry):
-        # case that we are going in a positive direction
-
-        def _true_fun(carry):
-            # positive direction and sign change -> update initial states
-            positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
-            initial_operator_values = last_operator_values
-            initial_field = last_H
-            positive_direction = jnp.array([False])
-            return positive_direction, initial_field, initial_operator_values
-
-        def _false_fun(carry):
-            # positive direction and no sign change -> return values as they are
-            positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
-            return positive_direction, initial_field, initial_operator_values
-
-        last_H = carry[2]
-        return jax.lax.cond((H < last_H)[0], _true_fun, _false_fun, carry)
-
-    def false_fun(H, carry):
-        def _true_fun(carry):
-            # negative direction and sign change -> update initial states
-            positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
-            initial_operator_values = last_operator_values
-            initial_field = last_H
-            positive_direction = jnp.array([True])
-
-            return positive_direction, initial_field, initial_operator_values
-
-        def _false_fun(carry):
-            # negative direction and no sign change -> return values as they are
-            positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
-            return positive_direction, initial_field, initial_operator_values
-
-        last_H = carry[2]
-        return jax.lax.cond((H > last_H)[0], _true_fun, _false_fun, carry)
-
-    positive_direction = carry[0]
-    return jax.lax.cond(positive_direction[0], true_fun, false_fun, H, carry)
-
-
-@eqx.filter_jit
-def estimate_B(H_trajectory, model, alpha_beta_grid, initial_field=None, initial_operator_values=None, T=1e-3):
-    """Estimate B from H using the Preisach model."""
-    initial_field = jnp.array([-100.0]) if initial_field is None else initial_field
-    initial_operator_values = (
-        -jnp.ones((alpha_beta_grid.shape[0], 1)) if initial_operator_values is None else initial_operator_values
-    )
-
-    last_H = deepcopy(initial_field)
-    last_operator_values = deepcopy(initial_operator_values)
-
-    positive_direction = H_trajectory[0] > initial_field
-
-    def body(carry, H):
-        positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
-
-        # update initial_field and initial_operator_values based on sign change
-        positive_direction, initial_field, initial_operator_values = update_state(H, carry)
-
-        B_est_single, operator_values = model(
-            H=H,
-            last_H=last_H,
-            initial_field=initial_field,
-            initial_operator_values=initial_operator_values,
-            alpha_beta_grid=alpha_beta_grid,
-            T=T,
-        )
-
-        last_H = H
-        last_operator_values = operator_values
-
-        return (positive_direction, initial_field, last_H, initial_operator_values, last_operator_values), B_est_single
-
-    _, B_est = jax.lax.scan(
-        body, (positive_direction, initial_field, last_H, initial_operator_values, last_operator_values), H_trajectory
-    )
-    return B_est

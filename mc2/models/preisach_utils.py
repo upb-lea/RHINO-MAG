@@ -58,3 +58,47 @@ def preisachIntegration(w: float, Z: np.ndarray) -> np.ndarray:
     flipped = np.fliplr(np.flipud(w * Z))
     flipped_integral = np.cumsum(np.cumsum(flipped, axis=0), axis=1)
     return np.fliplr(np.flipud(flipped_integral))
+
+
+@eqx.filter_jit
+def update_state(H, carry):
+
+    def true_fun(H, carry):
+        # case that we are going in a positive direction
+
+        def _true_fun(carry):
+            # positive direction and sign change -> update initial states
+            positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
+            initial_operator_values = last_operator_values
+            initial_field = last_H
+            positive_direction = jnp.array([False])
+            return positive_direction, initial_field, initial_operator_values
+
+        def _false_fun(carry):
+            # positive direction and no sign change -> return values as they are
+            positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
+            return positive_direction, initial_field, initial_operator_values
+
+        last_H = carry[2]
+        return jax.lax.cond((H < last_H)[0], _true_fun, _false_fun, carry)
+
+    def false_fun(H, carry):
+        def _true_fun(carry):
+            # negative direction and sign change -> update initial states
+            positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
+            initial_operator_values = last_operator_values
+            initial_field = last_H
+            positive_direction = jnp.array([True])
+
+            return positive_direction, initial_field, initial_operator_values
+
+        def _false_fun(carry):
+            # negative direction and no sign change -> return values as they are
+            positive_direction, initial_field, last_H, initial_operator_values, last_operator_values = carry
+            return positive_direction, initial_field, initial_operator_values
+
+        last_H = carry[2]
+        return jax.lax.cond((H > last_H)[0], _true_fun, _false_fun, carry)
+
+    positive_direction = carry[0]
+    return jax.lax.cond(positive_direction[0], true_fun, false_fun, H, carry)
