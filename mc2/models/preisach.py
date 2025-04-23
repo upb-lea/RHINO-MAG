@@ -15,10 +15,12 @@ import equinox as eqx
 from mc2.models.preisach_utils import analyticalPreisachFunction2, preisachIntegration, filter_function, filter_grid
 
 
-class HysteronDensity(eqx.Module):
+class HysteronDensityMLP(eqx.Module):
     mlp: eqx.nn.MLP
 
-    def __init__(self, width_size, depth, *, key, **kwargs):
+    def __init__(self, width_size: int, depth: int, *, key, **kwargs):
+        """Simple comfort wrapper for MLP specifically for the hysteron density."""
+
         super().__init__(**kwargs)
         self.mlp = eqx.nn.MLP(
             in_size=2,
@@ -36,8 +38,33 @@ class HysteronDensity(eqx.Module):
 
 
 @eqx.filter_jit
-def hysteron_operator(H, last_H, initial_field, initial_output, alpha_beta, T):
+def hysteron_operator(
+    H: jax.Array,
+    last_H: jax.Array,
+    initial_field: jax.Array,
+    initial_output: jax.Array,
+    alpha_beta: jax.array,
+    T: float,
+) -> jax.Array:
+    """Differentiable hysteron operator.
 
+    TODO: The behavior of the operator is bit strange the saturation is not fully reached.
+    With very low T values this is not really a problem, since it approximates the standard
+    hysteron operator for this case. I am not sure if this is a problem or if we should just
+    use the standard hysteron operator in the first place.
+
+    Args:
+        H (jax.Array): Current field value.
+        last_H (jax.Array): Last field value.
+        initial_field (jax.Array): Initial field value after the last direction change of H.
+        initial_output (jax.Array): Initial output value after the last direction change of H.
+        alpha_beta (jax.Array): Discretized grid in the alpha-beta plane.
+        T (float): Scaling factor that governs the steepness of the transition.
+
+    Returns:
+        hysteron_operator_value (jax.Array): Hysteron operator value.
+
+    """
     alpha = alpha_beta[0]
     beta = alpha_beta[1]
 
@@ -59,24 +86,24 @@ def hysteron_operator(H, last_H, initial_field, initial_output, alpha_beta, T):
 
 
 class DifferentiablePreisach(eqx.Module):
-    hysteron_density: HysteronDensity
+    hysteron_density: HysteronDensityMLP
     A: jax.Array
 
     def __init__(self, width_size, depth, *, model_key, **kwargs):
         super().__init__(**kwargs)
 
-        poly_params, nn_key = jax.random.split(model_key)
+        # poly_params, nn_key = jax.random.split(model_key)
         # self.A = jax.random.uniform(poly_params, shape=(3,), minval=-1.0, maxval=1.0, dtype=jnp.float32)
         self.A = jnp.array([10.0, 0.0, 0.0], dtype=jnp.float32)
 
-        self.hysteron_density = HysteronDensity(
+        self.hysteron_density = HysteronDensityMLP(
             width_size=width_size,
             depth=depth,
-            key=nn_key,
+            key=model_key,
         )
 
     @eqx.filter_jit
-    def __call__(self, H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T=1):
+    def __call__(self, H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T=1e-3):
         hysteron_density_values = jax.vmap(self.hysteron_density)(alpha_beta_grid)
         hysteron_operator_values = jax.vmap(hysteron_operator, in_axes=(None, None, None, 0, 0, None))(
             H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T
@@ -132,7 +159,7 @@ class ArrayPreisach(eqx.Module):
         return cls(preisach), alpha_beta_grid
 
     @eqx.filter_jit
-    def __call__(self, H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T=1):
+    def __call__(self, H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T=1e-3):
         hysteron_density_values = self.hysteron_density
         hysteron_operator_values = jax.vmap(hysteron_operator, in_axes=(None, None, None, 0, 0, None))(
             H, last_H, initial_field, initial_operator_values, alpha_beta_grid, T
