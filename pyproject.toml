@@ -26,6 +26,9 @@ dependencies = [
     "diffrax==0.7.0",
     "optax==0.2.4",
     "pandas>=2.2.3",
+    "ipython>=9.1.0",
+    "ipykernel>=6.29.5",
+    "pyarrow>=19.0.1",
 ]
 
 [project.urls]
@@ -39,3 +42,6 @@ include = ["mc2"]  # package names should match these glob patterns (["*"] by de
 pythonpath = [
     "."
 ]
+
+[tool.ruff]
+line-length = 120

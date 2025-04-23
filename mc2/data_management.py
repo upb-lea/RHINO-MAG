@@ -5,8 +5,14 @@ import pickle
 import jax
 import jax.numpy as jnp
 import equinox as eqx
+from pathlib import Path
 
 from mc2.utils.data_inspection import load_and_process_single_from_full_file_overview
+
+
+DATA_ROOT = Path(__file__).parent.parent / "data"
+CACHE_ROOT = DATA_ROOT / "cache"
+CACHE_ROOT.mkdir(parents=True, exist_ok=True)
 
 
 class FrequencySet(eqx.Module):
@@ -208,3 +214,31 @@ class DataSet(eqx.Module):
                 filtered_material_sets.append(material_set)
 
         return DataSet(filtered_material_sets)
+
+
+def load_data_into_pandas_df(material: str = None, number: int = None, training: bool = True, n_rows: int = None):
+    """Load data selectively from raw CSV files if cache does not exist yet. Caches loaded data for next time."""
+    # TODO implement training vs testing data
+
+    if material is None:
+        # load all materials
+        raise NotImplementedError()
+    else:
+        mat_folder = DATA_ROOT / "raw" / material
+        assert mat_folder.is_dir(), f"Folder does not exist: {mat_folder}"
+        if number is None:
+            # load all sequences
+            raise NotImplementedError()
+        else:
+            data_ret = []
+            for suffix in list("BHT"):
+                filepath = mat_folder / f"{material}_{number}_{suffix}.csv"
+                cached_filepath = CACHE_ROOT / filepath.with_suffix(".parquet").name
+                if cached_filepath.exists():
+                    df = pd.read_parquet(cached_filepath)
+                else:
+                    assert filepath.exists(), f"File does not exist: {filepath}"
+                    df = pd.read_csv(filepath, header=None)
+                    df.to_parquet(cached_filepath)  # store cache
+                data_ret.append(df)
+    return data_ret

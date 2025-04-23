@@ -176,6 +176,7 @@ cython_debug/
 # datasets
 data/raw
 data/processed
+data/cache
 
 # ignore png and model files in the dev folders
 dev/**/*.png
