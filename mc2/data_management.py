@@ -228,9 +228,18 @@ def load_data_into_pandas_df(material: str = None, number: int = None, training:
         assert mat_folder.is_dir(), f"Folder does not exist: {mat_folder}"
         if number is None:
             # load all sequences
-            raise NotImplementedError()
+            data_ret_d = {}
+            csv_file_paths_l = list(mat_folder.glob(f"{material}*.csv"))
+            for csv_file in tqdm.tqdm(sorted(csv_file_paths_l)):
+                expected_cache_file = CACHE_ROOT / csv_file.with_suffix(".parquet")
+                if (expected_cache_file.exists()):
+                    df = pd.read_parquet(expected_cache_file)
+                else:
+                    df = pd.read_csv(csv_file, header=None)
+                data_ret_d[csv_file.stem] = df
+
         else:
-            data_ret = []
+            data_ret_d = {}
             for suffix in list("BHT"):
                 filepath = mat_folder / f"{material}_{number}_{suffix}.csv"
                 cached_filepath = CACHE_ROOT / filepath.with_suffix(".parquet").name
@@ -240,5 +249,5 @@ def load_data_into_pandas_df(material: str = None, number: int = None, training:
                     assert filepath.exists(), f"File does not exist: {filepath}"
                     df = pd.read_csv(filepath, header=None)
                     df.to_parquet(cached_filepath)  # store cache
-                data_ret.append(df)
-    return data_ret
+                data_ret_d[filepath.stem] = df
+    return data_ret_d

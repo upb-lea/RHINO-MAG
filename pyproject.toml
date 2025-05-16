@@ -29,6 +29,7 @@ dependencies = [
     "ipython>=9.1.0",
     "ipykernel>=6.29.5",
     "pyarrow>=19.0.1",
+    "jupyter>=1.1.1",
 ]
 
 [project.urls]
