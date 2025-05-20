@@ -11,8 +11,12 @@ from mc2.utils.data_inspection import load_and_process_single_from_full_file_ove
 
 
 DATA_ROOT = Path(__file__).parent.parent / "data"
+MODEL_DUMP_FOLDER = DATA_ROOT / "models"
 CACHE_ROOT = DATA_ROOT / "cache"
 CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+MODEL_DUMP_FOLDER.mkdir(parents=True, exist_ok=True)
+
+AVAILABLE_MATERIALS = ["3C90", "3C94", "3E6", "3F4", "77", "78", "N27", "N30", "N49", "N87"]
 
 
 class FrequencySet(eqx.Module):
@@ -216,7 +220,9 @@ class DataSet(eqx.Module):
         return DataSet(filtered_material_sets)
 
 
-def load_data_into_pandas_df(material: str = None, number: int = None, training: bool = True, n_rows: int = None):
+def load_data_into_pandas_df(
+    material: str = None, number: int = None, training: bool = True, n_rows: int = None
+) -> dict:
     """Load data selectively from raw CSV files if cache does not exist yet. Caches loaded data for next time."""
     # TODO implement training vs testing data
 
@@ -232,7 +238,7 @@ def load_data_into_pandas_df(material: str = None, number: int = None, training:
             csv_file_paths_l = list(mat_folder.glob(f"{material}*.csv"))
             for csv_file in tqdm.tqdm(sorted(csv_file_paths_l)):
                 expected_cache_file = CACHE_ROOT / csv_file.with_suffix(".parquet")
-                if (expected_cache_file.exists()):
+                if expected_cache_file.exists():
                     df = pd.read_parquet(expected_cache_file)
                 else:
                     df = pd.read_csv(csv_file, header=None)
@@ -248,6 +254,6 @@ def load_data_into_pandas_df(material: str = None, number: int = None, training:
                 else:
                     assert filepath.exists(), f"File does not exist: {filepath}"
                     df = pd.read_csv(filepath, header=None)
-                    df.to_parquet(cached_filepath)  # store cache
+                    df.to_parquet(cached_filepath, index=False)  # store cache
                 data_ret_d[filepath.stem] = df
     return data_ret_d
