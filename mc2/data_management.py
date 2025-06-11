@@ -66,9 +66,7 @@ class FrequencySet(eqx.Module):
         )
 
     @classmethod
-    def load_from_raw_data(
-        cls, file_overview: pd.DataFrame, material_name: str, frequency: float
-    ) -> "FrequencySet":
+    def load_from_raw_data(cls, file_overview: pd.DataFrame, material_name: str, frequency: float) -> "FrequencySet":
         """Load a FrequencySet from raw data."""
         data_dict = load_and_process_single_from_full_file_overview(
             file_overview,
@@ -79,9 +77,7 @@ class FrequencySet(eqx.Module):
 
         return cls.from_dict(data_dict)
 
-    def filter_temperatures(
-        self, temperatures: list[float] | jax.Array
-    ) -> "FrequencySet":
+    def filter_temperatures(self, temperatures: list[float] | jax.Array) -> "FrequencySet":
         """Filter the frequency set by temperatures."""
         if isinstance(temperatures, list):
             temperatures = jnp.array(temperatures)
@@ -122,9 +118,7 @@ class FrequencySet(eqx.Module):
             indices = list(range(freq_temp.H.shape[0]))
 
             # First split into train+val and test
-            train_val_idx, test_idx = train_test_split(
-                indices, test_size=test_frac, random_state=seed, shuffle=True
-            )
+            train_val_idx, test_idx = train_test_split(indices, test_size=test_frac, random_state=seed, shuffle=True)
             # Then split train+val into train and val
             val_relative_frac = val_frac / (train_frac + val_frac)
             train_idx, val_idx = train_test_split(
@@ -204,9 +198,7 @@ class MaterialSet(eqx.Module):
         frequency_sets = []
 
         for frequency in frequencies:
-            frequency_set = FrequencySet.load_from_raw_data(
-                file_overview, material_name, frequency
-            )
+            frequency_set = FrequencySet.load_from_raw_data(file_overview, material_name, frequency)
             frequency_sets.append(frequency_set)
 
         return cls(
@@ -243,9 +235,7 @@ class MaterialSet(eqx.Module):
             H_key = f"{key_base}_H"
             T_key = f"{key_base}_T"
 
-            assert (
-                B_key in data_d and H_key in data_d and T_key in data_d
-            ), f"Missing data for frequency {freq} Hz"
+            assert B_key in data_d and H_key in data_d and T_key in data_d, f"Missing data for frequency {freq} Hz"
 
             B = jnp.array(data_d[B_key].values)
             H = jnp.array(data_d[H_key].values)
@@ -296,13 +286,10 @@ class MaterialSet(eqx.Module):
         """Return the frequency set at the given index."""
         return self.frequency_sets[jnp.where(self.frequencies == frequency)[0][0]]
 
-    def filter_temperatures(
-        self, temperatures: list[float] | jax.Array
-    ) -> "MaterialSet":
+    def filter_temperatures(self, temperatures: list[float] | jax.Array) -> "MaterialSet":
         """Filter the material set by temperatures."""
         filtered_frequency_sets = [
-            frequency_set.filter_temperatures(temperatures)
-            for frequency_set in self.frequency_sets
+            frequency_set.filter_temperatures(temperatures) for frequency_set in self.frequency_sets
         ]
 
         return MaterialSet(
@@ -344,13 +331,11 @@ class MaterialSet(eqx.Module):
         test_frequency_sets = []
 
         for freq_set in self.frequency_sets:
-            train_fs, val_fs, test_fs = (
-                freq_set.split_frequency_set_into_train_val_test_sets(
-                    train_frac,
-                    val_frac,
-                    test_frac,
-                    seed,
-                )
+            train_fs, val_fs, test_fs = freq_set.split_frequency_set_into_train_val_test_sets(
+                train_frac,
+                val_frac,
+                test_frac,
+                seed,
             )
             train_frequency_sets.append(train_fs)
             val_frequency_sets.append(val_fs)
@@ -397,12 +382,11 @@ class DataSet(eqx.Module):
         frequencies: list[float] | jax.Array,
     ) -> "DataSet":
         """Load a DataSet from raw data."""
+
         material_sets = []
 
         for material_name in tqdm.tqdm(material_names):
-            material_set = MaterialSet.load_from_raw_data(
-                file_overview, material_name, frequencies
-            )
+            material_set = MaterialSet.load_from_raw_data(file_overview, material_name, frequencies)
             material_sets.append(material_set)
 
         return cls(material_sets)
@@ -421,9 +405,7 @@ class DataSet(eqx.Module):
     def __init__(self, material_sets: list[MaterialSet]):
         """Initialize the DataSet with a list of MaterialSet objects."""
         self.material_sets = material_sets
-        self.material_names = [
-            material_set.material_name for material_set in material_sets
-        ]
+        self.material_names = [material_set.material_name for material_set in material_sets]
         self._name_to_idx = {name: idx for idx, name in enumerate(self.material_names)}
 
     def __getitem__(self, idx: int) -> MaterialSet:
@@ -440,21 +422,11 @@ class DataSet(eqx.Module):
 
     def filter_temperatures(self, temperatures: list[float] | jax.Array) -> "DataSet":
         """Filter the dataset by temperatures."""
-        return DataSet(
-            [
-                material_set.filter_temperatures(temperatures)
-                for material_set in self.material_sets
-            ]
-        )
+        return DataSet([material_set.filter_temperatures(temperatures) for material_set in self.material_sets])
 
     def filter_frequencies(self, frequencies: list[float]) -> "DataSet":
         """Filter the dataset by frequencies."""
-        return DataSet(
-            [
-                material_set.filter_frequencies(frequencies)
-                for material_set in self.material_sets
-            ]
-        )
+        return DataSet([material_set.filter_frequencies(frequencies) for material_set in self.material_sets])
 
     def filter_materials(self, material_names: list[str]) -> "DataSet":
         """Filter the dataset by material names."""
@@ -510,18 +482,15 @@ def book_keeping(logs_d: Dict):
     exp_id = str(uuid4())[:8]
 
     pd.DataFrame(logs_d["predictions_transformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT
-        / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_transformed.parquet",
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_transformed.parquet",
         index=False,
     )
     pd.DataFrame(logs_d["predictions_untransformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT
-        / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_untransformed.parquet",
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_untransformed.parquet",
         index=False,
     )
     pd.DataFrame(logs_d["ground_truth_transformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT
-        / f"exp_{exp_id}_seed_{logs_d['seed']}_gt_transformed.parquet",
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt_transformed.parquet",
         index=False,
     )
     pd.DataFrame(logs_d["ground_truth_MS"]).to_parquet(
