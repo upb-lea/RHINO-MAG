@@ -1,12 +1,27 @@
 import tqdm
 import pandas as pd
 import pickle
-
+from typing import List, Dict
 import jax
 import jax.numpy as jnp
+import numpy as np
 import equinox as eqx
+from pathlib import Path
+from uuid import uuid4
 
 from mc2.utils.data_inspection import load_and_process_single_from_full_file_overview
+
+
+DATA_ROOT = Path(__file__).parent.parent / "data"
+MODEL_DUMP_ROOT = DATA_ROOT / "models"
+CACHE_ROOT = DATA_ROOT / "cache"
+EXPERIMENT_LOGS_ROOT = DATA_ROOT / "experiment_logs"
+
+for root_dir in (CACHE_ROOT, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT):
+    root_dir.mkdir(parents=True, exist_ok=True)
+
+
+AVAILABLE_MATERIALS = ["3C90", "3C94", "3E6", "3F4", "77", "78", "N27", "N30", "N49", "N87"]
 
 
 class FrequencySet(eqx.Module):
@@ -208,3 +223,59 @@ class DataSet(eqx.Module):
                 filtered_material_sets.append(material_set)
 
         return DataSet(filtered_material_sets)
+
+
+def load_data_into_pandas_df(
+    material: str = None, number: int = None, training: bool = True, n_rows: int = None
+) -> dict:
+    """Load data selectively from raw CSV files if cache does not exist yet. Caches loaded data for next time."""
+    # TODO implement training vs testing data
+
+    if material is None:
+        # load all materials
+        raise NotImplementedError()
+    else:
+        mat_folder = DATA_ROOT / "raw" / material
+        assert mat_folder.is_dir(), f"Folder does not exist: {mat_folder}"
+        if number is None:
+            # load all sequences
+            data_ret_d = {}
+            csv_file_paths_l = list(mat_folder.glob(f"{material}*.csv"))
+            for csv_file in tqdm.tqdm(sorted(csv_file_paths_l)):
+                expected_cache_file = CACHE_ROOT / csv_file.with_suffix(".parquet")
+                if expected_cache_file.exists():
+                    df = pd.read_parquet(expected_cache_file)
+                else:
+                    df = pd.read_csv(csv_file, header=None)
+                data_ret_d[csv_file.stem] = df
+
+        else:
+            data_ret_d = {}
+            for suffix in list("BHT"):
+                filepath = mat_folder / f"{material}_{number}_{suffix}.csv"
+                cached_filepath = CACHE_ROOT / filepath.with_suffix(".parquet").name
+                if cached_filepath.exists():
+                    df = pd.read_parquet(cached_filepath)
+                else:
+                    assert filepath.exists(), f"File does not exist: {filepath}"
+                    df = pd.read_csv(filepath, header=None)
+                    df.to_parquet(cached_filepath, index=False)  # store cache
+                data_ret_d[filepath.stem] = df
+    return data_ret_d
+
+
+def book_keeping(logs_d: Dict):
+    exp_id = str(uuid4())[:8]
+
+    pd.DataFrame(logs_d["predictions_transformed_MS"]).to_parquet(
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_transformed.parquet", index=False
+    )
+    pd.DataFrame(logs_d["predictions_untransformed_MS"]).to_parquet(
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_untransformed.parquet", index=False
+    )
+    pd.DataFrame(logs_d["ground_truth_transformed_MS"]).to_parquet(
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt_transformed.parquet", index=False
+    )
+    pd.DataFrame(logs_d["ground_truth_MS"]).to_parquet(
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt.parquet", index=False
+    )
