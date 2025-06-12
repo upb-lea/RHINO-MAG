@@ -1,13 +1,15 @@
 import tqdm
 import pandas as pd
 import pickle
-from typing import List, Dict
+from typing import Dict, Tuple
+from pathlib import Path
+from uuid import uuid4
+from sklearn.model_selection import train_test_split
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import equinox as eqx
-from pathlib import Path
-from uuid import uuid4
 
 from mc2.utils.data_inspection import load_and_process_single_from_full_file_overview
 
@@ -21,7 +23,18 @@ for root_dir in (CACHE_ROOT, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT):
     root_dir.mkdir(parents=True, exist_ok=True)
 
 
-AVAILABLE_MATERIALS = ["3C90", "3C94", "3E6", "3F4", "77", "78", "N27", "N30", "N49", "N87"]
+AVAILABLE_MATERIALS = [
+    "3C90",
+    "3C94",
+    "3E6",
+    "3F4",
+    "77",
+    "78",
+    "N27",
+    "N30",
+    "N49",
+    "N87",
+]
 
 
 class FrequencySet(eqx.Module):
@@ -79,6 +92,87 @@ class FrequencySet(eqx.Module):
             T=self.T[temperature_mask],
         )
 
+    def split_into_train_val_test(
+        self,
+        train_frac: float,
+        val_frac: float,
+        test_frac: float,
+        seed: int = 0,
+    ) -> Tuple["FrequencySet", "FrequencySet", "FrequencySet"]:
+        """Split a FrequencySet into train, validation and test sets, stratified by temperature.
+
+        For each temperature, sequences are split into train, val and test separately,
+        then combined across temperatures.
+        """
+
+        unique_temps = jnp.unique(self.T)
+
+        train_H, train_B, train_T = [], [], []
+        val_H, val_B, val_T = [], [], []
+        test_H, test_B, test_T = [], [], []
+
+        for temp in unique_temps:
+            # Use the class method to filter sequences for this temperature
+            freq_temp = self.filter_temperatures([temp])
+
+            # Indices for this temperature sequences
+            indices = list(range(freq_temp.H.shape[0]))
+
+            # First split into train+val and test
+            train_val_idx, test_idx = train_test_split(indices, test_size=test_frac, random_state=seed, shuffle=True)
+            # Then split train+val into train and val
+            val_relative_frac = val_frac / (train_frac + val_frac)
+            train_idx, val_idx = train_test_split(
+                train_val_idx,
+                test_size=val_relative_frac,
+                random_state=seed,
+                shuffle=True,
+            )
+
+            # Append split sequences for this temperature to respective sets
+            train_idx = jnp.array(train_idx)
+            val_idx = jnp.array(val_idx)
+            test_idx = jnp.array(test_idx)
+
+            train_H.append(freq_temp.H[train_idx])
+            train_B.append(freq_temp.B[train_idx])
+            train_T.append(freq_temp.T[train_idx])
+
+            val_H.append(freq_temp.H[val_idx])
+            val_B.append(freq_temp.B[val_idx])
+            val_T.append(freq_temp.T[val_idx])
+
+            test_H.append(freq_temp.H[test_idx])
+            test_B.append(freq_temp.B[test_idx])
+            test_T.append(freq_temp.T[test_idx])
+
+        # Concatenate all temperature splits per dataset
+        train_set = FrequencySet(
+            material_name=self.material_name,
+            frequency=self.frequency,
+            H=jnp.concatenate(train_H),
+            B=jnp.concatenate(train_B),
+            T=jnp.concatenate(train_T),
+        )
+
+        val_set = FrequencySet(
+            material_name=self.material_name,
+            frequency=self.frequency,
+            H=jnp.concatenate(val_H),
+            B=jnp.concatenate(val_B),
+            T=jnp.concatenate(val_T),
+        )
+
+        test_set = FrequencySet(
+            material_name=self.material_name,
+            frequency=self.frequency,
+            H=jnp.concatenate(test_H),
+            B=jnp.concatenate(test_B),
+            T=jnp.concatenate(test_T),
+        )
+
+        return train_set, val_set, test_set
+
 
 class MaterialSet(eqx.Module):
     """Class to store measurement data for a single material but with variable
@@ -95,8 +189,22 @@ class MaterialSet(eqx.Module):
     frequencies: jax.Array
 
     @classmethod
+    def load_from_file(cls, file_path: str):
+        """Load a MaterialSet from a file."""
+        with open(file_path, "rb") as f:
+            return pickle.load(f)
+
+    def save_to_file(self, file_path: str):
+        """Save the MaterialSet to a file."""
+        with open(file_path, "wb") as f:
+            pickle.dump(self, f)
+
+    @classmethod
     def load_from_raw_data(
-        cls, file_overview: pd.DataFrame, material_name: str, frequencies: list[float] | jax.Array
+        cls,
+        file_overview: pd.DataFrame,
+        material_name: str,
+        frequencies: list[float] | jax.Array,
     ) -> "MaterialSet":
         """Load a MaterialSet from raw data."""
         frequency_sets = []
@@ -110,6 +218,65 @@ class MaterialSet(eqx.Module):
             frequency_sets=frequency_sets,
             frequencies=jnp.array(frequencies),
         )
+
+    @classmethod
+    def from_pandas_dict(
+        cls,
+        data_d: dict[str, pd.DataFrame],
+        frequencies: list[float] = (50000.0, 80000.0, 125000.0, 200000.0, 320000.0, 500000.0, 800000.0),
+    ) -> "MaterialSet":
+        """Create a MaterialSet from a dictionary of pandas DataFrames."""
+
+        # Extract the material name from the first key in the data dictionary
+        sample_key = next(iter(data_d))
+        material_name = sample_key.split("_")[0]
+
+        frequency_sets = []
+
+        for idx, freq in enumerate(frequencies):
+            key_base = f"{material_name}_{idx + 1}"
+            B_key = f"{key_base}_B"
+            H_key = f"{key_base}_H"
+            T_key = f"{key_base}_T"
+
+            assert B_key in data_d and H_key in data_d and T_key in data_d, f"Missing data for frequency {freq} Hz"
+
+            B = jnp.array(data_d[B_key].values)
+            H = jnp.array(data_d[H_key].values)
+            T = jnp.array(data_d[T_key].values)[:, 0]
+
+            freq_set = FrequencySet(
+                material_name=material_name,
+                frequency=freq,
+                B=B,
+                H=H,
+                T=T,
+            )
+
+            frequency_sets.append(freq_set)
+
+        return cls(
+            material_name=material_name,
+            frequencies=jnp.array(frequencies),
+            frequency_sets=frequency_sets,
+        )
+
+    def to_pandas_dict(self) -> dict[str, pd.DataFrame]:
+        """Convert the MaterialSet to a dictionary of pandas DataFrames."""
+        data_dict = {}
+
+        for idx, freq_set in enumerate(self.frequency_sets):
+            prefix = f"{freq_set.material_name}_{idx + 1}"
+
+            B_df = pd.DataFrame(jnp.array(freq_set.B))
+            H_df = pd.DataFrame(jnp.array(freq_set.H))
+            T_df = pd.DataFrame(jnp.array(freq_set.T))
+
+            data_dict[f"{prefix}_B"] = B_df
+            data_dict[f"{prefix}_H"] = H_df
+            data_dict[f"{prefix}_T"] = T_df
+
+        return data_dict
 
     def __getitem__(self, idx: int) -> FrequencySet:
         """Return the frequency set at the given index."""
@@ -151,6 +318,53 @@ class MaterialSet(eqx.Module):
             frequencies=jnp.array([fs.frequency for fs in filtered_frequency_sets]),
         )
 
+    def split_into_train_val_test(
+        self,
+        train_frac: float = 0.7,
+        val_frac: float = 0.15,
+        test_frac: float = 0.15,
+        seed: int = 0,
+    ) -> Tuple["MaterialSet", "MaterialSet", "MaterialSet"]:
+        """
+        Split a MaterialSet into train, val, test MaterialSets.
+        Each FrequencySet inside is split stratified by temperature sequences.
+        """
+
+        train_frequency_sets = []
+        val_frequency_sets = []
+        test_frequency_sets = []
+
+        for freq_set in self.frequency_sets:
+            train_fs, val_fs, test_fs = freq_set.split_into_train_val_test(
+                train_frac,
+                val_frac,
+                test_frac,
+                seed,
+            )
+            train_frequency_sets.append(train_fs)
+            val_frequency_sets.append(val_fs)
+            test_frequency_sets.append(test_fs)
+
+        frequencies = self.frequencies
+
+        train_material_set = MaterialSet(
+            material_name=self.material_name,
+            frequency_sets=train_frequency_sets,
+            frequencies=frequencies,
+        )
+        val_material_set = MaterialSet(
+            material_name=self.material_name,
+            frequency_sets=val_frequency_sets,
+            frequencies=frequencies,
+        )
+        test_material_set = MaterialSet(
+            material_name=self.material_name,
+            frequency_sets=test_frequency_sets,
+            frequencies=frequencies,
+        )
+
+        return train_material_set, val_material_set, test_material_set
+
 
 class DataSet(eqx.Module):
     """Class to store measurement data for multiple materials.
@@ -166,9 +380,13 @@ class DataSet(eqx.Module):
 
     @classmethod
     def load_from_raw_data(
-        cls, file_overview: pd.DataFrame, material_names: list[str], frequencies: list[float] | jax.Array
+        cls,
+        file_overview: pd.DataFrame,
+        material_names: list[str],
+        frequencies: list[float] | jax.Array,
     ) -> "DataSet":
         """Load a DataSet from raw data."""
+
         material_sets = []
 
         for material_name in tqdm.tqdm(material_names):
@@ -268,14 +486,51 @@ def book_keeping(logs_d: Dict):
     exp_id = str(uuid4())[:8]
 
     pd.DataFrame(logs_d["predictions_transformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_transformed.parquet", index=False
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_transformed.parquet",
+        index=False,
     )
     pd.DataFrame(logs_d["predictions_untransformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_untransformed.parquet", index=False
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_untransformed.parquet",
+        index=False,
     )
     pd.DataFrame(logs_d["ground_truth_transformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt_transformed.parquet", index=False
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt_transformed.parquet",
+        index=False,
     )
     pd.DataFrame(logs_d["ground_truth_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt.parquet", index=False
+        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt.parquet",
+        index=False,
     )
+
+
+def get_train_val_test_pandas_dicts(
+    data_dict: dict[str, pd.DataFrame] = None,
+    material_name: str = None,
+    train_frac: float = 0.7,
+    val_frac: float = 0.15,
+    test_frac: float = 0.15,
+    seed: int = 12,
+) -> tuple[
+    dict[str, pd.DataFrame],
+    dict[str, pd.DataFrame],
+    dict[str, pd.DataFrame],
+    dict[str, pd.DataFrame],
+]:
+
+    if data_dict is None and material_name is None:
+        raise ValueError("Either data_dict or material_name must be provided.")
+
+    if data_dict is None:
+        data_dict = load_data_into_pandas_df(material=material_name)
+
+    mat_set = MaterialSet.from_pandas_dict(data_dict)
+
+    train_set, val_set, test_set = mat_set.split_into_train_val_test(
+        train_frac=train_frac, val_frac=val_frac, test_frac=test_frac, seed=seed
+    )
+
+    data_train = train_set.to_pandas_dict()
+    data_val = val_set.to_pandas_dict()
+    data_test = test_set.to_pandas_dict()
+
+    return data_train, data_val, data_test
