@@ -1,15 +1,16 @@
 import tqdm
 import pandas as pd
 import pickle
-from typing import List, Dict
+from typing import Dict, Tuple
+from pathlib import Path
+from uuid import uuid4
+from sklearn.model_selection import train_test_split
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import equinox as eqx
-from pathlib import Path
-from uuid import uuid4
-from sklearn.model_selection import train_test_split
-from typing import Tuple
+
 from mc2.utils.data_inspection import load_and_process_single_from_full_file_overview
 
 
@@ -91,15 +92,15 @@ class FrequencySet(eqx.Module):
             T=self.T[temperature_mask],
         )
 
-    def split_frequency_set_into_train_val_test_sets(
+    def split_into_train_val_test(
         self,
         train_frac: float,
         val_frac: float,
         test_frac: float,
         seed: int = 0,
     ) -> Tuple["FrequencySet", "FrequencySet", "FrequencySet"]:
-        """
-        Split a FrequencySet into train, val and test sets, stratified by temperature.
+        """Split a FrequencySet into train, validation and test sets, stratified by temperature.
+
         For each temperature, sequences are split into train, val and test separately,
         then combined across temperatures.
         """
@@ -128,7 +129,7 @@ class FrequencySet(eqx.Module):
                 shuffle=True,
             )
 
-            # Append split sequences for this temperature to respective sets^
+            # Append split sequences for this temperature to respective sets
             train_idx = jnp.array(train_idx)
             val_idx = jnp.array(val_idx)
             test_idx = jnp.array(test_idx)
@@ -188,6 +189,17 @@ class MaterialSet(eqx.Module):
     frequencies: jax.Array
 
     @classmethod
+    def load_from_file(cls, file_path: str):
+        """Load a MaterialSet from a file."""
+        with open(file_path, "rb") as f:
+            return pickle.load(f)
+
+    def save_to_file(self, file_path: str):
+        """Save the MaterialSet to a file."""
+        with open(file_path, "wb") as f:
+            pickle.dump(self, f)
+
+    @classmethod
     def load_from_raw_data(
         cls,
         file_overview: pd.DataFrame,
@@ -211,15 +223,7 @@ class MaterialSet(eqx.Module):
     def from_pandas_dict(
         cls,
         data_d: dict[str, pd.DataFrame],
-        frequencies: list[float] = [
-            50000.0,
-            80000.0,
-            125000.0,
-            200000.0,
-            320000.0,
-            500000.0,
-            800000.0,
-        ],
+        frequencies: list[float] = (50000.0, 80000.0, 125000.0, 200000.0, 320000.0, 500000.0, 800000.0),
     ) -> "MaterialSet":
         """Create a MaterialSet from a dictionary of pandas DataFrames."""
 
@@ -314,7 +318,7 @@ class MaterialSet(eqx.Module):
             frequencies=jnp.array([fs.frequency for fs in filtered_frequency_sets]),
         )
 
-    def split_material_set_into_train_val_test_sets(
+    def split_into_train_val_test(
         self,
         train_frac: float = 0.7,
         val_frac: float = 0.15,
@@ -331,7 +335,7 @@ class MaterialSet(eqx.Module):
         test_frequency_sets = []
 
         for freq_set in self.frequency_sets:
-            train_fs, val_fs, test_fs = freq_set.split_frequency_set_into_train_val_test_sets(
+            train_fs, val_fs, test_fs = freq_set.split_into_train_val_test(
                 train_frac,
                 val_frac,
                 test_frac,
@@ -521,7 +525,7 @@ def get_train_val_test_pandas_dicts(
 
     mat_set = MaterialSet.from_pandas_dict(data_dict)
 
-    train_set, val_set, test_set = mat_set.split_material_set_into_train_val_test_sets(
+    train_set, val_set, test_set = mat_set.split_into_train_val_test(
         train_frac=train_frac, val_frac=val_frac, test_frac=test_frac, seed=seed
     )
 
