@@ -34,6 +34,7 @@ dependencies = [
     "torch",
     "torchinfo",
     "joblib>=1.5.0",
+    "scikit-learn>=1.7.0",
 ]
 
 [project.urls]
