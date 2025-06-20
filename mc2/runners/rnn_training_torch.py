@@ -1,5 +1,8 @@
 import argparse
 from mc2.training.routine import train_recursive_nn
+import jax
+
+jax.config.update("jax_platform_name", "cpu")
 
 
 def parse_args() -> argparse.Namespace:
