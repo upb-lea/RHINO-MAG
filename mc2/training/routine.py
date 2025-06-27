@@ -222,7 +222,12 @@ def train_recursive_nn(
     return experiment_logs_l
 
 
-# wie schnell ist ein GRU in JAX?
+# TODO
+# wie schnell ist ein GRU in JAX? (OJS)
+# Kleinere Abtastraten untersuchen (Hendrik)
+# NODEs (Hendrik)
+# FE function implementieren (Till)
+# Target-Trafos untersuchen (Wilhelm)
+
 # k-fold CV für 1. Nov submission muss implementiert werden
 # train-val-test split mit reduzierter Datenmenge für prototyping muss implementiert werden
-# bookkeeping ausbauen
