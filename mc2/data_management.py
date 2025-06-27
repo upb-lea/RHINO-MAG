@@ -3,6 +3,8 @@ import pandas as pd
 import pickle
 from typing import Dict, Tuple
 from pathlib import Path
+import logging
+import sys
 from uuid import uuid4
 from sklearn.model_selection import train_test_split
 
@@ -35,6 +37,24 @@ AVAILABLE_MATERIALS = [
     "N49",
     "N87",
 ]
+
+DESIRED_DT_FMT = "%Y-%m-%d %H:%M:%S"  # desired datetime format
+LOG_FORMATTER = logging.Formatter("%(asctime)s | %(levelname)s : %(message)s", DESIRED_DT_FMT)
+LOG_COLUMN_WIDTH = 40
+
+
+def setup_package_logging():
+    """Configure package-wide logging settings."""
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(LOG_FORMATTER)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[stream_handler],
+    )
+
+
+setup_package_logging()
 
 
 class FrequencySet(eqx.Module):
@@ -494,23 +514,27 @@ def load_data_into_pandas_df(
 
 def book_keeping(logs_d: Dict):
     exp_id = str(uuid4())[:8]
+    mat = logs_d.get("material", "unknown_material")
+    logs_root = EXPERIMENT_LOGS_ROOT / f"{mat}_{exp_id}"
+    logs_root.mkdir(parents=True, exist_ok=True)
+    # store predictions and ground truth
+    for l_key, l_v in logs_d.items():
+        if l_key.startswith("predictions_MS"):
+            seq_i = l_key.split("_")[-1]
 
-    pd.DataFrame(logs_d["predictions_transformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_transformed.parquet",
-        index=False,
-    )
-    pd.DataFrame(logs_d["predictions_untransformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_untransformed.parquet",
-        index=False,
-    )
-    pd.DataFrame(logs_d["ground_truth_transformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt_transformed.parquet",
-        index=False,
-    )
-    pd.DataFrame(logs_d["ground_truth_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt.parquet",
-        index=False,
-    )
+            pd.DataFrame(l_v).to_parquet(
+                logs_root / f"seed_{logs_d['seed']}_seq_{seq_i}_preds.parquet",
+                index=False,
+            )
+
+            pd.DataFrame(logs_d[f"ground_truth_MS_{seq_i}"]).to_parquet(
+                logs_root / f"seed_{logs_d['seed']}_seq_{seq_i}_gt.parquet",
+                index=False,
+            )
+    # store trends
+    pd.DataFrame(
+        np.column_stack([logs_d["loss_trends_train"], logs_d["loss_trends_val"]]), columns=["train", "val"]
+    ).to_parquet(logs_root / f"seed_{logs_d['seed']}_loss_trends.parquet", index=False)
 
 
 def get_train_val_test_pandas_dicts(

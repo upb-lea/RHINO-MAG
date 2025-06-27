@@ -10,13 +10,37 @@ from typing import Dict
 from torchinfo import summary
 from mc2.data_management import (
     AVAILABLE_MATERIALS,
-    load_data_into_pandas_df,
     book_keeping,
     get_train_val_test_pandas_dicts,
+    setup_package_logging,
 )
 
 SUPPORTED_ARCHS = ["gru"]
-DO_TRANSFORM_H = False
+DO_TRANSFORM_H = True
+H_FACTOR = 1.2
+
+
+@torch.no_grad()
+def evaluate_recursively(mdl, tensors_d, loss, device, max_H, n_states, set_lbl="val"):
+    target_lbl = "H_traf" if DO_TRANSFORM_H else "H"
+    mdl.eval()
+    val_loss = 0.0
+    preds_MS_l = []
+    for model_in_MSP, h_MS in zip(tensors_d[set_lbl]["model_in_ASP"], tensors_d[set_lbl][target_lbl]):
+        M, S, P = model_in_MSP.shape
+        hidden_IMI = h_MS[:, 0].reshape(1, M, 1)
+        """hidden_IMR = torch.cat(
+            [hidden_IMI, torch.zeros((1, M, n_states - 1), dtype=torch.float32, device=device)], dim=2
+        )"""
+        hidden_IMR = torch.tile(hidden_IMI, (1, 1, n_states))  # init hidden state with first H
+        val_pred_MSR, hidden_IMI = mdl(model_in_MSP, hidden_IMR)
+        if DO_TRANSFORM_H:
+            val_pred_untransformed_MS = torch.atanh(torch.clip(val_pred_MSR[:, :, 0], -0.999, 0.999)) / H_FACTOR * max_H
+        else:
+            val_pred_untransformed_MS = val_pred_MSR[:, :, 0] * max_H
+        val_loss += loss(val_pred_untransformed_MS, h_MS * max_H).cpu().numpy()
+        preds_MS_l += [val_pred_untransformed_MS]
+    return val_loss / len(tensors_d[set_lbl]["model_in_ASP"]), preds_MS_l
 
 
 def train_recursive_nn(
@@ -56,15 +80,17 @@ def train_recursive_nn(
         for num_set_k, num_set_df in set_d.items():
             mat, set_num, quant_lbl = num_set_k.upper().split("_")
             num_set_AS = num_set_df.to_numpy() / max_d[quant_lbl]  # FE, normalize
+            if debug and set_lbl == "train":
+                num_set_AS = num_set_AS[::10, :]
             if set_lbl not in tensors_d:
                 tensors_d[set_lbl] = {"B": [], "H": [], "H_traf": [], "T": []}
             tensors_d[set_lbl][quant_lbl].append(torch.from_numpy(num_set_AS).to(device, torch.float32))
             if DO_TRANSFORM_H and quant_lbl == "H":
                 # experimental target transform
-                h_factor = 1.2
                 tensors_d[set_lbl]["H_traf"].append(
-                    torch.from_numpy(np.tanh(h_factor * num_set_AS)).to(device, torch.float32)
+                    torch.from_numpy(np.tanh(H_FACTOR * num_set_AS)).to(device, torch.float32)
                 )
+
         # concatenate B and T into a model_in tensor
         if "model_in_ASP" not in tensors_d[set_lbl]:
             tensors_d[set_lbl]["model_in_ASP"] = []
@@ -87,8 +113,8 @@ def train_recursive_nn(
         np.random.seed(seed)
         random.seed(seed)
         torch.manual_seed(seed)
-
         logs = {
+            "material": material,
             "loss_trends_train": [],
             "loss_trends_val": [],
             "models_state_dict": [],
@@ -105,7 +131,7 @@ def train_recursive_nn(
                 mdl,
                 input_size=((1, 1, n_inputs), (1, 1, n_units)),
             )
-            log.info(f"\n{mdl_info}")
+            # log.info(f"\n{mdl_info}")
         R = n_units
         # mdl = torch.jit.script(mdl)  # does not work for GRU
         mdl = mdl.to(device)
@@ -137,9 +163,10 @@ def train_recursive_nn(
                     train_h_BS = train_shuff_h_NS[batch_start:batch_end]
                     B = len(train_BSP)
                     hidden_IBI = train_h_BS[:, 0].reshape(1, B, 1)
-                    hidden_IBR = torch.cat(
+                    """hidden_IBR = torch.cat(
                         [hidden_IBI, torch.zeros((1, B, R - 1), dtype=torch.float32, device=device)], dim=2
-                    )
+                    )"""
+                    hidden_IBR = torch.tile(hidden_IBI, (1, 1, R))  # init hidden state with first H
 
                     for seq_i in range(n_seqs):
                         seq_start, seq_end = seq_i * tbptt_size, min((seq_i + 1) * tbptt_size, S)
@@ -159,47 +186,30 @@ def train_recursive_nn(
                 train_loss_avg_per_epoch += avg_loss / len(tensors_d["train"]["model_in_ASP"])
             logs["loss_trends_train"].append(train_loss_avg_per_epoch)
             pbar_str = f"Loss {train_loss_avg_per_epoch:.2e}"
-            val_loss = 0.0
-            for model_in_MSP, h_MS in zip(tensors_d["val"]["model_in_ASP"], tensors_d["val"][target_lbl]):
-                with torch.no_grad():
-                    M, S, P = model_in_MSP.shape
-                    mdl.eval()
 
-                    hidden_IMI = h_MS[:, 0].reshape(1, M, 1)
-                    hidden_IMR = torch.cat(
-                        [hidden_IMI, torch.zeros((1, M, R - 1), dtype=torch.float32, device=device)], dim=2
-                    )
-                    val_pred_MSR, hidden_IMI = mdl(model_in_MSP, hidden_IMR)
-                    max_H = max_d["H"]
-                    if DO_TRANSFORM_H:
-                        val_pred_untransformed_MS = (
-                            torch.atanh(torch.clip(val_pred_MSR[:, :, 0], -0.999, 0.999)) / h_factor * max_H
-                        )
-                    else:
-                        val_pred_untransformed_MS = val_pred_MSR[:, :, 0] * max_H
-                    val_loss += loss(val_pred_untransformed_MS, h_MS * max_H).cpu().numpy()
-            logs["loss_trends_val"].append(val_loss / len(tensors_d["val"]["model_in_ASP"]))
+            val_loss, _ = evaluate_recursively(mdl, tensors_d, loss, device, max_d["H"], R, set_lbl="val")
+            logs["loss_trends_val"].append(val_loss)
             pbar_str += f"| val loss {val_loss:.2e}"
             pbar.set_postfix_str(pbar_str)
             if np.isnan(val_loss):
                 break
-        # TODO: implement Test set evaluation
 
+        test_loss, test_pred_MS_l = evaluate_recursively(mdl, tensors_d, loss, device, max_d["H"], R, set_lbl="test")
+        log.info(f"Test loss seed {seed}: {test_loss:.3f} A/m")
         # book keeping
         if "models_arch" not in logs:
             # TODO implement configurized topology
             logs["models_arch"] = json.dumps({})
         with torch.no_grad():
-            logs["predictions_transformed_MS"] = val_pred_MSR[:, :, 0].cpu().numpy()
-            logs["predictions_untransformed_MS"] = val_pred_untransformed_MS.cpu().numpy()
-            logs["ground_truth_transformed_MS"] = test_h_transformed_MS.cpu().numpy()
-            logs["ground_truth_MS"] = test_h_MS.cpu().numpy() * max_H
+            for i, (gt, pred) in enumerate(zip(tensors_d[set_lbl][target_lbl], test_pred_MS_l)):
+                logs[f"predictions_MS_{i}"] = pred.cpu().numpy()
+                logs[f"ground_truth_MS_{i}"] = gt.cpu().numpy() * max_d["H"]
         logs["end_time"] = pd.Timestamp.now().round(freq="s")
         logs["seed"] = seed
         return logs
 
     n_seeds = 1 if debug else n_seeds
-    print(f"Parallelize over {n_seeds} seeds with {n_jobs} processes..")
+    log.info(f"Parallelize over {n_seeds} seeds with {n_jobs} processes..")
     with Parallel(n_jobs=n_jobs) as prll:
         # list of dicts
         experiment_logs_l = prll(delayed(run_seeded_training)(s) for s in range(n_seeds))
@@ -210,3 +220,9 @@ def train_recursive_nn(
 
     # TODO DB logging
     return experiment_logs_l
+
+
+# wie schnell ist ein GRU in JAX?
+# k-fold CV für 1. Nov submission muss implementiert werden
+# train-val-test split mit reduzierter Datenmenge für prototyping muss implementiert werden
+# bookkeeping ausbauen
