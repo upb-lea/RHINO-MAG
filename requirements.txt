@@ -8,3 +8,4 @@ equinox==0.12.1
 diffrax==0.7.0
 optax==0.2.4
 pandas>=2.2.3
+scikit-learn==1.4.2

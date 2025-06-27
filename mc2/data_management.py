@@ -1,13 +1,17 @@
 import tqdm
 import pandas as pd
 import pickle
-from typing import List, Dict
+from typing import Dict, Tuple
+from pathlib import Path
+import logging
+import sys
+from uuid import uuid4
+from sklearn.model_selection import train_test_split
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import equinox as eqx
-from pathlib import Path
-from uuid import uuid4
 
 from mc2.utils.data_inspection import load_and_process_single_from_full_file_overview
 
@@ -21,7 +25,36 @@ for root_dir in (CACHE_ROOT, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT):
     root_dir.mkdir(parents=True, exist_ok=True)
 
 
-AVAILABLE_MATERIALS = ["3C90", "3C94", "3E6", "3F4", "77", "78", "N27", "N30", "N49", "N87"]
+AVAILABLE_MATERIALS = [
+    "3C90",
+    "3C94",
+    "3E6",
+    "3F4",
+    "77",
+    "78",
+    "N27",
+    "N30",
+    "N49",
+    "N87",
+]
+
+DESIRED_DT_FMT = "%Y-%m-%d %H:%M:%S"  # desired datetime format
+LOG_FORMATTER = logging.Formatter("%(asctime)s | %(levelname)s : %(message)s", DESIRED_DT_FMT)
+LOG_COLUMN_WIDTH = 40
+
+
+def setup_package_logging():
+    """Configure package-wide logging settings."""
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(LOG_FORMATTER)
+
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[stream_handler],
+    )
+
+
+setup_package_logging()
 
 
 class FrequencySet(eqx.Module):
@@ -41,34 +74,35 @@ class FrequencySet(eqx.Module):
     H: jax.Array
     B: jax.Array
     T: jax.Array
+    device: jax.Device
 
     @classmethod
-    def from_dict(cls, data_dict: dict) -> "FrequencySet":
+    def from_dict(cls, data_dict: dict, device: jax.Device) -> "FrequencySet":
         """Create a FrequencySet from a dictionary."""
         return cls(
             material_name=data_dict["material_name"],
             frequency=data_dict["frequency"],
-            H=jnp.array(data_dict["H"]),
-            B=jnp.array(data_dict["B"]),
-            T=jnp.array(data_dict["T"]),
+            H=jnp.array(data_dict["H"], device=device),
+            B=jnp.array(data_dict["B"], device=device),
+            T=jnp.array(data_dict["T"], device=device),
+            device=device,
         )
 
     @classmethod
-    def load_from_raw_data(cls, file_overview: pd.DataFrame, material_name: str, frequency: float) -> "FrequencySet":
+    def load_from_raw_data(
+        cls, file_overview: pd.DataFrame, material_name: str, frequency: float, device: jax.Device
+    ) -> "FrequencySet":
         """Load a FrequencySet from raw data."""
         data_dict = load_and_process_single_from_full_file_overview(
-            file_overview,
-            material_name=material_name,
-            data_type=["B", "T", "H"],
-            frequency=[frequency],
+            file_overview, material_name=material_name, data_type=["B", "T", "H"], frequency=[frequency]
         )
-
+        data_dict["device"] = device
         return cls.from_dict(data_dict)
 
-    def filter_temperatures(self, temperatures: list[float] | jax.Array) -> "FrequencySet":
+    def filter_temperatures(self, temperatures: list[float] | jax.Array, device: jax.Device) -> "FrequencySet":
         """Filter the frequency set by temperatures."""
         if isinstance(temperatures, list):
-            temperatures = jnp.array(temperatures)
+            temperatures = jnp.array(temperatures, device=device)
 
         temperature_mask = jnp.isin(self.T, temperatures)
         return FrequencySet(
@@ -77,7 +111,93 @@ class FrequencySet(eqx.Module):
             H=self.H[temperature_mask],
             B=self.B[temperature_mask],
             T=self.T[temperature_mask],
+            device=device,
         )
+
+    def split_into_train_val_test(
+        self,
+        train_frac: float,
+        val_frac: float,
+        test_frac: float,
+        seed: int = 0,
+        device_str: str = "cpu",
+    ) -> Tuple["FrequencySet", "FrequencySet", "FrequencySet"]:
+        """Split a FrequencySet into train, validation and test sets, stratified by temperature.
+
+        For each temperature, sequences are split into train, val and test separately,
+        then combined across temperatures.
+        """
+        device = jax.devices(device_str)[0]
+        unique_temps = jnp.unique(self.T)
+
+        train_H, train_B, train_T = [], [], []
+        val_H, val_B, val_T = [], [], []
+        test_H, test_B, test_T = [], [], []
+
+        for temp in unique_temps:
+            # Use the class method to filter sequences for this temperature
+            freq_temp = self.filter_temperatures([temp], device=device)
+
+            # Indices for this temperature sequences
+            indices = list(range(freq_temp.H.shape[0]))
+
+            # First split into train+val and test
+            train_val_idx, test_idx = train_test_split(indices, test_size=test_frac, random_state=seed, shuffle=True)
+            # Then split train+val into train and val
+            val_relative_frac = val_frac / (train_frac + val_frac)
+            train_idx, val_idx = train_test_split(
+                train_val_idx,
+                test_size=val_relative_frac,
+                random_state=seed,
+                shuffle=True,
+            )
+
+            # Append split sequences for this temperature to respective sets
+            train_idx = jnp.array(train_idx, device=device)
+            val_idx = jnp.array(val_idx, device=device)
+            test_idx = jnp.array(test_idx, device=device)
+
+            train_H.append(freq_temp.H[train_idx])
+            train_B.append(freq_temp.B[train_idx])
+            train_T.append(freq_temp.T[train_idx])
+
+            val_H.append(freq_temp.H[val_idx])
+            val_B.append(freq_temp.B[val_idx])
+            val_T.append(freq_temp.T[val_idx])
+
+            test_H.append(freq_temp.H[test_idx])
+            test_B.append(freq_temp.B[test_idx])
+            test_T.append(freq_temp.T[test_idx])
+
+        # Concatenate all temperature splits per dataset
+        train_set = FrequencySet(
+            material_name=self.material_name,
+            frequency=self.frequency,
+            H=jnp.concatenate(train_H),
+            B=jnp.concatenate(train_B),
+            T=jnp.concatenate(train_T),
+            device=device,
+        )
+
+        val_set = FrequencySet(
+            material_name=self.material_name,
+            frequency=self.frequency,
+            H=jnp.concatenate(val_H),
+            B=jnp.concatenate(val_B),
+            T=jnp.concatenate(val_T),
+            device=device,
+        )
+
+        test_set = FrequencySet(
+            material_name=self.material_name,
+            frequency=self.frequency,
+            H=jnp.concatenate(test_H),
+            B=jnp.concatenate(test_B),
+            T=jnp.concatenate(test_T),
+            device=device,
+        )
+
+        return train_set, val_set, test_set
 
 
 class MaterialSet(eqx.Module):
@@ -93,23 +213,95 @@ class MaterialSet(eqx.Module):
     material_name: str
     frequency_sets: list[FrequencySet]
     frequencies: jax.Array
+    device: jax.Device
+
+    @classmethod
+    def load_from_file(cls, file_path: str):
+        """Load a MaterialSet from a file."""
+        with open(file_path, "rb") as f:
+            return pickle.load(f)
+
+    def save_to_file(self, file_path: str):
+        """Save the MaterialSet to a file."""
+        with open(file_path, "wb") as f:
+            pickle.dump(self, f)
 
     @classmethod
     def load_from_raw_data(
-        cls, file_overview: pd.DataFrame, material_name: str, frequencies: list[float] | jax.Array
+        cls,
+        file_overview: pd.DataFrame,
+        material_name: str,
+        frequencies: list[float] | jax.Array,
+        device_str: str = "cpu",
     ) -> "MaterialSet":
         """Load a MaterialSet from raw data."""
         frequency_sets = []
-
+        device = jax.devices(device_str)[0]
         for frequency in frequencies:
-            frequency_set = FrequencySet.load_from_raw_data(file_overview, material_name, frequency)
+            frequency_set = FrequencySet.load_from_raw_data(file_overview, material_name, frequency, device)
             frequency_sets.append(frequency_set)
 
         return cls(
             material_name=material_name,
             frequency_sets=frequency_sets,
-            frequencies=jnp.array(frequencies),
+            frequencies=jnp.array(frequencies, device=device),
+            device=device,
         )
+
+    @classmethod
+    def from_pandas_dict(
+        cls,
+        data_d: dict[str, pd.DataFrame],
+        frequencies: list[float] = (50000.0, 80000.0, 125000.0, 200000.0, 320000.0, 500000.0, 800000.0),
+        device_str: str = "cpu",
+    ) -> "MaterialSet":
+        """Create a MaterialSet from a dictionary of pandas DataFrames."""
+
+        # Extract the material name from the first key in the data dictionary
+        sample_key = next(iter(data_d))
+        material_name = sample_key.split("_")[0]
+
+        frequency_sets = []
+        dev = jax.devices(device_str)[0]
+        for idx, freq in enumerate(frequencies):
+            key_base = f"{material_name}_{idx + 1}"
+            B_key = f"{key_base}_B"
+            H_key = f"{key_base}_H"
+            T_key = f"{key_base}_T"
+
+            assert B_key in data_d and H_key in data_d and T_key in data_d, f"Missing data for frequency {freq} Hz"
+
+            B = jnp.array(data_d[B_key].values, device=dev)
+            H = jnp.array(data_d[H_key].values, device=dev)
+            T = jnp.array(data_d[T_key].values, device=dev)[:, 0]
+
+            freq_set = FrequencySet(material_name=material_name, frequency=freq, B=B, H=H, T=T, device=dev)
+
+            frequency_sets.append(freq_set)
+
+        return cls(
+            material_name=material_name,
+            frequencies=jnp.array(frequencies, device=dev),
+            frequency_sets=frequency_sets,
+            device=dev,
+        )
+
+    def to_pandas_dict(self) -> dict[str, pd.DataFrame]:
+        """Convert the MaterialSet to a dictionary of pandas DataFrames."""
+        data_dict = {}
+
+        for idx, freq_set in enumerate(self.frequency_sets):
+            prefix = f"{freq_set.material_name}_{idx + 1}"
+
+            B_df = pd.DataFrame(jnp.array(freq_set.B))
+            H_df = pd.DataFrame(jnp.array(freq_set.H))
+            T_df = pd.DataFrame(jnp.array(freq_set.T))
+
+            data_dict[f"{prefix}_B"] = B_df
+            data_dict[f"{prefix}_H"] = H_df
+            data_dict[f"{prefix}_T"] = T_df
+
+        return data_dict
 
     def __getitem__(self, idx: int) -> FrequencySet:
         """Return the frequency set at the given index."""
@@ -126,20 +318,21 @@ class MaterialSet(eqx.Module):
     def filter_temperatures(self, temperatures: list[float] | jax.Array) -> "MaterialSet":
         """Filter the material set by temperatures."""
         filtered_frequency_sets = [
-            frequency_set.filter_temperatures(temperatures) for frequency_set in self.frequency_sets
+            frequency_set.filter_temperatures(temperatures, device=self.device) for frequency_set in self.frequency_sets
         ]
 
         return MaterialSet(
             material_name=self.material_name,
             frequency_sets=filtered_frequency_sets,
             frequencies=jnp.array([fs.frequency for fs in filtered_frequency_sets]),
+            device=self.device,
         )
 
     def filter_frequencies(self, frequencies: list[float] | jax.Array) -> "MaterialSet":
         """Filter the material set by frequencies."""
         filtered_frequency_sets = []
 
-        frequencies = jnp.array(frequencies)
+        frequencies = jnp.array(frequencies, device=self.device)
 
         for frequency_set in self.frequency_sets:
             if frequency_set.frequency in frequencies:
@@ -148,8 +341,57 @@ class MaterialSet(eqx.Module):
         return MaterialSet(
             material_name=self.material_name,
             frequency_sets=filtered_frequency_sets,
-            frequencies=jnp.array([fs.frequency for fs in filtered_frequency_sets]),
+            frequencies=jnp.array([fs.frequency for fs in filtered_frequency_sets], device=self.device),
+            device=self.device,
         )
+
+    def split_into_train_val_test(
+        self,
+        train_frac: float = 0.7,
+        val_frac: float = 0.15,
+        test_frac: float = 0.15,
+        seed: int = 0,
+        device_str: str = "cpu",
+    ) -> Tuple["MaterialSet", "MaterialSet", "MaterialSet"]:
+        """
+        Split a MaterialSet into train, val, test MaterialSets.
+        Each FrequencySet inside is split stratified by temperature sequences.
+        """
+
+        train_frequency_sets = []
+        val_frequency_sets = []
+        test_frequency_sets = []
+
+        for freq_set in self.frequency_sets:
+            train_fs, val_fs, test_fs = freq_set.split_into_train_val_test(
+                train_frac, val_frac, test_frac, seed, device_str
+            )
+            train_frequency_sets.append(train_fs)
+            val_frequency_sets.append(val_fs)
+            test_frequency_sets.append(test_fs)
+
+        frequencies = self.frequencies
+        device = jax.devices(device_str)[0]
+        train_material_set = MaterialSet(
+            material_name=self.material_name,
+            frequency_sets=train_frequency_sets,
+            frequencies=frequencies,
+            device=device,
+        )
+        val_material_set = MaterialSet(
+            material_name=self.material_name,
+            frequency_sets=val_frequency_sets,
+            frequencies=frequencies,
+            device=device,
+        )
+        test_material_set = MaterialSet(
+            material_name=self.material_name,
+            frequency_sets=test_frequency_sets,
+            frequencies=frequencies,
+            device=device,
+        )
+
+        return train_material_set, val_material_set, test_material_set
 
 
 class DataSet(eqx.Module):
@@ -166,13 +408,18 @@ class DataSet(eqx.Module):
 
     @classmethod
     def load_from_raw_data(
-        cls, file_overview: pd.DataFrame, material_names: list[str], frequencies: list[float] | jax.Array
+        cls,
+        file_overview: pd.DataFrame,
+        material_names: list[str],
+        frequencies: list[float] | jax.Array,
+        device_str: str = "cpu",
     ) -> "DataSet":
         """Load a DataSet from raw data."""
+
         material_sets = []
 
-        for material_name in tqdm.tqdm(material_names):
-            material_set = MaterialSet.load_from_raw_data(file_overview, material_name, frequencies)
+        for material_name in tqdm.tqdm(material_names, desc="Loading MaterialSets"):
+            material_set = MaterialSet.load_from_raw_data(file_overview, material_name, frequencies, device_str)
             material_sets.append(material_set)
 
         return cls(material_sets)
@@ -241,12 +488,13 @@ def load_data_into_pandas_df(
             # load all sequences
             data_ret_d = {}
             csv_file_paths_l = list(mat_folder.glob(f"{material}*.csv"))
-            for csv_file in tqdm.tqdm(sorted(csv_file_paths_l)):
+            for csv_file in tqdm.tqdm(sorted(csv_file_paths_l), desc=f"Loading data for {material}"):
                 expected_cache_file = CACHE_ROOT / csv_file.with_suffix(".parquet")
                 if expected_cache_file.exists():
                     df = pd.read_parquet(expected_cache_file)
                 else:
                     df = pd.read_csv(csv_file, header=None)
+                    df.to_parquet(expected_cache_file, index=False)  # store cache
                 data_ret_d[csv_file.stem] = df
 
         else:
@@ -266,16 +514,57 @@ def load_data_into_pandas_df(
 
 def book_keeping(logs_d: Dict):
     exp_id = str(uuid4())[:8]
+    mat = logs_d.get("material", "unknown_material")
+    logs_root = EXPERIMENT_LOGS_ROOT / f"{mat}_{exp_id}"
+    logs_root.mkdir(parents=True, exist_ok=True)
+    # store predictions and ground truth
+    for l_key, l_v in logs_d.items():
+        if l_key.startswith("predictions_MS"):
+            seq_i = l_key.split("_")[-1]
 
-    pd.DataFrame(logs_d["predictions_transformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_transformed.parquet", index=False
+            pd.DataFrame(l_v).to_parquet(
+                logs_root / f"seed_{logs_d['seed']}_seq_{seq_i}_preds.parquet",
+                index=False,
+            )
+
+            pd.DataFrame(logs_d[f"ground_truth_MS_{seq_i}"]).to_parquet(
+                logs_root / f"seed_{logs_d['seed']}_seq_{seq_i}_gt.parquet",
+                index=False,
+            )
+    # store trends
+    pd.DataFrame(
+        np.column_stack([logs_d["loss_trends_train"], logs_d["loss_trends_val"]]), columns=["train", "val"]
+    ).to_parquet(logs_root / f"seed_{logs_d['seed']}_loss_trends.parquet", index=False)
+
+
+def get_train_val_test_pandas_dicts(
+    data_dict: dict[str, pd.DataFrame] = None,
+    material_name: str = None,
+    train_frac: float = 0.7,
+    val_frac: float = 0.15,
+    test_frac: float = 0.15,
+    seed: int = 12,
+    device_str: str = "cpu",
+) -> tuple[
+    dict[str, pd.DataFrame],
+    dict[str, pd.DataFrame],
+    dict[str, pd.DataFrame],
+    dict[str, pd.DataFrame],
+]:
+    if data_dict is None and material_name is None:
+        raise ValueError("Either data_dict or material_name must be provided.")
+
+    if data_dict is None:
+        data_dict = load_data_into_pandas_df(material=material_name)
+
+    mat_set = MaterialSet.from_pandas_dict(data_dict, device_str=device_str)
+
+    train_set, val_set, test_set = mat_set.split_into_train_val_test(
+        train_frac=train_frac, val_frac=val_frac, test_frac=test_frac, seed=seed
     )
-    pd.DataFrame(logs_d["predictions_untransformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_preds_untransformed.parquet", index=False
-    )
-    pd.DataFrame(logs_d["ground_truth_transformed_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt_transformed.parquet", index=False
-    )
-    pd.DataFrame(logs_d["ground_truth_MS"]).to_parquet(
-        EXPERIMENT_LOGS_ROOT / f"exp_{exp_id}_seed_{logs_d['seed']}_gt.parquet", index=False
-    )
+
+    data_train = train_set.to_pandas_dict()
+    data_val = val_set.to_pandas_dict()
+    data_test = test_set.to_pandas_dict()
+
+    return data_train, data_val, data_test
