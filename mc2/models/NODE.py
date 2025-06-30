@@ -80,3 +80,46 @@ class NeuralEulerODE(eqx.Module):
         _, observations = jax.lax.scan(body_fun, init_obs, actions)
         observations = jnp.concatenate([init_obs[None, :], observations], axis=0)
         return observations
+
+
+class HiddenStateNeuralEulerODE(eqx.Module):
+    state_func: StateSpaceMLP
+    obs_func: callable
+    obs_dim: int
+    state_dim: int
+    action_dim: int
+
+    def __init__(self, obs_dim, state_dim, action_dim, width_size, depth, obs_func, *, key, **kwargs):
+        super().__init__(**kwargs)
+        self.state_func = StateSpaceMLP(state_dim, action_dim, width_size, depth, key=key)
+        self.obs_func = obs_func
+
+        self.obs_dim = obs_dim
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+
+    def step(self, state, action, tau):
+        next_state = state + tau * self.state_func(state, action)
+        next_obs = self.obs_func(state)
+
+        return next_state, next_obs
+
+    def __call__(self, init_obs, actions, tau):
+
+        init_state = init_obs.repeat(self.state_dim, axis=0)
+
+        def body_fun(carry, action):
+            state = carry
+            state, obs = self.step(state, action, tau)
+            return state, jnp.hstack([state, obs])
+
+        _, states_observations = jax.lax.scan(body_fun, init_state, actions)
+
+        init_obs = self.obs_func(init_state)
+        states_observations = jnp.concatenate(
+            [jnp.hstack([init_state, init_obs])[None, :], states_observations], axis=0
+        )
+
+        states = states_observations[:, : self.state_dim]
+        observations = states_observations[:, self.state_dim :]
+        return states, observations
