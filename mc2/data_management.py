@@ -74,35 +74,30 @@ class FrequencySet(eqx.Module):
     H: jax.Array
     B: jax.Array
     T: jax.Array
-    device: jax.Device
 
     @classmethod
-    def from_dict(cls, data_dict: dict, device: jax.Device) -> "FrequencySet":
+    def from_dict(cls, data_dict: dict) -> "FrequencySet":
         """Create a FrequencySet from a dictionary."""
         return cls(
             material_name=data_dict["material_name"],
             frequency=data_dict["frequency"],
-            H=jnp.array(data_dict["H"], device=device),
-            B=jnp.array(data_dict["B"], device=device),
-            T=jnp.array(data_dict["T"], device=device),
-            device=device,
+            H=jnp.array(data_dict["H"]),
+            B=jnp.array(data_dict["B"]),
+            T=jnp.array(data_dict["T"]),
         )
 
     @classmethod
-    def load_from_raw_data(
-        cls, file_overview: pd.DataFrame, material_name: str, frequency: float, device: jax.Device
-    ) -> "FrequencySet":
+    def load_from_raw_data(cls, file_overview: pd.DataFrame, material_name: str, frequency: float) -> "FrequencySet":
         """Load a FrequencySet from raw data."""
         data_dict = load_and_process_single_from_full_file_overview(
             file_overview, material_name=material_name, data_type=["B", "T", "H"], frequency=[frequency]
         )
-        data_dict["device"] = device
         return cls.from_dict(data_dict)
 
-    def filter_temperatures(self, temperatures: list[float] | jax.Array, device: jax.Device) -> "FrequencySet":
+    def filter_temperatures(self, temperatures: list[float] | jax.Array) -> "FrequencySet":
         """Filter the frequency set by temperatures."""
         if isinstance(temperatures, list):
-            temperatures = jnp.array(temperatures, device=device)
+            temperatures = jnp.array(temperatures)
 
         temperature_mask = jnp.isin(self.T, temperatures)
         return FrequencySet(
@@ -111,7 +106,6 @@ class FrequencySet(eqx.Module):
             H=self.H[temperature_mask],
             B=self.B[temperature_mask],
             T=self.T[temperature_mask],
-            device=device,
         )
 
     def split_into_train_val_test(
@@ -120,14 +114,12 @@ class FrequencySet(eqx.Module):
         val_frac: float,
         test_frac: float,
         seed: int = 0,
-        device_str: str = "cpu",
     ) -> Tuple["FrequencySet", "FrequencySet", "FrequencySet"]:
         """Split a FrequencySet into train, validation and test sets, stratified by temperature.
 
         For each temperature, sequences are split into train, val and test separately,
         then combined across temperatures.
         """
-        device = jax.devices(device_str)[0]
         unique_temps = jnp.unique(self.T)
 
         train_H, train_B, train_T = [], [], []
@@ -136,7 +128,7 @@ class FrequencySet(eqx.Module):
 
         for temp in unique_temps:
             # Use the class method to filter sequences for this temperature
-            freq_temp = self.filter_temperatures([temp], device=device)
+            freq_temp = self.filter_temperatures([temp])
 
             # Indices for this temperature sequences
             indices = list(range(freq_temp.H.shape[0]))
@@ -153,9 +145,9 @@ class FrequencySet(eqx.Module):
             )
 
             # Append split sequences for this temperature to respective sets
-            train_idx = jnp.array(train_idx, device=device)
-            val_idx = jnp.array(val_idx, device=device)
-            test_idx = jnp.array(test_idx, device=device)
+            train_idx = jnp.array(train_idx)
+            val_idx = jnp.array(val_idx)
+            test_idx = jnp.array(test_idx)
 
             train_H.append(freq_temp.H[train_idx])
             train_B.append(freq_temp.B[train_idx])
@@ -176,7 +168,6 @@ class FrequencySet(eqx.Module):
             H=jnp.concatenate(train_H),
             B=jnp.concatenate(train_B),
             T=jnp.concatenate(train_T),
-            device=device,
         )
 
         val_set = FrequencySet(
@@ -185,7 +176,6 @@ class FrequencySet(eqx.Module):
             H=jnp.concatenate(val_H),
             B=jnp.concatenate(val_B),
             T=jnp.concatenate(val_T),
-            device=device,
         )
 
         test_set = FrequencySet(
@@ -194,7 +184,6 @@ class FrequencySet(eqx.Module):
             H=jnp.concatenate(test_H),
             B=jnp.concatenate(test_B),
             T=jnp.concatenate(test_T),
-            device=device,
         )
 
         return train_set, val_set, test_set
@@ -213,7 +202,6 @@ class MaterialSet(eqx.Module):
     material_name: str
     frequency_sets: list[FrequencySet]
     frequencies: jax.Array
-    device: jax.Device
 
     @classmethod
     def load_from_file(cls, file_path: str):
@@ -232,20 +220,17 @@ class MaterialSet(eqx.Module):
         file_overview: pd.DataFrame,
         material_name: str,
         frequencies: list[float] | jax.Array,
-        device_str: str = "cpu",
     ) -> "MaterialSet":
         """Load a MaterialSet from raw data."""
         frequency_sets = []
-        device = jax.devices(device_str)[0]
         for frequency in frequencies:
-            frequency_set = FrequencySet.load_from_raw_data(file_overview, material_name, frequency, device)
+            frequency_set = FrequencySet.load_from_raw_data(file_overview, material_name, frequency)
             frequency_sets.append(frequency_set)
 
         return cls(
             material_name=material_name,
             frequency_sets=frequency_sets,
-            frequencies=jnp.array(frequencies, device=device),
-            device=device,
+            frequencies=jnp.array(frequencies),
         )
 
     @classmethod
@@ -253,7 +238,6 @@ class MaterialSet(eqx.Module):
         cls,
         data_d: dict[str, pd.DataFrame],
         frequencies: list[float] = (50000.0, 80000.0, 125000.0, 200000.0, 320000.0, 500000.0, 800000.0),
-        device_str: str = "cpu",
     ) -> "MaterialSet":
         """Create a MaterialSet from a dictionary of pandas DataFrames."""
 
@@ -262,7 +246,6 @@ class MaterialSet(eqx.Module):
         material_name = sample_key.split("_")[0]
 
         frequency_sets = []
-        dev = jax.devices(device_str)[0]
         for idx, freq in enumerate(frequencies):
             key_base = f"{material_name}_{idx + 1}"
             B_key = f"{key_base}_B"
@@ -271,19 +254,18 @@ class MaterialSet(eqx.Module):
 
             assert B_key in data_d and H_key in data_d and T_key in data_d, f"Missing data for frequency {freq} Hz"
 
-            B = jnp.array(data_d[B_key].values, device=dev)
-            H = jnp.array(data_d[H_key].values, device=dev)
-            T = jnp.array(data_d[T_key].values, device=dev)[:, 0]
+            B = jnp.array(data_d[B_key].values)
+            H = jnp.array(data_d[H_key].values)
+            T = jnp.array(data_d[T_key].values)[:, 0]
 
-            freq_set = FrequencySet(material_name=material_name, frequency=freq, B=B, H=H, T=T, device=dev)
+            freq_set = FrequencySet(material_name=material_name, frequency=freq, B=B, H=H, T=T)
 
             frequency_sets.append(freq_set)
 
         return cls(
             material_name=material_name,
-            frequencies=jnp.array(frequencies, device=dev),
+            frequencies=jnp.array(frequencies),
             frequency_sets=frequency_sets,
-            device=dev,
         )
 
     def to_pandas_dict(self) -> dict[str, pd.DataFrame]:
@@ -318,21 +300,20 @@ class MaterialSet(eqx.Module):
     def filter_temperatures(self, temperatures: list[float] | jax.Array) -> "MaterialSet":
         """Filter the material set by temperatures."""
         filtered_frequency_sets = [
-            frequency_set.filter_temperatures(temperatures, device=self.device) for frequency_set in self.frequency_sets
+            frequency_set.filter_temperatures(temperatures) for frequency_set in self.frequency_sets
         ]
 
         return MaterialSet(
             material_name=self.material_name,
             frequency_sets=filtered_frequency_sets,
             frequencies=jnp.array([fs.frequency for fs in filtered_frequency_sets]),
-            device=self.device,
         )
 
     def filter_frequencies(self, frequencies: list[float] | jax.Array) -> "MaterialSet":
         """Filter the material set by frequencies."""
         filtered_frequency_sets = []
 
-        frequencies = jnp.array(frequencies, device=self.device)
+        frequencies = jnp.array(frequencies)
 
         for frequency_set in self.frequency_sets:
             if frequency_set.frequency in frequencies:
@@ -341,8 +322,7 @@ class MaterialSet(eqx.Module):
         return MaterialSet(
             material_name=self.material_name,
             frequency_sets=filtered_frequency_sets,
-            frequencies=jnp.array([fs.frequency for fs in filtered_frequency_sets], device=self.device),
-            device=self.device,
+            frequencies=jnp.array([fs.frequency for fs in filtered_frequency_sets]),
         )
 
     def split_into_train_val_test(
@@ -351,7 +331,6 @@ class MaterialSet(eqx.Module):
         val_frac: float = 0.15,
         test_frac: float = 0.15,
         seed: int = 0,
-        device_str: str = "cpu",
     ) -> Tuple["MaterialSet", "MaterialSet", "MaterialSet"]:
         """
         Split a MaterialSet into train, val, test MaterialSets.
@@ -363,32 +342,26 @@ class MaterialSet(eqx.Module):
         test_frequency_sets = []
 
         for freq_set in self.frequency_sets:
-            train_fs, val_fs, test_fs = freq_set.split_into_train_val_test(
-                train_frac, val_frac, test_frac, seed, device_str
-            )
+            train_fs, val_fs, test_fs = freq_set.split_into_train_val_test(train_frac, val_frac, test_frac, seed)
             train_frequency_sets.append(train_fs)
             val_frequency_sets.append(val_fs)
             test_frequency_sets.append(test_fs)
 
         frequencies = self.frequencies
-        device = jax.devices(device_str)[0]
         train_material_set = MaterialSet(
             material_name=self.material_name,
             frequency_sets=train_frequency_sets,
             frequencies=frequencies,
-            device=device,
         )
         val_material_set = MaterialSet(
             material_name=self.material_name,
             frequency_sets=val_frequency_sets,
             frequencies=frequencies,
-            device=device,
         )
         test_material_set = MaterialSet(
             material_name=self.material_name,
             frequency_sets=test_frequency_sets,
             frequencies=frequencies,
-            device=device,
         )
 
         return train_material_set, val_material_set, test_material_set
@@ -412,14 +385,13 @@ class DataSet(eqx.Module):
         file_overview: pd.DataFrame,
         material_names: list[str],
         frequencies: list[float] | jax.Array,
-        device_str: str = "cpu",
     ) -> "DataSet":
         """Load a DataSet from raw data."""
 
         material_sets = []
 
         for material_name in tqdm.tqdm(material_names, desc="Loading MaterialSets"):
-            material_set = MaterialSet.load_from_raw_data(file_overview, material_name, frequencies, device_str)
+            material_set = MaterialSet.load_from_raw_data(file_overview, material_name, frequencies)
             material_sets.append(material_set)
 
         return cls(material_sets)
@@ -544,7 +516,6 @@ def get_train_val_test_pandas_dicts(
     val_frac: float = 0.15,
     test_frac: float = 0.15,
     seed: int = 12,
-    device_str: str = "cpu",
 ) -> tuple[
     dict[str, pd.DataFrame],
     dict[str, pd.DataFrame],
@@ -557,7 +528,7 @@ def get_train_val_test_pandas_dicts(
     if data_dict is None:
         data_dict = load_data_into_pandas_df(material=material_name)
 
-    mat_set = MaterialSet.from_pandas_dict(data_dict, device_str=device_str)
+    mat_set = MaterialSet.from_pandas_dict(data_dict)
 
     train_set, val_set, test_set = mat_set.split_into_train_val_test(
         train_frac=train_frac, val_frac=val_frac, test_frac=test_frac, seed=seed
