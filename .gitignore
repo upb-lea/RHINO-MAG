@@ -184,3 +184,5 @@ dev/**/*.eqx
 
 # ignore model files in the data folders
 data/**/*.eqx
+
+dev/**/lightning_logs
