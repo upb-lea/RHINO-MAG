@@ -214,34 +214,37 @@ class FrequencySet(eqx.Module):
 
         return train_set, val_set, test_set
 
-    def normalize(self, transform_H: bool = False):
+    def normalize(self, normalizer=None, transform_H: bool = False):
 
-        H_max = jnp.max(jnp.abs(self.H))
-        B_max = jnp.max(jnp.abs(self.B))
-        T_max = jnp.max(jnp.abs(self.T))
+        if normalizer is None:
+            H_max = jnp.max(jnp.abs(self.H))
+            B_max = jnp.max(jnp.abs(self.B))
+            T_max = jnp.max(jnp.abs(self.T))
 
-        H = self.H / H_max
-        if transform_H:
-            transform = lambda h: jnp.tanh(h * 1.2)
-            H = transform(H)
-            inverse_transform = lambda h: jnp.atanh(h) / 1.2
-        else:
-            transform = lambda h: h
-            inverse_transform = lambda h: h
+            if transform_H:
+                transform = lambda h: jnp.tanh(h * 1.2)
+                inverse_transform = lambda h: jnp.atanh(h) / 1.2
+            else:
+                transform = lambda h: h
+                inverse_transform = lambda h: h
+
+            normalizer = Normalizer(
+                B_max=B_max.item(),
+                H_max=H_max.item(),
+                T_max=T_max.item(),
+                H_transform=transform,
+                H_inverse_transform=inverse_transform,
+            )
+
+        norm_B, norm_H, norm_T = normalizer.normalize(self.B, self.H, self.T)
 
         return NormalizedFrequencySet(
             material_name=self.material_name,
             frequency=self.frequency,
-            H=H,
-            B=self.B / B_max,
-            T=self.T / T_max,
-            normalizer=Normalizer(
-                B_max=B_max,
-                H_max=H_max,
-                T_max=T_max,
-                H_transform=transform,
-                H_inverse_transform=inverse_transform,
-            ),
+            H=norm_H,
+            B=norm_B,
+            T=norm_T,
+            normalizer=normalizer,
         )
 
 
