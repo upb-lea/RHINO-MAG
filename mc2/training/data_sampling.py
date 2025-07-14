@@ -69,8 +69,9 @@ def load_batches(
 
     batched_H = dataset.H[n_sequence_indices[..., None], slice]
     batched_B = dataset.B[n_sequence_indices[..., None], slice]
+    batched_T = dataset.T[n_sequence_indices]
 
-    return batched_H, batched_B
+    return batched_H, batched_B, batched_T
 
 
 @eqx.filter_jit
@@ -95,12 +96,16 @@ def draw_data_uniformly(
     n_sequence_indices, starting_points, loader_key = sample_batch_indices(
         n_sequences, full_sequence_length, training_sequence_length, training_batch_size, loader_key
     )
-    batched_H, batched_B = load_batches(dataset, n_sequence_indices, starting_points, training_sequence_length)
+    batched_H, batched_B, batched_T = load_batches(
+        dataset, n_sequence_indices, starting_points, training_sequence_length
+    )
 
     batched_H = jnp.squeeze(batched_H)[..., None]
     batched_B = jnp.squeeze(batched_B)[..., None]
+    batched_T = jnp.squeeze(batched_T)[:, None, None]
+    batched_T = jnp.broadcast_to(batched_T, batched_B.shape)
 
-    return batched_H, batched_B, loader_key
+    return batched_H, batched_B, batched_T, loader_key
 
 
 def data_loader(dataset, training_sequence_length, training_batch_size, loader_key):
