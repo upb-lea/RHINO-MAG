@@ -214,7 +214,7 @@ class FrequencySet(eqx.Module):
 
         return train_set, val_set, test_set
 
-    def normalize(self, normalizer=None, transform_H: bool = False):
+    def normalize(self, normalizer: Normalizer = None, transform_H: bool = False):
 
         if normalizer is None:
             H_max = jnp.max(jnp.abs(self.H))
