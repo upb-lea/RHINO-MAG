@@ -67,13 +67,20 @@ class Normalizer(eqx.Module):
     def normalize(self, B, H, T):
         return (
             B / self.B_max,
-            self.H_transform(H) / self.H_max,
+            self.H_transform(H / self.H_max),
             T / self.T_max,
         )
+
+    def normalize_H(self, H):
+        return self.H_transform(H / self.H_max)
 
     def denormalize(self, B, H, T):
         H = self.H_inverse_transform(H)
         return B * self.B_max, H * self.H_max, T * self.T_max
+
+    def denormalize_H(self, H):
+        H = self.H_inverse_transform(H)
+        return H * self.H_max
 
 
 class FrequencySet(eqx.Module):
