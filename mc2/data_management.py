@@ -188,6 +188,48 @@ class FrequencySet(eqx.Module):
 
         return train_set, val_set, test_set
 
+    def normalize(self, transform_H: bool = False):
+
+        H_max = jnp.max(jnp.abs(self.H))
+        B_max = jnp.max(jnp.abs(self.B))
+        T_max = jnp.max(jnp.abs(self.T))
+
+        H = self.H / H_max
+        if transform_H:
+            H = jnp.tanh(H * 1.2)
+            inverse_transform = lambda h: jnp.atanh(h) / 1.2
+        else:
+            inverse_transform = lambda h: h
+
+        return NormalizedFrequencySet(
+            material_name=self.material_name,
+            frequency=self.frequency,
+            H=H,
+            B=self.B / B_max,
+            T=self.T / T_max,
+            B_max=B_max,
+            H_max=H_max,
+            T_max=T_max,
+            inverse_transform=inverse_transform,
+        )
+
+
+class NormalizedFrequencySet(FrequencySet):
+    B_max: float
+    H_max: float
+    T_max: float
+    inverse_transform: callable
+
+    def denormalize(self):
+        H = self.inverse_transform(self.H)
+        return FrequencySet(
+            material_name=self.material_name,
+            frequency=self.frequency,
+            H=H * self.H_max,
+            B=self.B * self.B_max,
+            T=self.T * self.T_max,
+        )
+
 
 class MaterialSet(eqx.Module):
     """Class to store measurement data for a single material but with variable
