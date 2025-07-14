@@ -97,14 +97,11 @@ def train_recursive_nn(
     tbptt_size: int = 64,
     batch_size: int = 1024,
 ):
-    # assert model_arch in SUPPORTED_ARCHS, f"model arch {model_arch} not in {SUPPORTED_ARCHS}"
-    # assert material is None or material in AVAILABLE_MATERIALS, f"mat {material} not in {AVAILABLE_MATERIALS}"
-    # device = torch.device("cuda:0")
+
     n_epochs = 3 if debug else n_epochs
 
     if material is None:
         material = "N87"
-    # train_d, val_d, test_d = get_train_val_test_pandas_dicts(material_name=material, seed=12)
     data_dict = load_data_into_pandas_df(material=material)
     mat_set = MaterialSet.from_pandas_dict(data_dict)
 
@@ -125,7 +122,7 @@ def train_recursive_nn(
         log.info(f"max {k} value in training set: {max_v:.2f} T or A/m or °C")
         max_d[k] = max_v
 
-    # convert to torch tensor, normalize
+    # normalize
     train_set_norm = normalize_material_set(train_set, max_d, reduce_train=debug)
     val_set_norm = normalize_material_set(val_set, max_d)
     test_set_norm = normalize_material_set(test_set, max_d)
@@ -137,17 +134,9 @@ def train_recursive_nn(
         f"test size: {sum(freq_set.H.shape[0] for freq_set in test_set_norm.frequency_sets)}"
     )
 
-    FREQ_CATEGORIES = jnp.array([50000.0, 80000.0, 125000.0, 200000.0, 320000.0, 500000.0, 800000.0])
-
-    # def one_hot_frequency_vectorized(f_batch):
-    #     # f_batch shape: (batch, seq_len)
-    #     # Map frequencies to indices
-    #     indices = jnp.argmin(jnp.abs(f_batch[..., None] - FREQ_CATEGORIES), axis=-1)
-    #     return jax.nn.one_hot(indices, num_classes=len(FREQ_CATEGORIES))
+    # FREQ_CATEGORIES = jnp.array([50000.0, 80000.0, 125000.0, 200000.0, 320000.0, 500000.0, 800000.0])
 
     def featurize(B, H, T, f):
-        # f = jnp.squeeze(f, axis=-1)
-        # one_hot_f = one_hot_frequency_vectorized(f)
         fes = add_fe(jnp.reshape(B, (1, -1)), n_s=tbptt_size)
         return jnp.concatenate([B, fes[0], T, f], axis=-1), jnp.tanh(H_FACTOR * H)
 
@@ -214,10 +203,7 @@ def train_recursive_nn(
                 val_loss = val_test(val_set_norm, model, featurize)
                 logs["loss_trends_val"].append(val_loss)
             pbar_str += f"| val loss {val_loss:.2e}"
-            # train_loss_full = val_test(train_set_norm, model, featurize)
             logs["loss_trends_train"].append(train_loss)
-
-            # pbar_str += f"| train loss full {train_loss_full:.2e}"
             pbar.set_postfix_str(pbar_str)
 
         test_loss = val_test(test_set_norm, model, featurize)
