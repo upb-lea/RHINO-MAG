@@ -110,7 +110,7 @@ class NODEwInterface(ModelInterface):
             jnp.asarray(B_future),
             jnp.asarray(temperature),
         )
-        H_future = np.array(H_future, dtype=np.float64)
+        H_future = np.array(H_future[:-1], dtype=np.float64)
 
         assert B_future.shape[0] == H_future.shape[0], (
             "Sanity Check: The future flux (B) and field (H) sequences must have "
@@ -142,7 +142,7 @@ class NODEwInterface(ModelInterface):
             jnp.asarray(B_future),
             jnp.asarray(temperature),
         )
-        H_future = np.array(B_future, dtype=np.float64)
+        H_future = np.array(H_future[:, :-1], dtype=np.float64)
 
         assert B_future.shape[0] == H_future.shape[0], (
             "The past flux (B) and field (H) sequences must have the same batch_size."
