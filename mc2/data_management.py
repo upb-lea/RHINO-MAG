@@ -57,6 +57,25 @@ def setup_package_logging():
 setup_package_logging()
 
 
+class Normalizer(eqx.Module):
+    B_max: float
+    H_max: float
+    T_max: float
+    H_transform: callable
+    H_inverse_transform: callable
+
+    def normalize(self, B, H, T):
+        return (
+            B / self.B_max,
+            self.H_transform(H) / self.H_max,
+            T / self.T_max,
+        )
+
+    def denormalize(self, B, H, T):
+        H = self.H_inverse_transform(H)
+        return B * self.B_max, H * self.H_max, T * self.T_max
+
+
 class FrequencySet(eqx.Module):
     """Class to store measurement data for a single material for a single frequency
     but with potentially variable temperatures.
@@ -196,9 +215,11 @@ class FrequencySet(eqx.Module):
 
         H = self.H / H_max
         if transform_H:
-            H = jnp.tanh(H * 1.2)
+            transform = lambda h: jnp.tanh(h * 1.2)
+            H = transform(H)
             inverse_transform = lambda h: jnp.atanh(h) / 1.2
         else:
+            transform = lambda h: h
             inverse_transform = lambda h: h
 
         return NormalizedFrequencySet(
@@ -207,27 +228,27 @@ class FrequencySet(eqx.Module):
             H=H,
             B=self.B / B_max,
             T=self.T / T_max,
-            B_max=B_max,
-            H_max=H_max,
-            T_max=T_max,
-            inverse_transform=inverse_transform,
+            normalizer=Normalizer(
+                B_max=B_max,
+                H_max=H_max,
+                T_max=T_max,
+                H_transform=transform,
+                H_inverse_transform=inverse_transform,
+            ),
         )
 
 
 class NormalizedFrequencySet(FrequencySet):
-    B_max: float
-    H_max: float
-    T_max: float
-    inverse_transform: callable
+    normalizer: Normalizer
 
     def denormalize(self):
-        H = self.inverse_transform(self.H)
+        B, H, T = self.normalizer.denormalize(self.B, self.H, self.T)
         return FrequencySet(
             material_name=self.material_name,
             frequency=self.frequency,
-            H=H * self.H_max,
-            B=self.B * self.B_max,
-            T=self.T * self.T_max,
+            H=H,
+            B=B,
+            T=T,
         )
 
 
