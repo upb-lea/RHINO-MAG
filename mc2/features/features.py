@@ -52,7 +52,7 @@ def add_fe(data_MN: npt.NDArray[np.float64], n_s: int) -> npt.NDArray[np.float64
             data_MN,
             db_dt_MN,
             np.gradient(db_dt_MN, axis=1),  # d²b/dt²
-            np.vstack([np.convolve(b, kernel, mode="same") for b in data_MN]),
+            np.vstack([np.convolve(b, kernel, mode="same") for b in data_MN]), # moving average
             np.sign(db_dt_MN),  # PWM of b
         ],
         axis=-1,

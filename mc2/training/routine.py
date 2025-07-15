@@ -174,6 +174,7 @@ def train_recursive_nn(
                     train_h_BS = train_shuff_h_AS[batch_start:batch_end]
 
                     # featurize
+                    # TODO add normalization of features
                     train_BSP = torch.dstack(
                         add_fe(train_BS, n_s=ROLLING_WINDOW_SIZE, with_original=True, temperature_MI=temp_BI)
                     )
