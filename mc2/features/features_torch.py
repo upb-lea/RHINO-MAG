@@ -24,7 +24,8 @@ def pwm_of_b(b: torch.Tensor) -> torch.Tensor:
 
 
 # combined features
-def add_fe(data: torch.Tensor, n_s: int) -> torch.Tensor:
+@torch.no_grad()
+def add_fe(data_MN: torch.Tensor, n_s: int) -> torch.Tensor:
     """
     Apply feature engineering to each sequence (row) of a 2D matrix.
 
@@ -39,18 +40,18 @@ def add_fe(data: torch.Tensor, n_s: int) -> torch.Tensor:
     :param n_s: Number of samples for the dynamic average
     :return: m x n x d array with stacked features
     """
-    assert data.ndim == 2, "Input must be a 2D array (m x n)"
-    m, n = data.shape
-    features = []
+    assert data_MN.ndim == 2, "Input must be a 2D array (m x n)"
+    db_dt_MN = torch.gradient(data_MN, dim=1)[0]  # db/dt
+    kernel = torch.ones(1, 1, n_s).to(torch.float64) / n_s
 
-    for i in range(m):
-        b = data[i]
-        dyn = dyn_avg(b, n_s)
-        db = db_dt(b)
-        d2b = d2b_dt2(b)
-        pwm = pwm_of_b(b)
-
-        stacked = torch.stack((b, dyn, db, d2b, pwm), axis=-1)  # shape: (n, d)
-        features.append(stacked)
-
-    return torch.stack(features, axis=0)
+    featurized_data_MND = torch.stack(
+        [
+            data_MN,
+            db_dt_MN,
+            torch.gradient(db_dt_MN, dim=1)[0],  # d²b/dt²
+            torch.conv1d(data_MN[:, None, :], kernel, padding="same").squeeze(),  # moving average
+            torch.sign(db_dt_MN),  # PWM of b
+        ],
+        dim=-1,
+    )
+    return featurized_data_MND  # shape: (M, N, D)
