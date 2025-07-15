@@ -25,7 +25,7 @@ def pwm_of_b(b: torch.Tensor) -> torch.Tensor:
 
 # combined features
 @torch.no_grad()
-def add_fe(data_MN: torch.Tensor, n_s: int) -> torch.Tensor:
+def add_fe(data_MN: torch.Tensor, n_s: int, with_original=True, temperature_MI=None) -> torch.Tensor:
     """
     Apply feature engineering to each sequence (row) of a 2D matrix.
 
@@ -38,20 +38,25 @@ def add_fe(data_MN: torch.Tensor, n_s: int) -> torch.Tensor:
 
     :param data: m x n array (m sequences of length n)
     :param n_s: Number of samples for the dynamic average
-    :return: m x n x d array with stacked features
+    :return: list of 2d tensors
     """
     assert data_MN.ndim == 2, "Input must be a 2D array (m x n)"
     db_dt_MN = torch.gradient(data_MN, dim=1)[0]  # db/dt
-    kernel = torch.ones(1, 1, n_s).to(torch.float64) / n_s
+    kernel = torch.ones(1, 1, n_s, dtype=data_MN.dtype, device=data_MN.device) / n_s
 
-    featurized_data_MND = torch.stack(
-        [
-            data_MN,
-            db_dt_MN,
-            torch.gradient(db_dt_MN, dim=1)[0],  # d²b/dt²
-            torch.conv1d(data_MN[:, None, :], kernel, padding="same").squeeze(),  # moving average
-            torch.sign(db_dt_MN),  # PWM of b
-        ],
-        dim=-1,
-    )
-    return featurized_data_MND  # shape: (M, N, D)
+    if with_original:
+        fe_l = [data_MN]
+    else:
+        fe_l = []
+
+    fe_l += [
+        db_dt_MN,
+        torch.gradient(db_dt_MN, dim=1)[0],  # d²b/dt²
+        torch.conv1d(data_MN[:, None, :], kernel, padding="same").squeeze(),  # moving average
+        torch.sign(db_dt_MN),  # PWM of b
+    ]
+
+    if temperature_MI is not None:
+        fe_l.append(temperature_MI.repeat(1, data_MN.shape[1])[..., None])
+
+    return fe_l

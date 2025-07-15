@@ -14,10 +14,13 @@ from mc2.data_management import (
     get_train_val_test_pandas_dicts,
     setup_package_logging,
 )
+from mc2.features.features_torch import add_fe
 
 SUPPORTED_ARCHS = ["gru"]
 DO_TRANSFORM_H = True
 H_FACTOR = 1.2
+
+ROLLING_WINDOW_SIZE = 101
 
 
 @torch.no_grad()
@@ -26,7 +29,11 @@ def evaluate_recursively(mdl, tensors_d, loss, device, max_H, n_states, set_lbl=
     mdl.eval()
     val_loss = 0.0
     preds_MS_l = []
-    for model_in_MSP, h_MS in zip(tensors_d[set_lbl]["model_in_ASP"], tensors_d[set_lbl][target_lbl]):
+    for (model_in_MS, temp_MI), h_MS in zip(tensors_d[set_lbl]["model_in_AS_l"], tensors_d[set_lbl][target_lbl]):
+        # featurize
+        model_in_MSP = torch.dstack(
+            add_fe(model_in_MS, n_s=ROLLING_WINDOW_SIZE, with_original=True, temperature_MI=temp_MI)
+        )
         M, S, P = model_in_MSP.shape
         hidden_IMI = h_MS[:, 0].reshape(1, M, 1)
         """hidden_IMR = torch.cat(
@@ -40,7 +47,7 @@ def evaluate_recursively(mdl, tensors_d, loss, device, max_H, n_states, set_lbl=
             val_pred_untransformed_MS = val_pred_MSR[:, :, 0] * max_H
         val_loss += loss(val_pred_untransformed_MS, h_MS * max_H).cpu().numpy()
         preds_MS_l += [val_pred_untransformed_MS]
-    return val_loss / len(tensors_d[set_lbl]["model_in_ASP"]), preds_MS_l
+    return val_loss / len(tensors_d[set_lbl]["model_in_AS_l"][0]), preds_MS_l
 
 
 def train_recursive_nn(
@@ -51,7 +58,7 @@ def train_recursive_nn(
     n_seeds: int = 5,
     n_jobs: int = 5,
     tbptt_size: int = 64,
-    batch_size: int = 1024,
+    batch_size: int = 256,
 ):
     assert model_arch in SUPPORTED_ARCHS, f"model arch {model_arch} not in {SUPPORTED_ARCHS}"
     assert material is None or material in AVAILABLE_MATERIALS, f"mat {material} not in {AVAILABLE_MATERIALS}"
@@ -91,18 +98,18 @@ def train_recursive_nn(
                     torch.from_numpy(np.tanh(H_FACTOR * num_set_AS)).to(device, torch.float32)
                 )
 
-        # concatenate B and T into a model_in tensor
-        if "model_in_ASP" not in tensors_d[set_lbl]:
-            tensors_d[set_lbl]["model_in_ASP"] = []
-        for b_AS, t_AI in zip(tensors_d[set_lbl]["B"], tensors_d[set_lbl]["T"]):
-            A, S = b_AS.shape
-            tensors_d[set_lbl]["model_in_ASP"].append(torch.cat([b_AS[..., None], t_AI.repeat(1, S)[..., None]], dim=2))
-            # TODO: do FE here
+        # filter input features
+        if "model_in_AS_l" not in tensors_d[set_lbl]:
+            tensors_d[set_lbl]["model_in_AS_l"] = []
+        tensors_d[set_lbl]["model_in_AS_l"] = list(zip(tensors_d[set_lbl]["B"], tensors_d[set_lbl]["T"]))
 
         del tensors_d[set_lbl]["B"]
         del tensors_d[set_lbl]["T"]
     del train_d, val_d, test_d  # free memory
-    n_inputs = tensors_d["train"]["model_in_ASP"][0].shape[-1]
+    # extract number of features from add_fe function
+    n_inputs = len(
+        add_fe(torch.ones((2, 10)), n_s=ROLLING_WINDOW_SIZE, with_original=True, temperature_MI=torch.ones((2, 1)))
+    )
     log.info(
         f"train size: {np.sum([len(a) for a in tensors_d['train']])}, "
         f"val size: {np.sum([len(a) for a in tensors_d['val']])}, "
@@ -146,21 +153,31 @@ def train_recursive_nn(
             mdl.train()
             # iterate over frequency sets
             train_loss_avg_per_epoch = 0
-            for model_in_MSP, h_MS in zip(tensors_d["train"]["model_in_ASP"], tensors_d["train"][target_lbl]):
-                A, S, P = model_in_MSP.shape
+            for (model_in_AS, temp_AI), h_AS in zip(
+                tensors_d["train"]["model_in_AS_l"], tensors_d["train"][target_lbl]
+            ):
+                A, S = model_in_AS.shape
                 # calculate amount of tbptt-len subsequences within a chunk
                 n_seqs = np.ceil(S / tbptt_size).astype(int)
                 n_batches = np.ceil(A / batch_size).astype(int)
                 # shuffle idx continuously
                 shuffle_idx = np.arange(A)
                 np.random.shuffle(shuffle_idx)
-                train_shuff_NSP = model_in_MSP[shuffle_idx]
-                train_shuff_h_NS = h_MS[shuffle_idx]
+                train_shuff_AS = model_in_AS[shuffle_idx]
+                train_shuff_h_AS = h_AS[shuffle_idx]
+                train_shuff_temp_AI = temp_AI[shuffle_idx]
                 avg_loss = 0.0
                 for batch_i in range(n_batches):
                     batch_start, batch_end = batch_i * batch_size, min((batch_i + 1) * batch_size, A)
-                    train_BSP = train_shuff_NSP[batch_start:batch_end]
-                    train_h_BS = train_shuff_h_NS[batch_start:batch_end]
+                    train_BS = train_shuff_AS[batch_start:batch_end]
+                    temp_BI = train_shuff_temp_AI[batch_start:batch_end]
+                    train_h_BS = train_shuff_h_AS[batch_start:batch_end]
+
+                    # featurize
+                    train_BSP = torch.dstack(
+                        add_fe(train_BS, n_s=ROLLING_WINDOW_SIZE, with_original=True, temperature_MI=temp_BI)
+                    )
+
                     B = len(train_BSP)
                     hidden_IBI = train_h_BS[:, 0].reshape(1, B, 1)
                     """hidden_IBR = torch.cat(
@@ -183,7 +200,7 @@ def train_recursive_nn(
                             avg_loss += train_loss.cpu().numpy().item()
 
                 avg_loss /= n_seqs * n_batches
-                train_loss_avg_per_epoch += avg_loss / len(tensors_d["train"]["model_in_ASP"])
+                train_loss_avg_per_epoch += avg_loss / len(tensors_d["train"]["model_in_AS_l"][0])
             logs["loss_trends_train"].append(train_loss_avg_per_epoch)
             pbar_str = f"Loss {train_loss_avg_per_epoch:.2e}"
 
