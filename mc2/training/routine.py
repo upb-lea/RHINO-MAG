@@ -14,17 +14,15 @@ from mc2.data_management import (
     get_train_val_test_pandas_dicts,
     setup_package_logging,
 )
-from mc2.features.features_torch import add_fe
+from mc2.features.features_torch import Featurizer
 
 SUPPORTED_ARCHS = ["gru"]
 DO_TRANSFORM_H = True
 H_FACTOR = 1.2
 
-ROLLING_WINDOW_SIZE = 101
-
 
 @torch.no_grad()
-def evaluate_recursively(mdl, tensors_d, loss, device, max_H, n_states, set_lbl="val"):
+def evaluate_recursively(mdl, tensors_d, loss, featurizer, max_H, n_states, set_lbl="val"):
     target_lbl = "H_traf" if DO_TRANSFORM_H else "H"
     mdl.eval()
     val_loss = 0.0
@@ -32,7 +30,7 @@ def evaluate_recursively(mdl, tensors_d, loss, device, max_H, n_states, set_lbl=
     for (model_in_MS, temp_MI), h_MS in zip(tensors_d[set_lbl]["model_in_AS_l"], tensors_d[set_lbl][target_lbl]):
         # featurize
         model_in_MSP = torch.dstack(
-            add_fe(model_in_MS, n_s=ROLLING_WINDOW_SIZE, with_original=True, temperature_MI=temp_MI)
+            featurizer.normalize(featurizer.add_fe(model_in_MS, with_original=True, temperature_MI=temp_MI))
         )
         M, S, P = model_in_MSP.shape
         hidden_IMI = h_MS[:, 0].reshape(1, M, 1)
@@ -107,9 +105,9 @@ def train_recursive_nn(
         del tensors_d[set_lbl]["T"]
     del train_d, val_d, test_d  # free memory
     # extract number of features from add_fe function
-    n_inputs = len(
-        add_fe(torch.ones((2, 10)), n_s=ROLLING_WINDOW_SIZE, with_original=True, temperature_MI=torch.ones((2, 1)))
-    )
+    featurizer = Featurizer()
+    featurizer.extract_normalization_constants(tensors_d["train"]["model_in_AS_l"])
+
     log.info(
         f"train size: {np.sum([len(a) for a in tensors_d['train']])}, "
         f"val size: {np.sum([len(a) for a in tensors_d['val']])}, "
@@ -131,12 +129,12 @@ def train_recursive_nn(
             case "gru":
                 # TODO configurize
                 n_units = 3
-                mdl = torch.nn.GRU(n_inputs, n_units, batch_first=True)
+                mdl = torch.nn.GRU(featurizer.n_inputs, n_units, batch_first=True)
 
         if seed == 0:
             mdl_info = summary(
                 mdl,
-                input_size=((1, 1, n_inputs), (1, 1, n_units)),
+                input_size=((1, 1, featurizer.n_inputs), (1, 1, n_units)),
             )
             # log.info(f"\n{mdl_info}")
         R = n_units
@@ -176,7 +174,7 @@ def train_recursive_nn(
                     # featurize
                     # TODO add normalization of features
                     train_BSP = torch.dstack(
-                        add_fe(train_BS, n_s=ROLLING_WINDOW_SIZE, with_original=True, temperature_MI=temp_BI)
+                        featurizer.normalize(featurizer.add_fe(train_BS, with_original=True, temperature_MI=temp_BI))
                     )
 
                     B = len(train_BSP)
@@ -205,14 +203,16 @@ def train_recursive_nn(
             logs["loss_trends_train"].append(train_loss_avg_per_epoch)
             pbar_str = f"Loss {train_loss_avg_per_epoch:.2e}"
 
-            val_loss, _ = evaluate_recursively(mdl, tensors_d, loss, device, max_d["H"], R, set_lbl="val")
+            val_loss, _ = evaluate_recursively(mdl, tensors_d, loss, featurizer, max_d["H"], R, set_lbl="val")
             logs["loss_trends_val"].append(val_loss)
             pbar_str += f"| val loss {val_loss:.2e}"
             pbar.set_postfix_str(pbar_str)
             if np.isnan(val_loss):
                 break
 
-        test_loss, test_pred_MS_l = evaluate_recursively(mdl, tensors_d, loss, device, max_d["H"], R, set_lbl="test")
+        test_loss, test_pred_MS_l = evaluate_recursively(
+            mdl, tensors_d, loss, featurizer, max_d["H"], R, set_lbl="test"
+        )
         log.info(f"Test loss seed {seed}: {test_loss:.3f} A/m")
         # book keeping
         if "models_arch" not in logs:
