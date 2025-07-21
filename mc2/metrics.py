@@ -55,14 +55,14 @@ def evaluate_model(
     H_past: jax.Array,
     B_future: jax.Array,
     H_future: jax.Array,
-    temperature: float,
+    T: float,
     metrics: dict = None,
     reduce_to_scalar: bool = True,
 ):
     if metrics is None:
         metrics = default_metrics()
 
-    H_est = model.batched_prediction(B_past, H_past, B_future, temperature)
+    H_est = model(B_past, H_past, B_future, T)
 
     metric_results = jax.vmap(evaluate_model_estimation, in_axes=(0, 0, 0, None))(B_future, H_future, H_est, metrics)
 
