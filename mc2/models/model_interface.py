@@ -15,32 +15,7 @@ class ModelInterface(ABC):
         B_past: npt.NDArray[np.float64],
         H_past: npt.NDArray[np.float64],
         B_future: npt.NDArray[np.float64],
-        temperature: float,
-    ) -> npt.NDArray[np.float64]:
-        """Model prediction interface according to the challenge description.
-
-        Args:
-            B_past (np.array): The physical (non-normalized) flux density values from time
-                step t0 to t1 with shape (past_sequence_length,)
-            H_past (np.array): The physical (non-normalized) field values from time step
-                t0 to t1 with shape (past_sequence_length,)
-            B_future (np.array): The physical (non-normalized) flux density values from
-                time step t1 to t2 with shape (future_sequence_length,)
-            temperature (float): The temperature of the material as a scalar
-
-        Returns:
-            H_future (np.array): The physical (non-normalized) field values from time
-                step t1 to t2 with shape (future_sequence_length,)
-        """
-        pass
-
-    @abstractmethod
-    def batched_prediction(
-        self,
-        B_past: npt.NDArray[np.float64],
-        H_past: npt.NDArray[np.float64],
-        B_future: npt.NDArray[np.float64],
-        temperature: npt.NDArray[np.float64],
+        T: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
         """Model prediction interface for batched inputs, i.e. for inputs with an extra
         leading dimension.
@@ -51,12 +26,12 @@ class ModelInterface(ABC):
             H_past (np.array): The physical (non-normalized) field values from time step
                 t0 to t1 with shape (n_batches, past_sequence_length)
             B_future (np.array): The physical (non-normalized) flux density values from
-                time step t1 to t2 with shape (n_batches, past_sequence_length)
-            temperature (float): The temperature of the material with shape (n_batches,)
+                time step t1 to t2 with shape (n_batches, future_sequence_length)
+            T (float): The temperature of the material with shape (n_batches,)
 
         Returns:
             H_future (np.array): The physical (non-normalized) field values from time
-                step t1 to t2 with shape (n_batches, past_sequence_length)
+                step t1 to t2 with shape (n_batches, future_sequence_length)
         """
         pass
 
@@ -96,43 +71,31 @@ class NODEwInterface(ModelInterface):
         B_past: npt.NDArray[np.float64],
         H_past: npt.NDArray[np.float64],
         B_future: npt.NDArray[np.float64],
-        temperature: float,
+        T: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
 
-        assert B_past.shape[0] == H_past.shape[0], (
-            "The past flux (B) and field (H) sequences must have the same length."
-            + f"The given lengths are {B_past.shape[0]} for B and {H_past.shape[0]} for H."
+        assert B_past.ndim == 2, (
+            "The expected dimensions for B_past are (n_batches, past_sequence_length). "
+            + f"The given array has dimension {B_past.ndim} instead."
         )
-
-        H_future = self.apply_model(
-            jnp.asarray(B_past),
-            jnp.asarray(H_past),
-            jnp.asarray(B_future),
-            jnp.asarray(temperature),
+        assert H_past.ndim == 2, (
+            "The expected dimensions for H_past are (n_batches, past_sequence_length). "
+            + f"The given array has dimension {H_past.ndim} instead."
         )
-        H_future = np.array(jnp.squeeze(H_future[:-1]), dtype=np.float64)
-
-        assert B_future.shape[0] == H_future.shape[0], (
-            "Sanity Check: The future flux (B) and field (H) sequences must have "
-            + f"the same length. The given lengths are {B_future.shape[0]} for B and {H_future.shape[0]} for H."
+        assert B_future.ndim == 2, (
+            "The expected dimensions for B_future are (n_batches, future_sequence_length). "
+            + f"The given array has dimension {B_future.ndim} instead."
         )
-
-        return H_future
-
-    def batched_prediction(
-        self,
-        B_past: npt.NDArray[np.float64],
-        H_past: npt.NDArray[np.float64],
-        B_future: npt.NDArray[np.float64],
-        temperature: npt.NDArray[np.float64],
-    ) -> npt.NDArray[np.float64]:
+        assert T.ndim == 1, (
+            "The expected dimensions for T are (n_batches,). " + f"The given array has dimension {T.ndim} instead."
+        )
 
         assert B_past.shape[0] == H_past.shape[0], (
-            "The past flux (B) and field (H) sequences must have the same batch_size."
+            "The past flux (B) and field (H) sequences must have the same batch_size. "
             + f"The given batch_sizes are {B_past.shape[0]} for B and {H_past.shape[0]} for H."
         )
         assert B_past.shape[1] == H_past.shape[1], (
-            "The past flux (B) and field (H) sequences must have the same length."
+            "The past flux (B) and field (H) sequences must have the same length. "
             + f"The given lengths are {B_past.shape[1]} for B and {H_past.shape[1]} for H."
         )
 
@@ -140,12 +103,12 @@ class NODEwInterface(ModelInterface):
             jnp.asarray(B_past),
             jnp.asarray(H_past),
             jnp.asarray(B_future),
-            jnp.asarray(temperature),
+            jnp.asarray(T),
         )
-        H_future = np.array(jnp.squeeze(H_future[:, :-1]), dtype=np.float64)
+        H_future = np.array(H_future[:, :-1, 0], dtype=np.float64)
 
         assert B_future.shape[0] == H_future.shape[0], (
-            "The past flux (B) and field (H) sequences must have the same batch_size."
+            "The future flux (B) and field (H) sequences must have the same batch_size."
             + f"The given batch_sizes are {B_future.shape[0]} for B and {H_future.shape[0]} for H."
         )
         assert B_future.shape[1] == H_future.shape[1], (
