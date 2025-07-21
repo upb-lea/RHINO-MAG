@@ -24,7 +24,7 @@ def parse_args() -> argparse.Namespace:
 
 def main():
     args = parse_args()
-    train_recursive_nn(material=args.material, n_epochs=args.epochs, debug=args.debug)
+    train_recursive_nn(material=args.material, n_epochs=args.epochs, debug=args.debug, n_jobs=5)
 
 
 if __name__ == "__main__":
