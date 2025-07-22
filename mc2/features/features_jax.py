@@ -3,7 +3,6 @@ import jax.numpy as jnp
 import equinox as eqx
 
 
-# single features
 def db_dt(b: jax.Array) -> jax.Array:
     """Calculate the first derivative of b."""
     return jnp.gradient(b)
@@ -24,7 +23,6 @@ def pwm_of_b(b: jax.Array) -> jax.Array:
     return jnp.sign(db_dt(b))
 
 
-# combined features
 def compute_fe_single(data_single: jax.Array, n_s: int) -> jax.Array:
     dyn = dyn_avg(data_single, n_s)
     db = db_dt(data_single)

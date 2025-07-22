@@ -8,7 +8,7 @@ import torch
 import json
 import random
 import logging as log
-from tqdm import trange
+from tqdm.notebook import trange
 from joblib import Parallel, delayed
 from typing import Dict
 from torchinfo import summary
@@ -26,10 +26,11 @@ from mc2.models.RNN import BaseRNN
 from mc2.training.data_sampling import draw_data_uniformly
 from mc2.training.optimization import make_step
 
-SUPPORTED_ARCHS = ["gru"]
+from IPython.display import clear_output, display
+
 DO_TRANSFORM_H = True
 H_FACTOR = 1.2
-VAL_EVERY = 50
+VAL_EVERY = 100
 
 
 @torch.no_grad()
@@ -91,14 +92,14 @@ def normalize_material_set(mat_set: MaterialSet, max_d: dict[str, float], reduce
 def train_recursive_nn(
     material=None,
     debug: bool = False,
-    n_epochs: int = 100,
+    n_steps: int = 100,
     n_seeds: int = 5,
     n_jobs: int = 5,
     tbptt_size: int = 64,
     batch_size: int = 1024,
 ):
 
-    n_epochs = 3 if debug else n_epochs
+    n_steps = 3 if debug else n_steps
 
     if material is None:
         material = "N87"
@@ -137,40 +138,87 @@ def train_recursive_nn(
     # FREQ_CATEGORIES = jnp.array([50000.0, 80000.0, 125000.0, 200000.0, 320000.0, 500000.0, 800000.0])
 
     def featurize(B, H, T, f):
-        fes = add_fe(jnp.reshape(B, (1, -1)), n_s=tbptt_size)
-        return jnp.concatenate([B, fes[0], T, f], axis=-1), jnp.tanh(H_FACTOR * H)
+        # fes = add_fe(jnp.reshape(B, (1, -1)), n_s=tbptt_size)
+        return jnp.concatenate([B, T, f], axis=-1), jnp.tanh(H_FACTOR * H)  # fes[0],
+
+    # @eqx.filter_jit
+    # def train_step(model, opt_state, train_set_norm, optimizer, featurize, key):
+    #     train_loss = 0.0
+    #     for freq_set in train_set_norm.frequency_sets:
+    #         key, subkey = jax.random.split(key)
+    #         batch_H, batch_B, batch_T, _ = draw_data_uniformly(
+    #             freq_set, training_sequence_length=tbptt_size, training_batch_size=batch_size, loader_key=subkey
+    #         )
+    #         batch_f = freq_set.frequency * jnp.ones_like(batch_B) / 800_000  # do normlization already in advance TODO
+
+    #         batch_x, batch_y = jax.vmap(featurize)(batch_B, batch_H, batch_T, batch_f)
+    #         # print(batch_x.shape, batch_y.shape, "Training batch shape")
+    #         loss, model, opt_state = make_step(model, batch_x, batch_y, optimizer, opt_state)
+
+    #         train_loss += loss / len(train_set_norm.frequencies)
+    #     return train_loss, model, opt_state
 
     @eqx.filter_jit
+    def process_freq_set(model, opt_state, key, freq_set, optimizer):
+        key, subkey = jax.random.split(key)
+        batch_H, batch_B, batch_T, _ = draw_data_uniformly(
+            freq_set,
+            training_sequence_length=tbptt_size,
+            training_batch_size=batch_size,
+            loader_key=subkey,
+        )
+        batch_f = freq_set.frequency * jnp.ones_like(batch_B) / 800_000
+
+        batch_x, batch_y = jax.vmap(featurize)(batch_B, batch_H, batch_T, batch_f)
+        loss, model, opt_state = make_step(model, batch_x, batch_y, optimizer, opt_state)
+
+        return loss, model, opt_state, key
+
     def train_step(model, opt_state, train_set_norm, optimizer, featurize, key):
+
         train_loss = 0.0
         for freq_set in train_set_norm.frequency_sets:
-            key, subkey = jax.random.split(key)
-            batch_H, batch_B, batch_T, _ = draw_data_uniformly(
-                freq_set, training_sequence_length=tbptt_size, training_batch_size=batch_size, loader_key=subkey
-            )
-            batch_f = freq_set.frequency * jnp.ones_like(batch_B) / 800_000  # do normlization already in advance TODO
-
-            batch_x, batch_y = jax.vmap(featurize)(batch_B, batch_H, batch_T, batch_f)
-            # print(batch_x.shape, batch_y.shape, "Training batch shape")
-            loss, model, opt_state = make_step(model, batch_x, batch_y, optimizer, opt_state)
-
+            loss, model, opt_state, key = process_freq_set(model, opt_state, key, freq_set, optimizer)
             train_loss += loss / len(train_set_norm.frequencies)
+
         return train_loss, model, opt_state
 
+    # @eqx.filter_jit
+    # def val_test(set, model, featurize):
+    #     val_loss = 0
+    #     for freq_set in set.frequency_sets:
+    #         f = freq_set.frequency / 800_000
+    #         batch_x, batch_y = jax.vmap(featurize)(
+    #             freq_set.B[..., None],
+    #             freq_set.H[..., None],
+    #             jnp.broadcast_to(freq_set.T[:, None, None], freq_set.B[..., None].shape),
+    #             f * jnp.ones_like(freq_set.B[..., None]),
+    #         )
+    #         # print(batch_x.shape, batch_y.shape)
+    #         pred_y = jax.vmap(model)(batch_x)
+    #         val_loss += jnp.mean((pred_y - batch_y) ** 2) / len(set.frequencies)
+    #     return val_loss
+
     @eqx.filter_jit
+    def process_freq_set_val(freq_set, model, featurize):
+        f = freq_set.frequency / 800_000
+        B = freq_set.B[..., None]
+        H = freq_set.H[..., None]
+        T = jnp.broadcast_to(freq_set.T[:, None, None], B.shape)
+        F = f * jnp.ones_like(B)
+
+        batch_x, batch_y = jax.vmap(featurize)(B, H, T, F)
+        pred_y = jax.vmap(model)(batch_x)
+        loss = jnp.mean((pred_y - batch_y) ** 2)
+        return loss
+
     def val_test(set, model, featurize):
-        val_loss = 0
+
+        val_loss = 0.0
         for freq_set in set.frequency_sets:
-            f = freq_set.frequency / 800_000
-            batch_x, batch_y = jax.vmap(featurize)(
-                freq_set.B[..., None],
-                freq_set.H[..., None],
-                jnp.broadcast_to(freq_set.T[:, None, None], freq_set.B[..., None].shape),
-                f * jnp.ones_like(freq_set.B[..., None]),
-            )
-            # print(batch_x.shape, batch_y.shape)
-            pred_y = jax.vmap(model)(batch_x)
-            val_loss += jnp.mean((pred_y - batch_y) ** 2) / len(set.frequencies)
+            loss = process_freq_set_val(freq_set, model, featurize)
+            val_loss += loss / len(set.frequencies)
+
         return val_loss
 
     def run_seeded_training(seed):
@@ -183,23 +231,23 @@ def train_recursive_nn(
             "start_time": pd.Timestamp.now().round(freq="s"),
         }
 
-        hidden_size = 256
-        in_size = 8
+        hidden_size = 8
+        in_size = 3
         out_size = 1
         model = BaseRNN(in_size, out_size, hidden_size, key=key)
         optimizer = optax.adam(1e-3)
         opt_state = optimizer.init(model)
 
-        pbar = trange(n_epochs, desc=f"Seed {seed}", position=seed, unit="epoch")
+        pbar = trange(n_steps, desc=f"Seed {seed}", position=seed, unit="step")
         test_loss = val_test(test_set_norm, model, featurize)
         log.info(f"Test loss seed {seed}: {test_loss:.3f} A/m")
-        for epoch in pbar:
+        for step in pbar:
             train_loss = 0
             # train_data: (N, S, features), (N, S, output_features)
             key, subkey = jax.random.split(key)
             train_loss, model, opt_state = train_step(model, opt_state, train_set_norm, optimizer, featurize, subkey)
             pbar_str = f"Loss {train_loss:.2e}"
-            if epoch % VAL_EVERY == 0:
+            if step % VAL_EVERY == 0:
                 val_loss = val_test(val_set_norm, model, featurize)
                 logs["loss_trends_val"].append(val_loss)
             pbar_str += f"| val loss {val_loss:.2e}"
@@ -229,7 +277,7 @@ def train_recursive_nn(
     # best_log = experiment_logs_l[best_idx]
     # book_keeping(best_log)
 
-    return run_seeded_training(0)
+    return run_seeded_training(1)
 
 
 # TODO
