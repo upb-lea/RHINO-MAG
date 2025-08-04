@@ -18,8 +18,8 @@ class BaseRNN(eqx.Module):
         self.linear = eqx.nn.Linear(hidden_size, out_size, use_bias=False, key=lkey)
         self.bias = jnp.zeros(out_size)
 
-    def __call__(self, input):
-        hidden = jnp.zeros((self.hidden_size,))
+    def __call__(self, input, init_hidden):
+        hidden = init_hidden
 
         def f(carry, inp):
             rnn_out = self.cell(inp, carry)

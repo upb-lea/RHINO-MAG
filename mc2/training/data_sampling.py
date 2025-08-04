@@ -46,31 +46,53 @@ def sample_batch_indices(
     return n_sequence_indices, starting_points, updated_loader_key
 
 
+# @eqx.filter_jit
+# def load_batches(
+#     dataset: FrequencySet, n_sequence_indices: jax.Array, starting_points: jax.Array, training_sequence_length: int
+# ):
+#     """Load batches of data from the dataset according to the sampled indices.
+
+#     Args:
+#         dataset (DataSet): Dataset object containing the data.
+#         n_sequence_indices (jax.Array): Indices of the sequences.
+#         starting_points (jax.Array): Starting points for the sequences.
+#         training_sequence_length (int): Length of the training sequence.
+
+#     Returns:
+#         batched_H (jax.Array): Batched H data.
+#         batched_B (jax.Array): Batched B data.
+#     """
+
+#     slice = jnp.linspace(
+#         start=starting_points, stop=starting_points + training_sequence_length, num=training_sequence_length, dtype=int
+#     ).T
+
+#     batched_H = dataset.H[n_sequence_indices[..., None], slice]
+#     batched_B = dataset.B[n_sequence_indices[..., None], slice]
+#     batched_T = dataset.T[n_sequence_indices]
+
+#     return batched_H, batched_B, batched_T
+
+
 @eqx.filter_jit
 def load_batches(
-    dataset: FrequencySet, n_sequence_indices: jax.Array, starting_points: jax.Array, training_sequence_length: int
+    dataset: FrequencySet,
+    n_sequence_indices: jax.Array,
+    starting_points: jax.Array,
+    training_sequence_length: int,
 ):
-    """Load batches of data from the dataset according to the sampled indices.
+    """Load batches of data from the dataset using dynamic slicing."""
 
-    Args:
-        dataset (DataSet): Dataset object containing the data.
-        n_sequence_indices (jax.Array): Indices of the sequences.
-        starting_points (jax.Array): Starting points for the sequences.
-        training_sequence_length (int): Length of the training sequence.
+    def slice_sequence(sequence, start_idx):
+        return jax.lax.dynamic_slice(sequence, (start_idx,), (training_sequence_length,))
 
-    Returns:
-        batched_H (jax.Array): Batched H data.
-        batched_B (jax.Array): Batched B data.
-    """
+    def get_H_B_T(seq_idx, start_idx):
+        H_seq = slice_sequence(dataset.H[seq_idx], start_idx)
+        B_seq = slice_sequence(dataset.B[seq_idx], start_idx)
+        T_val = dataset.T[seq_idx]
+        return H_seq, B_seq, T_val
 
-    slice = jnp.linspace(
-        start=starting_points, stop=starting_points + training_sequence_length, num=training_sequence_length, dtype=int
-    ).T
-
-    batched_H = dataset.H[n_sequence_indices[..., None], slice]
-    batched_B = dataset.B[n_sequence_indices[..., None], slice]
-    batched_T = dataset.T[n_sequence_indices]
-
+    batched_H, batched_B, batched_T = jax.vmap(get_H_B_T)(n_sequence_indices, starting_points)
     return batched_H, batched_B, batched_T
 
 
@@ -100,10 +122,9 @@ def draw_data_uniformly(
         dataset, n_sequence_indices, starting_points, training_sequence_length
     )
 
-    batched_H = jnp.squeeze(batched_H)[..., None]
-    batched_B = jnp.squeeze(batched_B)[..., None]
-    batched_T = jnp.squeeze(batched_T)[:, None, None]
-    batched_T = jnp.broadcast_to(batched_T, batched_B.shape)
+    batched_H = jnp.squeeze(batched_H)
+    batched_B = jnp.squeeze(batched_B)
+    batched_T = jnp.squeeze(batched_T)
 
     return batched_H, batched_B, batched_T, loader_key
 
