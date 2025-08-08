@@ -217,9 +217,9 @@ def compute_MSE_loss(
     B_future: jax.Array,
     H_future: jax.Array,
     T: jax.Array,
-    f: jax.Array,
 ):
-    pred_H = (model.normalized_call)(B_past, H_past, B_future, T, f)
+    # f: jax.Array,
+    pred_H = (model.normalized_call)(B_past, H_past, B_future, T)  # , f
     return jnp.mean((pred_H - H_future) ** 2)
 
 
@@ -231,11 +231,11 @@ def make_step(
     B_future: jax.Array,
     H_future: jax.Array,
     T: jax.Array,
-    f: jax.Array,
     optim: optax.GradientTransformation,
     opt_state: optax.OptState,
 ):
-    loss, grads = compute_MSE_loss(model, B_past, H_past, B_future, H_future, T, f)
+    # f: jax.Array,
+    loss, grads = compute_MSE_loss(model, B_past, H_past, B_future, H_future, T)  # , f
     updates, opt_state = optim.update(grads, opt_state)
     model = eqx.apply_updates(model, updates)
     return loss, model, opt_state
@@ -253,7 +253,7 @@ def process_freq_set(model, opt_state, key, freq_set, optimizer, past_size, tbpt
     # batch_H = batch_H[:, :, 0]
     # batch_B = batch_B[:, :, 0]
     # batch_T = batch_T[:, 0, 0]
-    batch_f = freq_set.frequency
+    # batch_f = freq_set.frequency
 
     batch_H_past = batch_H[:, :past_size]
     batch_H_future = batch_H[:, past_size:]
@@ -266,10 +266,9 @@ def process_freq_set(model, opt_state, key, freq_set, optimizer, past_size, tbpt
         batch_B_future,
         batch_H_future,
         batch_T,
-        batch_f,
         optimizer,
         opt_state,
-    )
+    )  # batch_f,
 
     return loss, model, opt_state, key
 
@@ -291,13 +290,13 @@ def process_freq_set_val(freq_set, model, past_size):
     B = freq_set.B
     H = freq_set.H
     T = freq_set.T
-    f = freq_set.frequency
+    # f = freq_set.frequency
     batch_H_past = H[:, :past_size]
     batch_H_future = H[:, past_size:]
     batch_B_past = B[:, :past_size]
     batch_B_future = B[:, past_size:]
 
-    pred_H = model.normalized_call(batch_B_past, batch_H_past, batch_B_future, T, f)
+    pred_H = model.normalized_call(batch_B_past, batch_H_past, batch_B_future, T)  # , f
     loss = jnp.mean((pred_H - batch_H_future) ** 2)
     return loss
 
@@ -320,7 +319,7 @@ def train_model(
     val_every: int = 100,
     seed: int = 5,
     tbptt_size: int = 64,
-    past_size: int = 8,
+    past_size: int = 750,
     batch_size: int = 1024,
 ):
 

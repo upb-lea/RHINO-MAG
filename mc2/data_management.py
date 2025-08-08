@@ -1,6 +1,7 @@
 import tqdm
 import pandas as pd
 import pickle
+import json
 from typing import Dict, Tuple, Callable
 from pathlib import Path
 import logging
@@ -20,6 +21,7 @@ DATA_ROOT = Path(__file__).parent.parent / "data"
 MODEL_DUMP_ROOT = DATA_ROOT / "models"
 CACHE_ROOT = DATA_ROOT / "cache"
 EXPERIMENT_LOGS_ROOT = DATA_ROOT / "experiment_logs"
+NORMALIZATION_ROOT = DATA_ROOT / "normalization_values"
 
 for root_dir in (CACHE_ROOT, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT):
     root_dir.mkdir(parents=True, exist_ok=True)
@@ -61,20 +63,20 @@ class Normalizer(eqx.Module):
     B_max: float
     H_max: float
     T_max: float
-    f_max: float
+    # f_max: float
     norm_fe_max: jax.Array
     H_transform: callable = eqx.field(static=True)
     H_inverse_transform: callable = eqx.field(static=True)
 
-    def normalize(self, B, H, T, f):
-        return (B / self.B_max, self.H_transform(H / self.H_max), T / self.T_max, f / self.f_max)
+    def normalize(self, B, H, T):  # ,f
+        return (B / self.B_max, self.H_transform(H / self.H_max), T / self.T_max)  # , f / self.f_max
 
     def normalize_H(self, H):
         return self.H_transform(H / self.H_max)
 
-    def denormalize(self, B, H, T, f):
+    def denormalize(self, B, H, T):  # ,f
         H = self.H_inverse_transform(H)
-        return B * self.B_max, H * self.H_max, T * self.T_max, f / self.f_max
+        return B * self.B_max, H * self.H_max, T * self.T_max  # , f / self.f_max
 
     def denormalize_H(self, H):
         H = self.H_inverse_transform(H)
@@ -237,43 +239,44 @@ class FrequencySet(eqx.Module):
                 B_max=B_max.item(),
                 H_max=H_max.item(),
                 T_max=T_max.item(),
-                f_max=800_000,
                 norm_fe_max=jnp.array([]),
                 H_transform=transform,
                 H_inverse_transform=inverse_transform,
-            )
+            )  # f_max=800_000,
 
-            norm_B, norm_H, norm_T, norm_f = normalizer.normalize(self.B, self.H, self.T, self.frequency)
+            norm_B, norm_H, norm_T = normalizer.normalize(self.B, self.H, self.T)  # , norm_f , self.frequency
             if featurize is not None:
-                features = jax.vmap(featurize, in_axes=(0, 0, 0, 0, None))(norm_B, norm_H, norm_B, norm_T, norm_f)
+                features = jax.vmap(featurize, in_axes=(0, 0, 0, 0))(
+                    norm_B[:, :10], norm_H, norm_B[:, 10:], norm_T
+                )  # , norm_f
                 max_features = jnp.max(jnp.abs(features), axis=(0, 1))
                 normalizer = Normalizer(
                     B_max=B_max.item(),
                     H_max=H_max.item(),
                     T_max=T_max.item(),
-                    f_max=800_000,
                     norm_fe_max=max_features,
                     H_transform=transform,
                     H_inverse_transform=inverse_transform,
-                )
+                )  # f_max=800_000,
         else:
-            norm_B, norm_H, norm_T, norm_f = normalizer.normalize(self.B, self.H, self.T, self.frequency)
+            norm_B, norm_H, norm_T = normalizer.normalize(self.B, self.H, self.T)  # , norm_f , self.frequency
             if featurize is not None:
-                features = jax.vmap(featurize, in_axes=(0, 0, 0, 0, None))(norm_B, norm_H, norm_B, norm_T, norm_f)
+                features = jax.vmap(featurize, in_axes=(0, 0, 0, 0))(
+                    norm_B[:, :10], norm_H, norm_B[:, 10:], norm_T
+                )  # , norm_f
                 max_features = jnp.max(jnp.abs(features), axis=(0, 1))
                 normalizer = Normalizer(
                     B_max=normalizer.B_max,
                     H_max=normalizer.H_max,
                     T_max=normalizer.T_max,
-                    f_max=normalizer.f_max,
                     norm_fe_max=max_features,
                     H_transform=normalizer.H_transform,
                     H_inverse_transform=normalizer.H_inverse_transform,
-                )
+                )  # f_max=normalizer.f_max,
 
         return NormalizedFrequencySet(
             material_name=self.material_name,
-            frequency=norm_f,
+            frequency=self.frequency,
             H=norm_H,
             B=norm_B,
             T=norm_T,
@@ -285,10 +288,10 @@ class NormalizedFrequencySet(FrequencySet):
     normalizer: Normalizer
 
     def denormalize(self):
-        B, H, T, frequency = self.normalizer.denormalize(self.B, self.H, self.T, self.frequency)
+        B, H, T = self.normalizer.denormalize(self.B, self.H, self.T)  # , frequency , self.frequency
         return FrequencySet(
             material_name=self.material_name,
-            frequency=frequency,
+            frequency=self.frequency,
             H=H,
             B=B,
             T=T,
@@ -477,51 +480,84 @@ class MaterialSet(eqx.Module):
         normalizer: Normalizer = None,
         transform_H: bool = False,
         featurize: Callable = None,
-    ):
+        feature_names: list[str] = None,
+    ) -> "NormalizedMaterialSet":
 
         if normalizer is None:
-            frequency_sets_different_norm = [
-                freq_set.normalize(transform_H=transform_H, featurize=featurize) for freq_set in self.frequency_sets
-            ]
-            B_max = max(freq_set.normalizer.B_max for freq_set in frequency_sets_different_norm)
-            H_max = max(freq_set.normalizer.H_max for freq_set in frequency_sets_different_norm)
-            T_max = max(freq_set.normalizer.T_max for freq_set in frequency_sets_different_norm)
-            f_max = max(freq_set.normalizer.f_max for freq_set in frequency_sets_different_norm)
+            if featurize is None:
+                if feature_names is None:
+                    raise ValueError(
+                        "You must specify either 'featurize' or 'feature_names'. "
+                        "Without one of them, it is not possible to determine how to obtain "
+                        "the normalization values."
+                    )
+                else:
+                    file_json = NORMALIZATION_ROOT / "norm_values.json"
+                    with open(file_json, "r") as file:
+                        norm_values = json.load(file)
+                    norm_values_mat = norm_values[self.material_name]["train_set"]
+                    B_max = norm_values_mat["B_max"]
+                    H_max = norm_values_mat["H_max"]
+                    T_max = norm_values_mat["T_max"]
+                    # f_max = norm_values_mat["f_max"]
+                    H_transform = lambda h: jnp.tanh(h * 1.2)
+                    H_inverse_transform = lambda h: jnp.atanh(h) / 1.2
+                    max_norm_fe_max = jnp.array([norm_values_mat["features"][name] for name in feature_names])
+                    normalizer = Normalizer(
+                        B_max=B_max,
+                        H_max=H_max,
+                        T_max=T_max,
+                        norm_fe_max=max_norm_fe_max,
+                        H_transform=H_transform,
+                        H_inverse_transform=H_inverse_transform,
+                    )  # f_max=f_max,
+            else:
+                if feature_names is not None:
+                    raise ValueError(
+                        "Specify either 'featurize' OR 'feature_names', but not both. "
+                        "Otherwise, it is unclear whether normalization values should be "
+                        "recomputed using 'featurize' or loaded based on the provided 'feature_names'."
+                    )
+                frequency_sets_different_norm = [
+                    freq_set.normalize(transform_H=transform_H, featurize=featurize) for freq_set in self.frequency_sets
+                ]
+                B_max = max(freq_set.normalizer.B_max for freq_set in frequency_sets_different_norm)
+                H_max = max(freq_set.normalizer.H_max for freq_set in frequency_sets_different_norm)
+                T_max = max(freq_set.normalizer.T_max for freq_set in frequency_sets_different_norm)
+                # f_max = max(freq_set.normalizer.f_max for freq_set in frequency_sets_different_norm)
 
-            H_transform = frequency_sets_different_norm[0].normalizer.H_transform
-            H_inverse_transform = frequency_sets_different_norm[0].normalizer.H_inverse_transform
+                H_transform = frequency_sets_different_norm[0].normalizer.H_transform
+                H_inverse_transform = frequency_sets_different_norm[0].normalizer.H_inverse_transform
 
-            pre_normalizer = Normalizer(
-                B_max=B_max,
-                H_max=H_max,
-                T_max=T_max,
-                f_max=f_max,
-                norm_fe_max=jnp.array([]),
-                H_transform=H_transform,
-                H_inverse_transform=H_inverse_transform,
-            )
+                pre_normalizer = Normalizer(
+                    B_max=B_max,
+                    H_max=H_max,
+                    T_max=T_max,
+                    norm_fe_max=jnp.array([]),
+                    H_transform=H_transform,
+                    H_inverse_transform=H_inverse_transform,
+                )
+                # f_max=f_max,
+                frequency_sets_norm_pre = [
+                    freq_set.normalize(normalizer=pre_normalizer, transform_H=transform_H, featurize=featurize)
+                    for freq_set in self.frequency_sets
+                ]
 
-            frequency_sets_norm = [
-                freq_set.normalize(normalizer=pre_normalizer, transform_H=transform_H, featurize=featurize)
-                for freq_set in self.frequency_sets
-            ]
+                max_norm_fe_max = jnp.max(
+                    jnp.array([freq_set.normalizer.norm_fe_max for freq_set in frequency_sets_norm_pre]), axis=0
+                )
+                normalizer = Normalizer(
+                    B_max=B_max,
+                    H_max=H_max,
+                    T_max=T_max,
+                    norm_fe_max=max_norm_fe_max,
+                    H_transform=H_transform,
+                    H_inverse_transform=H_inverse_transform,
+                )  # f_max=f_max,
 
-            max_norm_fe_max = jnp.max(
-                jnp.array([freq_set.normalizer.norm_fe_max for freq_set in frequency_sets_norm]), axis=0
-            )
-            normalizer = Normalizer(
-                B_max=B_max,
-                H_max=H_max,
-                T_max=T_max,
-                f_max=f_max,
-                norm_fe_max=max_norm_fe_max,
-                H_transform=H_transform,
-                H_inverse_transform=H_inverse_transform,
-            )
-        else:
-            frequency_sets_norm = [
-                freq_set.normalize(normalizer=normalizer, transform_H=transform_H) for freq_set in self.frequency_sets
-            ]
+        frequency_sets_norm = [
+            freq_set.normalize(normalizer=normalizer, transform_H=transform_H) for freq_set in self.frequency_sets
+        ]
 
         frequencies_norm = [freq_set_norm.frequency for freq_set_norm in frequency_sets_norm]
 
