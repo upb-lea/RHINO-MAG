@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import equinox as eqx
 
 
-class BaseRNN(eqx.Module):
+class GRU(eqx.Module):
     """Very basic RNN model."""
 
     hidden_size: int
