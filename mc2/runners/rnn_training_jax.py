@@ -6,7 +6,7 @@ from mc2.data_management import AVAILABLE_MATERIALS
 from mc2.training.jax_routine import train_model
 from mc2.runners.model_setup_jax import get_GRU_setup
 
-supported_model_types = ["GRU"]  # ["EulerNODE", "HiddenStateEulerNODE", "GRU"]
+supported_model_types = ["GRU"]  # TODO: ["EulerNODE", "HiddenStateEulerNODE", "GRU"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -16,7 +16,7 @@ def parse_args() -> argparse.Namespace:
         "--material",
         default=None,
         required=True,
-        help=f"Material label to train on. One of {AVAILABLE_MATERIALS}",  # TODO: is this accurate?
+        help=f"Material label to train on. One of {AVAILABLE_MATERIALS}",
     )
     parser.add_argument(
         "--model_type",
@@ -24,6 +24,7 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help=f"Model type to train with. One of {supported_model_types}",
     )
+    # TODO: Enable epochs over sampling
     # parser.add_argument("-e", "--epochs", default=100, required=False, type=int, help="Number of epochs to train")
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
@@ -58,9 +59,9 @@ def main():
         **params["training_params"],
     )
 
-    # eval
+    # TODO: eval ?
 
-    # store results
+    # TODO: store results
     #
     # store model
     # store logs

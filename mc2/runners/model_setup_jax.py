@@ -30,7 +30,7 @@ def get_GRU_setup(material_name: str, model_key: jax.random.PRNGKey):
     model = GRU(**params["model_params"])
 
     #####
-    # TODO: How to do this properly?
+    # TODO: How to do this properly? Will this always be the featurize function? What about the n_s parameter?
     def featurize(norm_B_past, norm_H_past, norm_B_future, temperature):
         past_length = norm_B_past.shape[0]
         future_length = norm_B_future.shape[0]
