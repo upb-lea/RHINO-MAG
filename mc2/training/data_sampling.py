@@ -46,34 +46,6 @@ def sample_batch_indices(
     return n_sequence_indices, starting_points, updated_loader_key
 
 
-# @eqx.filter_jit
-# def load_batches(
-#     dataset: FrequencySet, n_sequence_indices: jax.Array, starting_points: jax.Array, training_sequence_length: int
-# ):
-#     """Load batches of data from the dataset according to the sampled indices.
-
-#     Args:
-#         dataset (DataSet): Dataset object containing the data.
-#         n_sequence_indices (jax.Array): Indices of the sequences.
-#         starting_points (jax.Array): Starting points for the sequences.
-#         training_sequence_length (int): Length of the training sequence.
-
-#     Returns:
-#         batched_H (jax.Array): Batched H data.
-#         batched_B (jax.Array): Batched B data.
-#     """
-
-#     slice = jnp.linspace(
-#         start=starting_points, stop=starting_points + training_sequence_length, num=training_sequence_length, dtype=int
-#     ).T
-
-#     batched_H = dataset.H[n_sequence_indices[..., None], slice]
-#     batched_B = dataset.B[n_sequence_indices[..., None], slice]
-#     batched_T = dataset.T[n_sequence_indices]
-
-#     return batched_H, batched_B, batched_T
-
-
 @eqx.filter_jit
 def load_batches(
     dataset: FrequencySet,

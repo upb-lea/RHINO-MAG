@@ -1,7 +1,7 @@
 import argparse
 import jax
 
-from mc2.training_jax.jax_routine import train_recursive_nn
+from mc2.training.jax_routine import train_recursive_nn
 
 
 def parse_args() -> argparse.Namespace:
