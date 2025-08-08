@@ -82,9 +82,9 @@ def compute_fe_single(data_single: jax.Array, n_s: int) -> jax.Array:
     db = db_dt(data_single)
     d2b = d2b_dt2(data_single)
     pwm = pwm_of_b(data_single)
-    f = get_frequency(d2b, F_SAMPLE)
-    f_repeated = jnp.full(pwm.shape, f)
-    return jnp.stack((data_single, dyn, db, d2b, pwm, f_repeated), axis=-1)
+    # f = get_frequency(d2b, F_SAMPLE)
+    # f_repeated = jnp.full(pwm.shape, f)
+    return jnp.stack((data_single, dyn, db, d2b, pwm), axis=-1)  # , f_repeated), axis=-1)
 
 
 @eqx.filter_jit
