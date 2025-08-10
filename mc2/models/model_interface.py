@@ -1,5 +1,8 @@
 from abc import abstractmethod
-from typing import Callable
+from typing import Callable, Type
+import pathlib
+import json
+
 import numpy as np
 import numpy.typing as npt
 
@@ -153,3 +156,17 @@ class RNNwInterface(ModelInterface):
         )
         batch_H_pred = jax.vmap(self.rnn)(batch_x, init_hidden)
         return batch_H_pred[:, :, 0]
+
+
+def save_model(filename: str | pathlib.Path, hyperparams: dict, model: ModelInterface):
+    with open(filename, "wb") as f:
+        hyperparam_str = json.dumps(hyperparams)
+        f.write((hyperparam_str + "\n").encode())
+        eqx.tree_serialise_leaves(f, model)
+
+
+def load_model(filename: str | pathlib.Path, model_class: Type[ModelInterface]):
+    with open(filename, "rb") as f:
+        hyperparams = json.loads(f.readline().decode())
+        model = model_class(key=jax.random.PRNGKey(0), **hyperparams)
+        return eqx.tree_deserialise_leaves(f, model)
