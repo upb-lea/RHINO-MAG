@@ -10,6 +10,8 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
+from mc2.data_management import Normalizer
+
 
 class ModelInterface(eqx.Module):
 
@@ -41,12 +43,9 @@ class ModelInterface(eqx.Module):
 
 
 class NODEwInterface(ModelInterface):
-
-    def __init__(self, model, normalize, denormalize, featurize):
-        self.model = model
-        self._normalize = normalize
-        self._denormalize = denormalize
-        self._featurize = featurize
+    model: eqx.Module
+    normalizer: Normalizer
+    featurize: Callable = eqx.field(static=True)
 
     @eqx.filter_jit
     def apply_model(
@@ -59,15 +58,42 @@ class NODEwInterface(ModelInterface):
 
         past_length = B_past.shape[0]
 
-        norm_B, norm_H_past, norm_temperature = self._normalize(jnp.hstack([B_past, B_future]), H_past, temperature)
+        norm_B, norm_H_past, norm_temperature = self.normalizer.normalize(
+            jnp.hstack([B_past, B_future]), H_past, temperature
+        )
 
         norm_B_past = norm_B[:past_length]
         norm_B_future = norm_B[past_length:]
 
-        featurized_input = self._featurize(norm_B_past, norm_H_past, norm_B_future, norm_temperature)
+        featurized_input = self.featurize(norm_B_past, norm_H_past, norm_B_future, norm_temperature)
 
         _, norm_H_future = self.model(norm_H_past[-1], featurized_input, tau=1)
-        H_future = self._denormalize(norm_H_future)
+        H_future = self.normalizer.denormalize_H(norm_H_future)
+        return H_future
+
+    @eqx.filter_jit
+    def normalized_call(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+    ) -> jax.Array:
+
+        def norm_apply_model(
+            B_past_norm: jax.Array, H_past_norm: jax.Array, B_future_norm: jax.Array, T_norm: jax.Array
+        ) -> jax.Array:
+            featurized_input = self.featurize(B_past_norm, H_past_norm, B_future_norm, T_norm)
+            _, H_future_norm = self.model(H_past_norm[-1], featurized_input, tau=1)
+            return H_future_norm
+
+        H_future = eqx.filter_vmap(norm_apply_model)(
+            B_past_norm,
+            H_past_norm,
+            B_future_norm,
+            T_norm,
+        )
+        H_future = H_future[:, :-1, 0]
         return H_future
 
     def __call__(
@@ -124,7 +150,7 @@ class NODEwInterface(ModelInterface):
 
 
 class RNNwInterface(ModelInterface):
-    rnn: eqx.Module
+    model: eqx.Module
     normalizer: eqx.Module
     featurize: Callable = eqx.field(static=True)
 
@@ -152,9 +178,9 @@ class RNNwInterface(ModelInterface):
             [B_future_norm[..., None], T_norm_broad[..., None], features_norm], axis=-1
         )  # , f_norm_broad[...,None]
         init_hidden = jnp.hstack(
-            [jnp.zeros((H_past_norm.shape[0], self.rnn.hidden_size - 1)), H_past_norm[:, -1, None]]
+            [jnp.zeros((H_past_norm.shape[0], self.model.hidden_size - 1)), H_past_norm[:, -1, None]]
         )
-        batch_H_pred = jax.vmap(self.rnn)(batch_x, init_hidden)
+        batch_H_pred = jax.vmap(self.model)(batch_x, init_hidden)
         return batch_H_pred[:, :, 0]
 
 

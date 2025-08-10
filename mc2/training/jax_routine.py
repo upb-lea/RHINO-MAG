@@ -190,7 +190,7 @@ def train_model(
         "loss_trends_val": [],
         "start_time": pd.Timestamp.now().round(freq="s"),
     }
-    opt_state = optimizer.init(model)
+    opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
     pbar = trange(n_steps, desc=f"Seed {seed}", position=seed, unit="step")
     test_loss = val_test(test_set_norm, model, past_size)
@@ -214,4 +214,4 @@ def train_model(
 
     logs["end_time"] = pd.Timestamp.now().round(freq="s")
     logs["seed"] = seed
-    return logs, model
+    return logs, model, (train_set, val_set, test_set)

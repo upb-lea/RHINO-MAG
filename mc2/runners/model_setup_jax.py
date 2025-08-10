@@ -4,15 +4,28 @@ import optax
 
 from mc2.features.features_jax import compute_fe_single
 from mc2.data_management import MaterialSet, load_data_into_pandas_df
-from mc2.models.model_interface import NODEwInterface, RNNwInterface
+from mc2.models.model_interface import ModelInterface, NODEwInterface, RNNwInterface
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU
 
 
-def get_GRU_setup(material_name: str, model_key: jax.random.PRNGKey):
+def get_normalizer(material_name, featurize):
+    data_dict = load_data_into_pandas_df(material=material_name)
+    mat_set = MaterialSet.from_pandas_dict(data_dict)
+    train_set, val_set, test_set = mat_set.split_into_train_val_test(
+        train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=12
+    )
+    train_set_norm = train_set.normalize(transform_H=True, featurize=featurize)
+    normalizer = train_set_norm.normalizer
+    return normalizer
+
+
+def get_GRU_setup(
+    material_name: str, model_key: jax.random.PRNGKey
+) -> tuple[ModelInterface, optax.GradientTransformation, dict]:
     params = dict(
         training_params=dict(
-            n_steps=10_000,
+            n_steps=100,  # 10_000
             val_every=500,
             tbptt_size=512,
             past_size=10,
@@ -40,15 +53,58 @@ def get_GRU_setup(material_name: str, model_key: jax.random.PRNGKey):
         return featurized_B[past_length:]
 
     # TODO: Store normalizer objects, somewhat weird as it is?
-    data_dict = load_data_into_pandas_df(material=material_name)
-    mat_set = MaterialSet.from_pandas_dict(data_dict)
-    train_set, val_set, test_set = mat_set.split_into_train_val_test(
-        train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=12
-    )
-    train_set_norm = train_set.normalize(transform_H=True, featurize=featurize)
-    normalizer = train_set_norm.normalizer
+    normalizer = get_normalizer(material_name, featurize)
     #####
 
-    wrapped_model = RNNwInterface(rnn=model, normalizer=normalizer, featurize=featurize)
+    wrapped_model = RNNwInterface(model=model, normalizer=normalizer, featurize=featurize)
+
+    return wrapped_model, optimizer, params
+
+
+def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
+    params = dict(
+        training_params=dict(
+            n_steps=1_000,
+            val_every=500,
+            tbptt_size=64,
+            past_size=10,
+            batch_size=512,
+        ),
+        model_params=dict(
+            obs_dim=1,
+            state_dim=10,
+            action_dim=5,
+            width_size=64,
+            depth=2,
+            obs_func=lambda x: x[0],
+            key=model_key,
+        ),
+        lr_params=dict(
+            init_value=1e-3,
+            transition_steps=1_000_000,
+            transition_begin=2_000,
+            decay_rate=0.1,
+            end_value=1e-4,
+        ),
+    )
+
+    lr_schedule = optax.schedules.exponential_decay(**params["lr_params"])
+    optimizer = optax.adam(lr_schedule)
+    model = HiddenStateNeuralEulerODE(**params["model_params"])
+
+    def featurize(norm_B_past, norm_H_past, norm_B_future, temperature):
+        past_length = norm_B_past.shape[0]
+        future_length = norm_B_future.shape[0]
+
+        featurized_B = compute_fe_single(jnp.hstack([norm_B_past, norm_B_future]), n_s=10)
+
+        return featurized_B[past_length:]
+
+    normalizer = get_normalizer(material_name, featurize)
+    wrapped_model = NODEwInterface(
+        model=model,
+        normalizer=normalizer,
+        featurize=featurize,
+    )
 
     return wrapped_model, optimizer, params
