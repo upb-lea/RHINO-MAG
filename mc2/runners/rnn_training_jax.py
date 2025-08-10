@@ -34,6 +34,13 @@ def parse_args() -> argparse.Namespace:
         required=True,
         help=f"Model type to train with. One of {supported_model_types}",
     )
+    parser.add_argument(
+        "--gpu_id",
+        default=-1,
+        type=int,
+        required=False,
+        help="id of the gpu to use for the experiments. '-1' for not setting a GPU.",
+    )
     # TODO: Enable epochs over sampling
     # parser.add_argument("-e", "--epochs", default=100, required=False, type=int, help="Number of epochs to train")
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
@@ -43,6 +50,10 @@ def parse_args() -> argparse.Namespace:
 
 def main():
     args = parse_args()
+
+    if args.gpu_id != -1:
+        gpus = jax.devices()
+        jax.config.update("jax_default_device", gpus[args.gpu_id])
 
     # setup
     seed = 5

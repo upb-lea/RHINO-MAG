@@ -1,6 +1,10 @@
+from typing import Any
+import numpy as np
+
 import jax
 import jax.numpy as jnp
 
+from mc2.data_management import MaterialSet
 from mc2.models.model_interface import ModelInterface
 
 
@@ -58,7 +62,7 @@ def evaluate_model(
     T: float,
     metrics: dict = None,
     reduce_to_scalar: bool = True,
-):
+) -> dict[str, Any]:
     if metrics is None:
         metrics = default_metrics()
 
@@ -73,3 +77,27 @@ def evaluate_model(
             metric_results["h"][name] = jnp.mean(result).item()
 
     return metric_results
+
+
+def evaluate_test_set(
+    model: ModelInterface,
+    test_set: MaterialSet,
+    metrics: dict = None,
+) -> dict[str, dict[str, dict[str, Any]]]:
+    eval_metrics = {}
+    for frequency in test_set.frequencies:
+        test_set_at_frequency = test_set.at_frequency(frequency)
+        eval_metrics[frequency.item()] = {
+            sequence_length.item(): evaluate_model(
+                model,
+                B_past=test_set_at_frequency.B[:, :1],
+                H_past=test_set_at_frequency.H[:, :1],
+                B_future=test_set_at_frequency.B[:, 1:sequence_length],
+                H_future=test_set_at_frequency.H[:, 1:sequence_length],
+                T=test_set_at_frequency.T[:],
+                metrics=metrics,
+                reduce_to_scalar=True,
+            )
+            for sequence_length in np.linspace(10, test_set_at_frequency.H.shape[-1], 10, dtype=int)
+        }
+    return eval_metrics

@@ -64,15 +64,15 @@ def get_GRU_setup(
 def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
     params = dict(
         training_params=dict(
-            n_steps=100_000,
+            n_steps=200_000,
             val_every=10_000,
-            tbptt_size=256,
-            past_size=10,
+            tbptt_size=100,
+            past_size=1,
             batch_size=256,
         ),
         model_params=dict(
             obs_dim=1,
-            state_dim=10,
+            state_dim=20,
             action_dim=5,
             width_size=64,
             depth=2,
