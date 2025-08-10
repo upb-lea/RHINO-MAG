@@ -1,12 +1,16 @@
 import argparse
 import pathlib
 from copy import deepcopy
+import logging as log
+
 import jax
+import jax.numpy as jnp
+import numpy as np
 import json
 import optax
 from uuid import uuid4
 
-from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT
+from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT
 from mc2.training.jax_routine import train_model
 from mc2.runners.model_setup_jax import get_GRU_setup, get_HNODE_setup
 from mc2.metrics import evaluate_model
@@ -67,29 +71,45 @@ def main():
         **params["training_params"],
     )
 
+    log.info("Training done. Proceeding with evaluation..")
+
+    exp_id = str(uuid4())[:16]
+
     # TODO: eval, sample shorter trajectories as well?
-    eval_metrics = {
-        frequency.item(): evaluate_model(
-            model,
-            B_past=test_set.at_frequency(frequency).B[:, :1],
-            H_past=test_set.at_frequency(frequency).H[:, :1],
-            B_future=test_set.at_frequency(frequency).B[:, 1:],
-            H_future=test_set.at_frequency(frequency).H[:, 1:],
-            T=test_set.at_frequency(frequency).T[:],
-            reduce_to_scalar=True,
-        )
-        for frequency in test_set.frequencies
-    }
-    print(eval_metrics)
+    eval_metrics = {}
+    for frequency in test_set.frequencies:
+        test_set_at_frequency = test_set.at_frequency(frequency)
+        eval_metrics[frequency.item()] = {
+            sequence_length.item(): evaluate_model(
+                model,
+                B_past=test_set_at_frequency.B[:, :1],
+                H_past=test_set_at_frequency.H[:, :1],
+                B_future=test_set_at_frequency.B[:, 1:sequence_length],
+                H_future=test_set_at_frequency.H[:, 1:sequence_length],
+                T=test_set_at_frequency.T[:],
+                reduce_to_scalar=True,
+            )
+            for sequence_length in np.linspace(10, test_set_at_frequency.H.shape[-1], 10, dtype=int)
+        }
+
+    log.info("Evaluation done. Proceeding with storing experiment data..")
 
     # TODO: store results
-    # json.dumps() # params, logs, eval
+    data = dict(params=params, logs=logs, metrics=eval_metrics)
+
+    with open(EXPERIMENT_LOGS_ROOT / "jax_experiments" / pathlib.Path(exp_id + ".json"), "w") as f:
+        json.dump(data, f)
+
     # store model
     save_model_params = deepcopy(params["model_params"])
     del save_model_params["key"]
-    save_model(MODEL_DUMP_ROOT / pathlib.Path(str(uuid4())[:8] + ".eqx"), save_model_params, model.model)
+    save_model(MODEL_DUMP_ROOT / pathlib.Path(exp_id + ".eqx"), save_model_params, model.model)
 
-    print("Experiment finished successfully.")
+    log.info(
+        f"Experiment with id '{exp_id}' finished successfully. "
+        + "Parameters, logs, evaluation metrics, and the model "
+        + "have been stored successfully."
+    )
 
 
 if __name__ == "__main__":

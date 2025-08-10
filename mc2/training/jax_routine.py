@@ -1,4 +1,3 @@
-import numpy as np
 import jax
 import jax.numpy as jnp
 import equinox as eqx
@@ -188,13 +187,14 @@ def train_model(
         "material": material_name,
         "loss_trends_train": [],
         "loss_trends_val": [],
-        "start_time": pd.Timestamp.now().round(freq="s"),
+        "start_time": str(pd.Timestamp.now().round(freq="s")),
     }
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
-    pbar = trange(n_steps, desc=f"Seed {seed}", position=seed, unit="step")
     test_loss = val_test(test_set_norm, model, past_size)
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
+
+    pbar = trange(n_steps, desc=f"Seed {seed}", position=seed, unit="step")
     for step in pbar:
         train_loss = 0
         key, subkey = jax.random.split(key)
@@ -204,14 +204,16 @@ def train_model(
         pbar_str = f"Loss {train_loss:.2e}"
         if step % val_every == 0:
             val_loss = val_test(val_set_norm, model, past_size)
-            logs["loss_trends_val"].append(val_loss)
+            logs["loss_trends_val"].append(val_loss.item())
         pbar_str += f"| val loss {val_loss:.2e}"
-        logs["loss_trends_train"].append(train_loss)
+        logs["loss_trends_train"].append(train_loss.item())
         pbar.set_postfix_str(pbar_str)
+
+    pbar.close()
 
     test_loss = val_test(test_set_norm, model, past_size)
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
 
-    logs["end_time"] = pd.Timestamp.now().round(freq="s")
+    logs["end_time"] = str(pd.Timestamp.now().round(freq="s"))
     logs["seed"] = seed
     return logs, model, (train_set, val_set, test_set)

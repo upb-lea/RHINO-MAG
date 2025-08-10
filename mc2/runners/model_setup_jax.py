@@ -107,4 +107,6 @@ def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
         featurize=featurize,
     )
 
+    params["model_params"]["key"] = params["model_params"]["key"].tolist()
+
     return wrapped_model, optimizer, params

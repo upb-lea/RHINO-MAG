@@ -185,4 +185,7 @@ dev/**/*.eqx
 # ignore model files in the data folders
 data/**/*.eqx
 
+# ignore experiment log files
+data/experiment_logs/**/*.json
+
 dev/**/lightning_logs
