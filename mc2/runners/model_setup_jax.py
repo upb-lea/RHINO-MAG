@@ -76,7 +76,7 @@ def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
             action_dim=5,
             width_size=64,
             depth=2,
-            obs_func=lambda x: x[0],
+            obs_func_type="identity",
             key=model_key,
         ),
         lr_params=dict(

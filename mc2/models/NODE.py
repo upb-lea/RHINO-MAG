@@ -89,10 +89,14 @@ class HiddenStateNeuralEulerODE(eqx.Module):
     state_dim: int
     action_dim: int
 
-    def __init__(self, obs_dim, state_dim, action_dim, width_size, depth, obs_func, *, key, **kwargs):
+    def __init__(self, obs_dim, state_dim, action_dim, width_size, depth, obs_func_type, *, key, **kwargs):
         super().__init__(**kwargs)
         self.state_func = StateSpaceMLP(state_dim, action_dim, width_size, depth, key=key)
-        self.obs_func = obs_func
+
+        if obs_func_type == "identity":
+            self.obs_func = lambda x: x[0]
+        else:
+            raise NotImplementedError()
 
         self.obs_dim = obs_dim
         self.state_dim = state_dim
