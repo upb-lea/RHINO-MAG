@@ -79,7 +79,7 @@ def evaluate_model(
     return metric_results
 
 
-def evaluate_test_set(
+def evaluate_model_on_test_set(
     model: ModelInterface,
     test_set: MaterialSet,
     metrics: dict = None,

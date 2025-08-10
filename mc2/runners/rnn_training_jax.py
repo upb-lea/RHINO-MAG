@@ -13,7 +13,7 @@ from uuid import uuid4
 from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT
 from mc2.training.jax_routine import train_model
 from mc2.runners.model_setup_jax import get_GRU_setup, get_HNODE_setup
-from mc2.metrics import evaluate_model
+from mc2.metrics import evaluate_model_on_test_set
 from mc2.models.model_interface import save_model
 
 supported_model_types = ["GRU", "HNODE"]  # TODO: ["EulerNODE", "HNODE", "GRU"]
@@ -85,23 +85,7 @@ def main():
     log.info("Training done. Proceeding with evaluation..")
 
     exp_id = str(uuid4())[:16]
-
-    # TODO: eval, sample shorter trajectories as well?
-    eval_metrics = {}
-    for frequency in test_set.frequencies:
-        test_set_at_frequency = test_set.at_frequency(frequency)
-        eval_metrics[frequency.item()] = {
-            sequence_length.item(): evaluate_model(
-                model,
-                B_past=test_set_at_frequency.B[:, :1],
-                H_past=test_set_at_frequency.H[:, :1],
-                B_future=test_set_at_frequency.B[:, 1:sequence_length],
-                H_future=test_set_at_frequency.H[:, 1:sequence_length],
-                T=test_set_at_frequency.T[:],
-                reduce_to_scalar=True,
-            )
-            for sequence_length in np.linspace(10, test_set_at_frequency.H.shape[-1], 10, dtype=int)
-        }
+    eval_metrics = evaluate_model_on_test_set(model, test_set)
 
     log.info("Evaluation done. Proceeding with storing experiment data..")
 
