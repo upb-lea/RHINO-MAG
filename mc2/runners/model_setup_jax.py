@@ -1,17 +1,22 @@
+from typing import Callable
+
 import jax
 import jax.numpy as jnp
 import optax
 
 from mc2.features.features_jax import compute_fe_single
-from mc2.data_management import MaterialSet, load_data_into_pandas_df
+from mc2.data_management import MaterialSet, FrequencySet, load_data_into_pandas_df
 from mc2.models.model_interface import ModelInterface, NODEwInterface, RNNwInterface
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU
 
 
-def get_normalizer(material_name, featurize):
+def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: int):
     data_dict = load_data_into_pandas_df(material=material_name)
     mat_set = MaterialSet.from_pandas_dict(data_dict)
+
+    mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
+
     train_set, val_set, test_set = mat_set.split_into_train_val_test(
         train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=12
     )
@@ -64,11 +69,12 @@ def get_GRU_setup(
 def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
     params = dict(
         training_params=dict(
-            n_steps=200_000,
-            val_every=10_000,
-            tbptt_size=100,
+            n_steps=1_000_000,
+            val_every=1_000,
+            tbptt_size=64,
             past_size=1,
-            batch_size=256,
+            batch_size=512,
+            subsampling_freq=5,
         ),
         model_params=dict(
             obs_dim=1,
@@ -100,7 +106,7 @@ def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
 
         return featurized_B[past_length:]
 
-    normalizer = get_normalizer(material_name, featurize)
+    normalizer = get_normalizer(material_name, featurize, params["training_params"]["subsampling_freq"])
     wrapped_model = NODEwInterface(
         model=model,
         normalizer=normalizer,

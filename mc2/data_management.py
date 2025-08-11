@@ -568,6 +568,25 @@ class MaterialSet(eqx.Module):
             normalizer=normalizer,
         )
 
+    def subsample(self, sampling_freq: int) -> "MaterialSet":
+
+        subsampled_freq_set_list = [
+            FrequencySet(
+                freq_set.material_name,
+                freq_set.frequency,
+                freq_set.H[:, ::sampling_freq],
+                freq_set.B[:, ::sampling_freq],
+                freq_set.T[:],
+            )
+            for freq_set in self
+        ]
+
+        return MaterialSet(
+            self.material_name,
+            subsampled_freq_set_list,
+            self.frequencies,
+        )
+
 
 class NormalizedMaterialSet(MaterialSet):
     normalizer: Normalizer

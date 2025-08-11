@@ -165,10 +165,12 @@ def train_model(
     tbptt_size: int,
     past_size: int,
     batch_size: int,
+    subsampling_freq: int,
 ):
 
     data_dict = load_data_into_pandas_df(material=material_name)
     mat_set = MaterialSet.from_pandas_dict(data_dict)
+    mat_set.subsample(sampling_freq=subsampling_freq)
 
     train_set, val_set, test_set = mat_set.split_into_train_val_test(
         train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=12
