@@ -5,9 +5,9 @@ import optax
 import pandas as pd
 import logging as log
 
-# from tqdm import trange
-from tqdm.notebook import trange
-from tqdm.notebook import tqdm
+from tqdm import trange
+
+# from tqdm.notebook import trange
 from mc2.data_management import (
     load_data_into_pandas_df,
     MaterialSet,
