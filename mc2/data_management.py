@@ -64,7 +64,7 @@ class Normalizer(eqx.Module):
     H_max: float
     T_max: float
     # f_max: float
-    norm_fe_max: jax.Array
+    norm_fe_max: list[float] = eqx.field(static=True)
     H_transform: callable = eqx.field(static=True)
     H_inverse_transform: callable = eqx.field(static=True)
 
@@ -83,11 +83,11 @@ class Normalizer(eqx.Module):
         return H * self.H_max
 
     def normalize_fe(self, features):
-        fe_norm = features / self.norm_fe_max
+        fe_norm = features / jnp.array(self.norm_fe_max)
         return fe_norm
 
     def denormalize_fe(self, features):
-        return features * self.norm_fe_max
+        return features * jnp.array(self.norm_fe_max)
 
 
 class FrequencySet(eqx.Module):
@@ -239,7 +239,7 @@ class FrequencySet(eqx.Module):
                 B_max=B_max.item(),
                 H_max=H_max.item(),
                 T_max=T_max.item(),
-                norm_fe_max=jnp.array([]),
+                norm_fe_max=[],
                 H_transform=transform,
                 H_inverse_transform=inverse_transform,
             )  # f_max=800_000,
@@ -254,7 +254,7 @@ class FrequencySet(eqx.Module):
                     B_max=B_max.item(),
                     H_max=H_max.item(),
                     T_max=T_max.item(),
-                    norm_fe_max=max_features,
+                    norm_fe_max=max_features.tolist(),
                     H_transform=transform,
                     H_inverse_transform=inverse_transform,
                 )  # f_max=800_000,
@@ -269,7 +269,7 @@ class FrequencySet(eqx.Module):
                     B_max=normalizer.B_max,
                     H_max=normalizer.H_max,
                     T_max=normalizer.T_max,
-                    norm_fe_max=max_features,
+                    norm_fe_max=max_features.tolist(),
                     H_transform=normalizer.H_transform,
                     H_inverse_transform=normalizer.H_inverse_transform,
                 )  # f_max=normalizer.f_max,
@@ -502,7 +502,7 @@ class MaterialSet(eqx.Module):
                     # f_max = norm_values_mat["f_max"]
                     H_transform = lambda h: jnp.tanh(h * 1.2)
                     H_inverse_transform = lambda h: jnp.atanh(h) / 1.2
-                    max_norm_fe_max = jnp.array([norm_values_mat["features"][name] for name in feature_names])
+                    max_norm_fe_max = [norm_values_mat["features"][name] for name in feature_names]
                     normalizer = Normalizer(
                         B_max=B_max,
                         H_max=H_max,
@@ -533,7 +533,7 @@ class MaterialSet(eqx.Module):
                     B_max=B_max,
                     H_max=H_max,
                     T_max=T_max,
-                    norm_fe_max=jnp.array([]),
+                    norm_fe_max=[],
                     H_transform=H_transform,
                     H_inverse_transform=H_inverse_transform,
                 )
@@ -550,7 +550,7 @@ class MaterialSet(eqx.Module):
                     B_max=B_max,
                     H_max=H_max,
                     T_max=T_max,
-                    norm_fe_max=max_norm_fe_max,
+                    norm_fe_max=max_norm_fe_max.tolist(),
                     H_transform=H_transform,
                     H_inverse_transform=H_inverse_transform,
                 )  # f_max=f_max,

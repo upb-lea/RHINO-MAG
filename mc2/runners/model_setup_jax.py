@@ -30,7 +30,7 @@ def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: in
             B_max=1.0,
             H_max=1.0,
             T_max=1.0,
-            norm_fe_max=jnp.ones(5),  # TODO: adapt to number of features?
+            norm_fe_max=jnp.ones(5).tolist(),  # TODO: adapt to number of features?
             H_transform=lambda h: h,
             H_inverse_transform=lambda h: h,
         )
