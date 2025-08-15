@@ -90,10 +90,10 @@ def evaluate_model_on_test_set(
         eval_metrics[frequency.item()] = {
             sequence_length.item(): evaluate_model(
                 model,
-                B_past=test_set_at_frequency.B[:, :1],
-                H_past=test_set_at_frequency.H[:, :1],
-                B_future=test_set_at_frequency.B[:, 1:sequence_length],
-                H_future=test_set_at_frequency.H[:, 1:sequence_length],
+                B_past=test_set_at_frequency.B[:, :20],
+                H_past=test_set_at_frequency.H[:, :20],
+                B_future=test_set_at_frequency.B[:, 20 : 20 + sequence_length],
+                H_future=test_set_at_frequency.H[:, 20 : 20 + sequence_length],
                 T=test_set_at_frequency.T[:],
                 metrics=metrics,
                 reduce_to_scalar=True,

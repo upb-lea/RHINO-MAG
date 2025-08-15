@@ -10,18 +10,31 @@ from mc2.models.model_interface import ModelInterface, NODEwInterface, RNNwInter
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU
 
+from mc2.data_management import Normalizer
 
-def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: int):
-    data_dict = load_data_into_pandas_df(material=material_name)
-    mat_set = MaterialSet.from_pandas_dict(data_dict)
 
-    mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
+def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: int, do_normalization: bool):
+    if do_normalization:
+        data_dict = load_data_into_pandas_df(material=material_name)
+        mat_set = MaterialSet.from_pandas_dict(data_dict)
 
-    train_set, val_set, test_set = mat_set.split_into_train_val_test(
-        train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=12
-    )
-    train_set_norm = train_set.normalize(transform_H=True, featurize=featurize)
-    normalizer = train_set_norm.normalizer
+        mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
+
+        train_set, val_set, test_set = mat_set.split_into_train_val_test(
+            train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=12
+        )
+        train_set_norm = train_set.normalize(transform_H=True, featurize=featurize)
+        normalizer = train_set_norm.normalizer
+    else:
+        normalizer = Normalizer(
+            B_max=1.0,
+            H_max=1.0,
+            T_max=1.0,
+            norm_fe_max=jnp.ones(5),  # TODO: adapt to number of features?
+            H_transform=lambda h: h,
+            H_inverse_transform=lambda h: h,
+        )
+
     return normalizer
 
 
@@ -30,12 +43,12 @@ def get_GRU_setup(
 ) -> tuple[ModelInterface, optax.GradientTransformation, dict]:
     params = dict(
         training_params=dict(
-            n_epochs=1,
+            n_epochs=100,
             n_steps=0,  # 10_000
             val_every=500,
-            tbptt_size=512,
+            tbptt_size=1024,
             past_size=10,
-            batch_size=64,
+            batch_size=256,
             subsampling_freq=1,
         ),
         model_params=dict(
@@ -45,6 +58,7 @@ def get_GRU_setup(
             key=model_key,
         ),
         lr=1e-3,
+        do_normalization=False,
     )
     optimizer = optax.adam(params["lr"])
     model = GRU(**params["model_params"])
@@ -60,7 +74,12 @@ def get_GRU_setup(
         return featurized_B[past_length:]
 
     # TODO: Store normalizer objects, somewhat weird as it is?
-    normalizer = get_normalizer(material_name, featurize, params["training_params"]["subsampling_freq"])
+    normalizer = get_normalizer(
+        material_name,
+        featurize,
+        params["training_params"]["subsampling_freq"],
+        params["do_normalization"],
+    )
     #####
 
     wrapped_model = RNNwInterface(model=model, normalizer=normalizer, featurize=featurize)
@@ -76,9 +95,9 @@ def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
             n_epochs=1,
             n_steps=0,  # 10_000
             val_every=500,
-            tbptt_size=512,
+            tbptt_size=1024,
             past_size=10,
-            batch_size=64,
+            batch_size=256,
             subsampling_freq=1,
         ),
         model_params=dict(
@@ -97,6 +116,7 @@ def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
             decay_rate=0.1,
             end_value=1e-4,
         ),
+        do_normalization=False,
     )
 
     lr_schedule = optax.schedules.exponential_decay(**params["lr_params"])
@@ -111,7 +131,12 @@ def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
 
         return featurized_B[past_length:]
 
-    normalizer = get_normalizer(material_name, featurize, params["training_params"]["subsampling_freq"])
+    normalizer = get_normalizer(
+        material_name,
+        featurize,
+        params["training_params"]["subsampling_freq"],
+        params["do_normalization"],
+    )
     wrapped_model = NODEwInterface(
         model=model,
         normalizer=normalizer,
