@@ -41,24 +41,42 @@ def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: in
 def get_GRU_setup(
     material_name: str, model_key: jax.random.PRNGKey
 ) -> tuple[ModelInterface, optax.GradientTransformation, dict]:
+    # params = dict(
+    #     training_params=dict(
+    #         n_epochs=100,
+    #         n_steps=0,  # 10_000
+    #         val_every=1,
+    #         tbptt_size=1024,
+    #         past_size=10,
+    #         batch_size=256,
+    #         subsampling_freq=1,
+    #     ),
+    #     model_params=dict(
+    #         hidden_size=8,
+    #         in_size=7,
+    #         out_size=1,
+    #         key=model_key,
+    #     ),
+    #     lr=1e-3,
+    #     do_normalization=False,
+    # )
     params = dict(
         training_params=dict(
-            n_epochs=100,
+            n_epochs=5,
             n_steps=0,  # 10_000
             val_every=1,
-            tbptt_size=1024,
-            past_size=10,
-            batch_size=256,
+            tbptt_size=512,
+            past_size=20,
+            batch_size=64,
             subsampling_freq=1,
         ),
         model_params=dict(
             hidden_size=8,
             in_size=7,
-            out_size=1,
             key=model_key,
         ),
         lr=1e-3,
-        do_normalization=False,
+        do_normalization=True,
     )
     optimizer = optax.adam(params["lr"])
     model = GRU(**params["model_params"])

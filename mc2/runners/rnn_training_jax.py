@@ -101,6 +101,7 @@ def main():
     with open(EXPERIMENT_LOGS_ROOT / "jax_experiments" / pathlib.Path(exp_id + ".json"), "w") as f:
         json.dump(data, f)
 
+    print(model)
     # store model
     save_model_params = deepcopy(params["model_params"])
     del save_model_params["key"]
