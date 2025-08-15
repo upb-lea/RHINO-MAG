@@ -30,11 +30,13 @@ def get_GRU_setup(
 ) -> tuple[ModelInterface, optax.GradientTransformation, dict]:
     params = dict(
         training_params=dict(
-            n_steps=100,  # 10_000
+            n_epochs=1,
+            n_steps=0,  # 10_000
             val_every=500,
             tbptt_size=512,
             past_size=10,
             batch_size=64,
+            subsampling_freq=1,
         ),
         model_params=dict(
             hidden_size=8,
@@ -58,10 +60,12 @@ def get_GRU_setup(
         return featurized_B[past_length:]
 
     # TODO: Store normalizer objects, somewhat weird as it is?
-    normalizer = get_normalizer(material_name, featurize)
+    normalizer = get_normalizer(material_name, featurize, params["training_params"]["subsampling_freq"])
     #####
 
     wrapped_model = RNNwInterface(model=model, normalizer=normalizer, featurize=featurize)
+
+    params["model_params"]["key"] = params["model_params"]["key"].tolist()
 
     return wrapped_model, optimizer, params
 
@@ -69,16 +73,17 @@ def get_GRU_setup(
 def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
     params = dict(
         training_params=dict(
-            n_steps=1_000_000,
-            val_every=1_000,
-            tbptt_size=64,
-            past_size=1,
-            batch_size=512,
-            subsampling_freq=5,
+            n_epochs=1,
+            n_steps=0,  # 10_000
+            val_every=500,
+            tbptt_size=512,
+            past_size=10,
+            batch_size=64,
+            subsampling_freq=1,
         ),
         model_params=dict(
             obs_dim=1,
-            state_dim=20,
+            state_dim=5,
             action_dim=5,
             width_size=64,
             depth=2,

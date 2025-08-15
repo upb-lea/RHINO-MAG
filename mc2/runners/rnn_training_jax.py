@@ -2,8 +2,13 @@ import argparse
 import pathlib
 from copy import deepcopy
 import logging as log
+import os
+
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
+
+# jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import numpy as np
 import json
@@ -56,7 +61,7 @@ def main():
         jax.config.update("jax_default_device", gpus[args.gpu_id])
 
     # setup
-    seed = 5
+    seed = 51
     key = jax.random.PRNGKey(seed)
     key, training_key, model_key = jax.random.split(key, 3)
 
@@ -89,8 +94,9 @@ def main():
 
     log.info("Evaluation done. Proceeding with storing experiment data..")
 
-    # TODO: store results
     data = dict(params=params, logs=logs, metrics=eval_metrics)
+
+    # TODO: automatically turn all jax arrays to lists...
 
     with open(EXPERIMENT_LOGS_ROOT / "jax_experiments" / pathlib.Path(exp_id + ".json"), "w") as f:
         json.dump(data, f)
