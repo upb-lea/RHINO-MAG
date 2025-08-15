@@ -96,13 +96,18 @@ def main():
 
     data = dict(params=params, logs=logs, metrics=eval_metrics)
 
-    # TODO: automatically turn all jax arrays to lists...
+    # create missing folders
+    experiment_path = EXPERIMENT_LOGS_ROOT / "jax_experiments"
+    experiment_path.mkdir(parents=True, exist_ok=True)
+    MODEL_DUMP_ROOT.mkdir(parents=True, exist_ok=True)
 
-    with open(EXPERIMENT_LOGS_ROOT / "jax_experiments" / pathlib.Path(exp_id + ".json"), "w") as f:
+    # TODO: automatically turn all jax arrays to lists...
+    # store experiment params + logs + eval_metrics
+    with open(experiment_path / pathlib.Path(exp_id + ".json"), "w") as f:
         json.dump(data, f)
 
-    print(model)
     # store model
+    print(model)
     save_model_params = deepcopy(params["model_params"])
     del save_model_params["key"]
     save_model(MODEL_DUMP_ROOT / pathlib.Path(exp_id + ".eqx"), save_model_params, model.model)

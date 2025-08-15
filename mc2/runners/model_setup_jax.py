@@ -110,12 +110,12 @@ def get_GRU_setup(
 def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
     params = dict(
         training_params=dict(
-            n_epochs=100,
+            n_epochs=5,
             n_steps=0,  # 10_000
             val_every=1,
-            tbptt_size=1024,
-            past_size=10,
-            batch_size=256,
+            tbptt_size=512,
+            past_size=20,
+            batch_size=64,
             subsampling_freq=1,
         ),
         model_params=dict(
@@ -134,7 +134,7 @@ def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
             decay_rate=0.1,
             end_value=1e-4,
         ),
-        do_normalization=False,
+        do_normalization=True,
     )
 
     lr_schedule = optax.schedules.exponential_decay(**params["lr_params"])
