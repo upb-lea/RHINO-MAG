@@ -45,7 +45,7 @@ def get_GRU_setup(
         training_params=dict(
             n_epochs=100,
             n_steps=0,  # 10_000
-            val_every=500,
+            val_every=1,
             tbptt_size=1024,
             past_size=10,
             batch_size=256,
@@ -92,9 +92,9 @@ def get_GRU_setup(
 def get_HNODE_setup(material_name: str, model_key: jax.random.PRNGKey):
     params = dict(
         training_params=dict(
-            n_epochs=1,
+            n_epochs=100,
             n_steps=0,  # 10_000
-            val_every=500,
+            val_every=1,
             tbptt_size=1024,
             past_size=10,
             batch_size=256,
