@@ -44,6 +44,9 @@ def setup_model(
     material_name: str,
     model_key: jax.random.PRNGKey,
     subsample_freq=1,
+    n_epochs=100,
+    tbptt_size=1024,
+    batch_size=256,
 ):
     match model_label:
         case "HNODE":
@@ -59,7 +62,7 @@ def setup_model(
             model = HiddenStateNeuralEulerODE(**model_params_d)
             mdl_interface_cls = NODEwInterface
         case "GRU":
-            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
+            model_params_d = dict(hidden_size=3, in_size=7, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
         case _:
@@ -67,12 +70,12 @@ def setup_model(
 
     params = dict(
         training_params=dict(
-            n_epochs=5,
+            n_epochs=n_epochs,
             n_steps=0,  # 10_000
             val_every=1,
-            tbptt_size=1024,
+            tbptt_size=tbptt_size,
             past_size=20,
-            batch_size=256,
+            batch_size=batch_size,
         ),
         lr_params=dict(
             init_value=1e-3,

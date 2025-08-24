@@ -15,7 +15,7 @@ import json
 import optax
 from uuid import uuid4
 
-from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT
+from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
 from mc2.runners.model_setup_jax import setup_model, SUPPORTED_MODELS
 from mc2.metrics import evaluate_model_on_test_set
@@ -45,7 +45,11 @@ def parse_args() -> argparse.Namespace:
         help="id of the gpu to use for the experiments. '-1' for not setting a GPU.",
     )
     # TODO: Enable epochs over sampling
-    # parser.add_argument("-e", "--epochs", default=100, required=False, type=int, help="Number of epochs to train")
+    parser.add_argument("-e", "--epochs", default=100, required=False, type=int, help="Number of epochs to train")
+    parser.add_argument("-b", "--batch_size", default=256, required=False, type=int, help="Batch size for training")
+    parser.add_argument(
+        "-t", "--tbptt_size", default=1024, required=False, type=int, help="Truncated backpropagation through time size"
+    )
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
     return args
@@ -59,7 +63,7 @@ def main():
         jax.config.update("jax_default_device", gpus[args.gpu_id])
 
     # setup
-    seed = 51
+    seed = 0
     key = jax.random.PRNGKey(seed)
     key, training_key, model_key = jax.random.split(key, 3)
 
@@ -68,7 +72,14 @@ def main():
     )
 
     # TODO: params as .yaml files?
-    wrapped_model, optimizer, params, data_tuple = setup_model(args.model_type, args.material, model_key)
+    wrapped_model, optimizer, params, data_tuple = setup_model(
+        args.model_type,
+        args.material,
+        model_key,
+        n_epochs=args.epochs,
+        tbptt_size=args.tbptt_size,
+        batch_size=args.batch_size,
+    )
     # run training
     logs, model = train_model(
         model=wrapped_model,
@@ -87,7 +98,8 @@ def main():
 
     log.info("Evaluation done. Proceeding with storing experiment data..")
 
-    json_dump_d = dict(params=params, logs=logs, metrics=eval_metrics)
+    json_dump_d = dict(params=params, metrics=eval_metrics)
+    book_keeping(logs)
 
     # create missing folders
     experiment_path = EXPERIMENT_LOGS_ROOT / "jax_experiments"
@@ -95,7 +107,7 @@ def main():
     MODEL_DUMP_ROOT.mkdir(parents=True, exist_ok=True)
 
     # TODO: automatically turn all jax arrays to lists...
-    # store experiment params + logs + eval_metrics
+    # store expeirment params + logs + eval_metrics
     with open(experiment_path / f"{exp_id}.json", "w") as f:
         json.dump(json_dump_d, f)
 
