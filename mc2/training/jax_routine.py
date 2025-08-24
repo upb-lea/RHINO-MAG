@@ -4,7 +4,7 @@ import equinox as eqx
 import optax
 import pandas as pd
 import logging as log
-
+from typing import Tuple
 from tqdm import trange
 
 # from tqdm.notebook import trange
@@ -178,7 +178,6 @@ def single_batch_step(freq_set, tbptt_size, past_size, batch_pairs, model, optim
 
 
 def train_step(model, opt_state, train_set_norm, optimizer, key, past_size, tbptt_size, batch_size):
-
     train_loss = 0.0
     for freq_set in train_set_norm.frequency_sets:
         loss, model, opt_state, key = process_freq_set(
@@ -238,7 +237,6 @@ def process_freq_set_val(freq_set, model, past_size):
 
 
 def val_test(set, model, past_size):
-
     val_loss = 0.0
     for freq_set in set.frequency_sets:
         loss = process_freq_set_val(freq_set, model, past_size)
@@ -251,6 +249,7 @@ def train_model(
     model,
     optimizer,
     material_name,
+    data_tuple: Tuple[MaterialSet, MaterialSet, MaterialSet],
     key: jax.random.PRNGKey,
     seed: int,
     n_steps: int,
@@ -259,16 +258,8 @@ def train_model(
     tbptt_size: int,
     past_size: int,
     batch_size: int,
-    subsampling_freq: int,
 ):
-
-    data_dict = load_data_into_pandas_df(material=material_name)
-    mat_set = MaterialSet.from_pandas_dict(data_dict)
-    mat_set.subsample(sampling_freq=subsampling_freq)
-
-    train_set, val_set, test_set = mat_set.split_into_train_val_test(
-        train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=12
-    )
+    train_set, val_set, test_set = data_tuple
 
     log.info(
         f"train size: {sum(freq_set.H.shape[0] for freq_set in train_set.frequency_sets)}, "
@@ -321,4 +312,4 @@ def train_model(
 
     logs["end_time"] = str(pd.Timestamp.now().round(freq="s"))
     logs["seed"] = seed
-    return logs, model, (train_set, val_set, test_set)
+    return logs, model

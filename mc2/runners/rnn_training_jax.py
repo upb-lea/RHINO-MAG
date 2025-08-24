@@ -17,11 +17,9 @@ from uuid import uuid4
 
 from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT
 from mc2.training.jax_routine import train_model
-from mc2.runners.model_setup_jax import get_GRU_setup, get_HNODE_setup
+from mc2.runners.model_setup_jax import setup_model, SUPPORTED_MODELS
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.models.model_interface import save_model
-
-supported_model_types = ["GRU", "HNODE"]  # TODO: ["EulerNODE", "HNODE", "GRU"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -37,7 +35,7 @@ def parse_args() -> argparse.Namespace:
         "--model_type",
         default=None,
         required=True,
-        help=f"Model type to train with. One of {supported_model_types}",
+        help=f"Model type to train with. One of {SUPPORTED_MODELS}",
     )
     parser.add_argument(
         "--gpu_id",
@@ -65,28 +63,23 @@ def main():
     key = jax.random.PRNGKey(seed)
     key, training_key, model_key = jax.random.split(key, 3)
 
-    assert (
-        args.material in AVAILABLE_MATERIALS
-    ), f"Material {args.material} is not available. Choose on of {AVAILABLE_MATERIALS}."
+    assert args.material in AVAILABLE_MATERIALS, (
+        f"Material {args.material} is not available. Choose on of {AVAILABLE_MATERIALS}."
+    )
 
     # TODO: params as .yaml files?
-    if args.model_type == "GRU":
-        wrapped_model, optimizer, params = get_GRU_setup(args.material, model_key)
-    elif args.model_type == "HNODE":
-        wrapped_model, optimizer, params = get_HNODE_setup(args.material, model_key)
-    else:
-        raise ValueError(f"Unknown model type: {args.model_type}. Choose on of {supported_model_types}")
-
+    wrapped_model, optimizer, params, data_tuple = setup_model(args.model_type, args.material, model_key)
     # run training
-    logs, model, (train_set, val_set, test_set) = train_model(
+    logs, model = train_model(
         model=wrapped_model,
         optimizer=optimizer,
         material_name=args.material,
+        data_tuple=data_tuple,
         key=training_key,
         seed=seed,
         **params["training_params"],
     )
-
+    train_set, val_set, test_set = data_tuple
     log.info("Training done. Proceeding with evaluation..")
 
     exp_id = str(uuid4())[:16]
@@ -94,7 +87,7 @@ def main():
 
     log.info("Evaluation done. Proceeding with storing experiment data..")
 
-    data = dict(params=params, logs=logs, metrics=eval_metrics)
+    json_dump_d = dict(params=params, logs=logs, metrics=eval_metrics)
 
     # create missing folders
     experiment_path = EXPERIMENT_LOGS_ROOT / "jax_experiments"
@@ -103,14 +96,14 @@ def main():
 
     # TODO: automatically turn all jax arrays to lists...
     # store experiment params + logs + eval_metrics
-    with open(experiment_path / pathlib.Path(exp_id + ".json"), "w") as f:
-        json.dump(data, f)
+    with open(experiment_path / f"{exp_id}.json", "w") as f:
+        json.dump(json_dump_d, f)
 
     # store model
     print(model)
     save_model_params = deepcopy(params["model_params"])
     del save_model_params["key"]
-    save_model(MODEL_DUMP_ROOT / pathlib.Path(exp_id + ".eqx"), save_model_params, model.model)
+    save_model(MODEL_DUMP_ROOT / f"{exp_id}.eqx", save_model_params, model.model)
 
     log.info(
         f"Experiment with id '{exp_id}' finished successfully. "
