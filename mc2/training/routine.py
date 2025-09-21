@@ -18,7 +18,7 @@ from mc2.features.features_torch import Featurizer
 from mc2.models.topologies_torch import DifferenceEqLayer, ExplEulerCell
 
 SUPPORTED_ARCHS = ["gru", "expleuler"]
-DO_TRANSFORM_H = True
+DO_TRANSFORM_H = False
 H_FACTOR = 1.2
 
 
@@ -32,6 +32,7 @@ def evaluate_recursively(
     n_states: int,
     set_lbl: str = "val",
     model_arch: str = "gru",
+    mat_lbl: str = "3C90",
 ):
     target_lbl = "H_traf" if DO_TRANSFORM_H else "H"
     mdl.eval()
@@ -118,13 +119,13 @@ def train_recursive_nn(
         del tensors_d[set_lbl]["T"]
     del train_d, val_d, test_d  # free memory
     # extract number of features from add_fe function
-    featurizer = Featurizer()
+    featurizer = Featurizer(mat_lbl=material, device=device)
     featurizer.extract_normalization_constants(tensors_d["train"]["model_in_AS_l"])
 
     log.info(
-        f"train size: {np.sum([len(a) for a in tensors_d['train']])}, "
-        f"val size: {np.sum([len(a) for a in tensors_d['val']])}, "
-        f"test size: {np.sum([len(a) for a in tensors_d['test']])}"
+        f"train size: {np.sum([a.numel() for a in tensors_d['train']['H']])}, "
+        f"val size: {np.sum([a.numel() for a in tensors_d['val']['H']])}, "
+        f"test size: {np.sum([a.numel() for a in tensors_d['test']['H']])}"
     )
 
     def run_seeded_training(seed=0):
@@ -241,6 +242,7 @@ def train_recursive_nn(
         if "models_arch" not in logs:
             # TODO implement configurized topology
             logs["models_arch"] = json.dumps({})
+        logs["model_state_dict"] = mdl.cpu().state_dict()
         with torch.no_grad():
             for i, (gt, pred) in enumerate(zip(tensors_d[set_lbl][target_lbl], test_pred_MS_l)):
                 logs[f"predictions_MS_{i}"] = pred.cpu().numpy()
@@ -272,3 +274,6 @@ def train_recursive_nn(
 
 # k-fold CV für 1. Nov submission muss implementiert werden
 # train-val-test split mit reduzierter Datenmenge für prototyping muss implementiert werden
+
+# TODO
+# add output layer that averages cell states to single output as alternative to always taking first cell

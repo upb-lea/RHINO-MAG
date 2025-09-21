@@ -1,7 +1,9 @@
 import numpy as np
 import torch
 import logging as log
+import pandas as pd
 from typing import List
+from mc2.data_management import CACHE_ROOT
 
 
 # single features
@@ -26,11 +28,24 @@ def pwm_of_b(b: torch.Tensor) -> torch.Tensor:
 
 
 class Featurizer:
-    def __init__(self, rolling_window_size: int = 101):
+    def __init__(self, rolling_window_size: int = 101, mat_lbl: str = "3C90", device: torch.device = None):
         self.n_inputs: int = None
         self.norm_consts_l: List = []
         self.norm_consts_BP: torch.Tensor = None
         self.rolling_window_size = rolling_window_size
+        self.mat_lbl = mat_lbl
+        self.device = device if device is not None else torch.device("cpu")
+        df_bh_bounds_QP = pd.read_parquet(CACHE_ROOT / f"{self.mat_lbl}_1_25C_BH_bounds.parquet")
+        self.bh_bounds_MI = {
+            "bins_mT": torch.tensor(df_bh_bounds_QP["bins_mT"].to_numpy(), dtype=torch.float32, device=device)[None, :],
+            "min_H_A_per_m": torch.tensor(
+                df_bh_bounds_QP["min_H_A_per_m"].to_numpy(), dtype=torch.float32, device=device
+            )[None, :],
+            "max_H_A_per_m": torch.tensor(
+                df_bh_bounds_QP["max_H_A_per_m"].to_numpy(), dtype=torch.float32, device=device
+            )[None, :],
+            # "avg_H_A_per_m": torch.tensor(df_bh_bounds_QP["avg_H_A_per_m"].to_numpy(), dtype=torch.float32)[None, :],
+        }
 
     @torch.no_grad()
     def extract_normalization_constants(self, data_MN_l: torch.Tensor) -> None:
@@ -94,9 +109,63 @@ class Featurizer:
             torch.conv1d(data_MN[:, None, :], kernel, padding="same").squeeze(),  # moving average
             torch.sign(db_dt_MN),  # PWM of b
         ]
+        #  generate support vectors
+        """for bound_lbl in ["min_H_A_per_m", "max_H_A_per_m"]:
+            fe_l += [
+                interp(
+                    data_MN,
+                    self.bh_bounds_MI["bins_mT"].to(device=data_MN.device),
+                    self.bh_bounds_MI[bound_lbl].to(device=data_MN.device),
+                    dim=1,
+                )
+            ]"""
 
         if temperature_MI is not None:
             fe_l.append(temperature_MI.repeat(1, data_MN.shape[1])[..., None])
         if self.n_inputs is None:
             self.n_inputs = len(fe_l)
         return fe_l
+
+
+# Source: https://github.com/pytorch/pytorch/issues/50334
+def interp(
+    x: torch.Tensor, xp: torch.Tensor, fp: torch.Tensor, dim: int = -1, extrapolate: str = "constant"
+) -> torch.Tensor:
+    """One-dimensional linear interpolation between monotonically increasing sample
+    points, with extrapolation beyond sample points.
+
+    Returns the one-dimensional piecewise linear interpolant to a function with
+    given discrete data points :math:`(xp, fp)`, evaluated at :math:`x`.
+
+    Args:
+        x: The :math:`x`-coordinates at which to evaluate the interpolated
+            values.
+        xp: The :math:`x`-coordinates of the data points, must be increasing.
+        fp: The :math:`y`-coordinates of the data points, same shape as `xp`.
+        dim: Dimension across which to interpolate.
+        extrapolate: How to handle values outside the range of `xp`. Options are:
+            - 'linear': Extrapolate linearly beyond range of xp values.
+            - 'constant': Use the boundary value of `fp` for `x` values outside `xp`.
+
+    Returns:
+        The interpolated values, same size as `x`.
+    """
+    # Move the interpolation dimension to the last axis
+    x = x.movedim(dim, -1)
+    xp = xp.movedim(dim, -1)
+    fp = fp.movedim(dim, -1)
+
+    m = torch.diff(fp) / torch.diff(xp)  # slope
+    b = fp[..., :-1] - m * xp[..., :-1]  # offset
+    indices = torch.searchsorted(xp.ravel(), x, right=False)
+
+    if extrapolate == "constant":
+        # Pad m and b to get constant values outside of xp range
+        m = torch.cat([torch.zeros_like(m)[..., :1], m, torch.zeros_like(m)[..., :1]], dim=-1)
+        b = torch.cat([fp[..., :1], b, fp[..., -1:]], dim=-1)
+    else:  # extrapolate == 'linear'
+        indices = torch.clamp(indices - 1, 0, m.shape[-1] - 1)
+
+    values = m.ravel()[indices] * x + b.ravel()[indices]
+
+    return values.movedim(-1, dim)

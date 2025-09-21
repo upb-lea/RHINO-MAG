@@ -18,7 +18,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("-e", "--epochs", default=100, required=False, type=int, help="Number of epochs to train")
     parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
-    parser.add_argument("-s", "--tbptt_size", default=1024, required=False, type=int, help="TBPTT size")
+    parser.add_argument("-p", "--tbptt_size", default=1024, required=False, type=int, help="TBPTT size")
+    parser.add_argument("-s", "--seeds", default=3, required=False, type=int, help="number of seeds")
     parser.add_argument(
         "-j",
         "--n_jobs",
@@ -47,6 +48,7 @@ def main():
         n_jobs=args.n_jobs,
         model_arch=args.arch,
         tbptt_size=args.tbptt_size,
+        n_seeds=args.seeds,
     )
 
 
