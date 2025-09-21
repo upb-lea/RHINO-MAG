@@ -3,7 +3,7 @@ import torch
 import logging as log
 import pandas as pd
 from typing import List
-from mc2.data_management import CACHE_ROOT
+from mc2.data_management import CACHE_ROOT, NORMALIZATION_ROOT
 
 
 # single features
@@ -62,6 +62,9 @@ class Featurizer:
                 data_min = feat_data_MN.min()
                 self.norm_consts_BP[0, i] = min(self.norm_consts_BP[0, i], data_min)
                 self.norm_consts_BP[1, i] = max(self.norm_consts_BP[1, i], data_max)
+        norm_const_save_path = NORMALIZATION_ROOT / f"{self.mat_lbl}_normalization_constants.parquet"
+        pd.DataFrame(self.norm_consts_BP.cpu().numpy()).to_parquet(norm_const_save_path, index=False)
+        log.info(f"Normalization constants saved to {norm_const_save_path}")
 
     @torch.no_grad()
     def normalize(self, data_MN_l: List[torch.Tensor]) -> List[torch.Tensor]:

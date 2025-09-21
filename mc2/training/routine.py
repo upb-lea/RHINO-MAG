@@ -32,7 +32,6 @@ def evaluate_recursively(
     n_states: int,
     set_lbl: str = "val",
     model_arch: str = "gru",
-    mat_lbl: str = "3C90",
 ):
     target_lbl = "H_traf" if DO_TRANSFORM_H else "H"
     mdl.eval()
