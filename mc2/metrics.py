@@ -43,7 +43,6 @@ def default_metrics():
 
 
 def evaluate_model_estimation(B: jax.Array, H: jax.Array, H_est: jax.Array, metrics: dict) -> dict:
-
     performance_metric_values = {"bh": {}, "h": {}}
 
     for name, function in metrics["bh"].items():

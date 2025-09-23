@@ -14,7 +14,6 @@ from mc2.data_management import Normalizer
 
 
 class ModelInterface(eqx.Module):
-
     @abstractmethod
     def __call__(
         self,
@@ -41,6 +40,15 @@ class ModelInterface(eqx.Module):
         """
         pass
 
+    def normalized_call(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+    ) -> jax.Array:
+        pass
+
 
 class NODEwInterface(ModelInterface):
     model: eqx.Module
@@ -55,7 +63,6 @@ class NODEwInterface(ModelInterface):
         B_future: jax.Array,
         temperature: jax.Array,
     ) -> jax.Array:
-
         past_length = B_past.shape[0]
 
         norm_B, norm_H_past, norm_temperature = self.normalizer.normalize(
@@ -79,7 +86,6 @@ class NODEwInterface(ModelInterface):
         B_future_norm: jax.Array,
         T_norm: jax.Array,
     ) -> jax.Array:
-
         def norm_apply_model(
             B_past_norm: jax.Array, H_past_norm: jax.Array, B_future_norm: jax.Array, T_norm: jax.Array
         ) -> jax.Array:
@@ -103,7 +109,6 @@ class NODEwInterface(ModelInterface):
         B_future: npt.NDArray[np.float64],
         T: npt.NDArray[np.float64],
     ) -> npt.NDArray[np.float64]:
-
         assert B_past.ndim == 2, (
             "The expected dimensions for B_past are (n_batches, past_sequence_length). "
             + f"The given array has dimension {B_past.ndim} instead."

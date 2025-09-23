@@ -4,7 +4,7 @@ import equinox as eqx
 import optax
 import pandas as pd
 import logging as log
-
+from typing import Tuple
 from tqdm import trange
 from mc2.data_management import (
     load_data_into_pandas_df,
@@ -13,6 +13,7 @@ from mc2.data_management import (
 )
 from mc2.training.data_sampling import draw_data_uniformly, load_batches, load_batches_material_set
 from mc2.training.optimization import make_step
+from mc2.models.model_interface import ModelInterface
 from itertools import zip_longest
 
 DO_TRANSFORM_H = True
@@ -146,7 +147,6 @@ def single_batch_step(material_set, tbptt_size, past_size, batch_pairs, model, o
 
 
 def train_step(model, opt_state, train_set_norm, optimizer, key, past_size, tbptt_size, batch_size):
-
     train_loss = 0.0
     for freq_set in train_set_norm.frequency_sets:
         loss, model, opt_state, key = process_freq_set(
@@ -161,8 +161,7 @@ def train_epoch(model, opt_state, train_set_norm, optimizer, key, past_size, tbp
     all_pairs_list = []
     for freq_idx in range(len(train_set_norm.frequency_sets)):
         freq_set = train_set_norm.frequency_sets[freq_idx]
-        seq_len = freq_set.H.shape[1]
-        n_sequences = freq_set.H.shape[0]
+        n_sequences, seq_len = freq_set.H.shape
         seq_indices = jnp.arange(n_sequences)
 
         key, subkey = jax.random.split(key)
@@ -205,7 +204,7 @@ def train_epoch(model, opt_state, train_set_norm, optimizer, key, past_size, tbp
 
 
 @eqx.filter_jit
-def process_freq_set_val(freq_set, model, past_size):
+def process_freq_set_val(freq_set, model: ModelInterface, past_size):
     B = freq_set.B
     H = freq_set.H
     T = freq_set.T
@@ -215,24 +214,30 @@ def process_freq_set_val(freq_set, model, past_size):
     batch_B_future = B[:, past_size:]
 
     pred_H = model.normalized_call(batch_B_past, batch_H_past, batch_B_future, T)  # , f
+    pred_H = model.normalizer.denormalize_H(pred_H)
+    batch_H_future = model.normalizer.denormalize_H(batch_H_future)
     loss = jnp.mean((pred_H - batch_H_future) ** 2)
-    return loss
+    return loss, pred_H, batch_H_future
 
 
 def val_test(set, model, past_size):
-
     val_loss = 0.0
+    val_pred_l = []
+    val_gt_l = []
     for freq_set in set.frequency_sets:
-        loss = process_freq_set_val(freq_set, model, past_size)
+        loss, pred, gt = process_freq_set_val(freq_set, model, past_size)
         val_loss += loss / len(set.frequencies)
+        val_pred_l.append(pred)
+        val_gt_l.append(gt)
 
-    return val_loss
+    return val_loss, val_pred_l, val_gt_l
 
 
 def train_model(
     model,
     optimizer,
     material_name,
+    data_tuple: Tuple[MaterialSet, MaterialSet, MaterialSet],
     key: jax.random.PRNGKey,
     seed: int,
     n_steps: int,
@@ -241,16 +246,8 @@ def train_model(
     tbptt_size: int,
     past_size: int,
     batch_size: int,
-    subsampling_freq: int,
 ):
-
-    data_dict = load_data_into_pandas_df(material=material_name)
-    mat_set = MaterialSet.from_pandas_dict(data_dict)
-    mat_set.subsample(sampling_freq=subsampling_freq)
-
-    train_set, val_set, test_set = mat_set.split_into_train_val_test(
-        train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=12
-    )
+    train_set, val_set, test_set = data_tuple
 
     log.info(
         f"train size: {sum(freq_set.H.shape[0] for freq_set in train_set.frequency_sets)}, "
@@ -269,11 +266,9 @@ def train_model(
     }
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
-    test_loss = val_test(test_set_norm, model, past_size)
+    test_loss, *_ = val_test(test_set_norm, model, past_size)
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
-    if n_steps > 0 and n_epochs > 0:
-        raise ValueError("Please set either `n_steps` or `n_epochs` grater than 0, not both.")
-    elif n_steps == 0 and n_epochs == 0:
+    if (n_steps > 0 and n_epochs > 0) or (n_steps == 0 and n_epochs == 0):
         raise ValueError("Please set either `n_steps` or `n_epochs` to a value greater than 0.")
     if n_steps > 0:
         pbar = trange(n_steps, desc=f"Seed {seed}", position=seed, unit="step")
@@ -290,7 +285,7 @@ def train_model(
         )
         pbar_str = f"Loss {train_loss:.2e}"
         if step % val_every == 0:
-            val_loss = val_test(val_set_norm, model, past_size)
+            val_loss, *_ = val_test(val_set_norm, model, past_size)
             logs["loss_trends_val"].append(val_loss.item())
         pbar_str += f"| val loss {val_loss:.2e}"
         logs["loss_trends_train"].append(train_loss.item())
@@ -298,9 +293,12 @@ def train_model(
 
     pbar.close()
 
-    test_loss = val_test(test_set_norm, model, past_size)
+    test_loss, test_pred_l, test_gt_l = val_test(test_set_norm, model, past_size)
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
 
     logs["end_time"] = str(pd.Timestamp.now().round(freq="s"))
     logs["seed"] = seed
-    return logs, model, (train_set, val_set, test_set)
+    for i, (test_pred, test_gt) in enumerate(zip(test_pred_l, test_gt_l)):
+        logs[f"predictions_MS_{i}"] = test_pred
+        logs[f"ground_truth_MS_{i}"] = test_gt
+    return logs, model

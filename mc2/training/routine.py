@@ -15,14 +15,24 @@ from mc2.data_management import (
     setup_package_logging,
 )
 from mc2.features.features_torch import Featurizer
+from mc2.models.topologies_torch import DifferenceEqLayer, ExplEulerCell
 
-SUPPORTED_ARCHS = ["gru"]
-DO_TRANSFORM_H = True
+SUPPORTED_ARCHS = ["gru", "expleuler"]
+DO_TRANSFORM_H = False
 H_FACTOR = 1.2
 
 
 @torch.no_grad()
-def evaluate_recursively(mdl, tensors_d, loss, featurizer, max_H, n_states, set_lbl="val"):
+def evaluate_recursively(
+    mdl: torch.nn.Module,
+    tensors_d: Dict[str, Dict[str, torch.Tensor]],
+    loss: torch.nn.Module,
+    featurizer: Featurizer,
+    max_H: float,
+    n_states: int,
+    set_lbl: str = "val",
+    model_arch: str = "gru",
+):
     target_lbl = "H_traf" if DO_TRANSFORM_H else "H"
     mdl.eval()
     val_loss = 0.0
@@ -33,12 +43,15 @@ def evaluate_recursively(mdl, tensors_d, loss, featurizer, max_H, n_states, set_
             featurizer.normalize(featurizer.add_fe(model_in_MS, with_original=True, temperature_MI=temp_MI))
         )
         M, S, P = model_in_MSP.shape
-        hidden_IMI = h_MS[:, 0].reshape(1, M, 1)
-        """hidden_IMR = torch.cat(
-            [hidden_IMI, torch.zeros((1, M, n_states - 1), dtype=torch.float32, device=device)], dim=2
-        )"""
-        hidden_IMR = torch.tile(hidden_IMI, (1, 1, n_states))  # init hidden state with first H
-        val_pred_MSR, hidden_IMI = mdl(model_in_MSP, hidden_IMR)
+        hidden = h_MS[:, 0].reshape(1, M, 1)
+        match model_arch:
+            case "gru":
+                # init hidden state with first H, shape (I, M, I)
+                hidden = torch.tile(hidden, (1, 1, n_states))
+            case "expleuler":
+                hidden = hidden.squeeze(0)  # init hidden state with first H, shape: (M, I)
+
+        val_pred_MSR, hidden = mdl(model_in_MSP, hidden)
         if DO_TRANSFORM_H:
             val_pred_untransformed_MS = torch.atanh(torch.clip(val_pred_MSR[:, :, 0], -0.999, 0.999)) / H_FACTOR * max_H
         else:
@@ -55,7 +68,7 @@ def train_recursive_nn(
     n_epochs: int = 100,
     n_seeds: int = 5,
     n_jobs: int = 5,
-    tbptt_size: int = 64,
+    tbptt_size: int = 1024,
     batch_size: int = 256,
 ):
     assert model_arch in SUPPORTED_ARCHS, f"model arch {model_arch} not in {SUPPORTED_ARCHS}"
@@ -105,13 +118,13 @@ def train_recursive_nn(
         del tensors_d[set_lbl]["T"]
     del train_d, val_d, test_d  # free memory
     # extract number of features from add_fe function
-    featurizer = Featurizer()
+    featurizer = Featurizer(mat_lbl=material, device=device)
     featurizer.extract_normalization_constants(tensors_d["train"]["model_in_AS_l"])
 
     log.info(
-        f"train size: {np.sum([len(a) for a in tensors_d['train']])}, "
-        f"val size: {np.sum([len(a) for a in tensors_d['val']])}, "
-        f"test size: {np.sum([len(a) for a in tensors_d['test']])}"
+        f"train size: {np.sum([a.numel() for a in tensors_d['train']['H']])}, "
+        f"val size: {np.sum([a.numel() for a in tensors_d['val']['H']])}, "
+        f"test size: {np.sum([a.numel() for a in tensors_d['test']['H']])}"
     )
 
     def run_seeded_training(seed=0):
@@ -128,17 +141,20 @@ def train_recursive_nn(
         match model_arch:
             case "gru":
                 # TODO configurize
-                n_units = 3
+                n_units = 8
                 mdl = torch.nn.GRU(featurizer.n_inputs, n_units, batch_first=True)
+                mdl_info_input_size = ((1, 1, featurizer.n_inputs), (1, 1, n_units))
+                R = n_units
+                # torch.jit.script does not work with GRU
 
+            case "expleuler":
+                mdl = DifferenceEqLayer(ExplEulerCell, n_inputs=featurizer.n_inputs)
+                mdl = torch.jit.script(mdl)  # new syntax as of pytorch 1.2
+                mdl_info_input_size = ((1, 1, featurizer.n_inputs), (1, 1))
+                R = 1  # won't be used
         if seed == 0:
-            mdl_info = summary(
-                mdl,
-                input_size=((1, 1, featurizer.n_inputs), (1, 1, n_units)),
-            )
-            # log.info(f"\n{mdl_info}")
-        R = n_units
-        # mdl = torch.jit.script(mdl)  # does not work for GRU
+            mdl_info = summary(mdl, input_size=mdl_info_input_size)
+
         mdl = mdl.to(device)
         opt = torch.optim.Adam(mdl.parameters(), lr=1e-3)
         loss = torch.nn.MSELoss()
@@ -172,7 +188,6 @@ def train_recursive_nn(
                     train_h_BS = train_shuff_h_AS[batch_start:batch_end]
 
                     # featurize
-                    # TODO add normalization of features
                     train_BSP = torch.dstack(
                         featurizer.normalize(featurizer.add_fe(train_BS, with_original=True, temperature_MI=temp_BI))
                     )
@@ -182,16 +197,22 @@ def train_recursive_nn(
                     """hidden_IBR = torch.cat(
                         [hidden_IBI, torch.zeros((1, B, R - 1), dtype=torch.float32, device=device)], dim=2
                     )"""
-                    hidden_IBR = torch.tile(hidden_IBI, (1, 1, R))  # init hidden state with first H
+                    match model_arch:
+                        case "gru":
+                            hidden = torch.tile(
+                                hidden_IBI, (1, 1, R)
+                            )  # init hidden state with first H, shape (I, B, I)
+                        case "expleuler":
+                            hidden = hidden_IBI.squeeze(0)  # init hidden state with first H, shape: (B, I)
 
                     for seq_i in range(n_seqs):
                         seq_start, seq_end = seq_i * tbptt_size, min((seq_i + 1) * tbptt_size, S)
                         mdl.zero_grad()
-                        hidden_IBR = hidden_IBR.detach()
+                        hidden = hidden.detach()
 
                         train_BQP = train_BSP[:, seq_start:seq_end, :]
                         train_h_BQ = train_h_BS[:, seq_start:seq_end]
-                        output_BQR, hidden_IBR = mdl(train_BQP, hidden_IBR)
+                        output_BQR, hidden = mdl(train_BQP, hidden)
                         train_loss = loss(output_BQR[:, :, 0], train_h_BQ)
                         train_loss.backward()
                         opt.step()
@@ -203,7 +224,9 @@ def train_recursive_nn(
             logs["loss_trends_train"].append(train_loss_avg_per_epoch)
             pbar_str = f"Loss {train_loss_avg_per_epoch:.2e}"
 
-            val_loss, _ = evaluate_recursively(mdl, tensors_d, loss, featurizer, max_d["H"], R, set_lbl="val")
+            val_loss, _ = evaluate_recursively(
+                mdl, tensors_d, loss, featurizer, max_d["H"], R, set_lbl="val", model_arch=model_arch
+            )
             logs["loss_trends_val"].append(val_loss)
             pbar_str += f"| val loss {val_loss:.2e}"
             pbar.set_postfix_str(pbar_str)
@@ -211,13 +234,14 @@ def train_recursive_nn(
                 break
 
         test_loss, test_pred_MS_l = evaluate_recursively(
-            mdl, tensors_d, loss, featurizer, max_d["H"], R, set_lbl="test"
+            mdl, tensors_d, loss, featurizer, max_d["H"], R, set_lbl="test", model_arch=model_arch
         )
         log.info(f"Test loss seed {seed}: {test_loss:.3f} A/m")
         # book keeping
         if "models_arch" not in logs:
             # TODO implement configurized topology
             logs["models_arch"] = json.dumps({})
+        logs["model_state_dict"] = mdl.cpu().state_dict()
         with torch.no_grad():
             for i, (gt, pred) in enumerate(zip(tensors_d[set_lbl][target_lbl], test_pred_MS_l)):
                 logs[f"predictions_MS_{i}"] = pred.cpu().numpy()
@@ -249,3 +273,6 @@ def train_recursive_nn(
 
 # k-fold CV für 1. Nov submission muss implementiert werden
 # train-val-test split mit reduzierter Datenmenge für prototyping muss implementiert werden
+
+# TODO
+# add output layer that averages cell states to single output as alternative to always taking first cell

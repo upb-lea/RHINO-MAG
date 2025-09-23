@@ -9,8 +9,10 @@ import sys
 from uuid import uuid4
 from sklearn.model_selection import train_test_split
 
+import h5py
 import jax
 import jax.numpy as jnp
+import torch
 import numpy as np
 import equinox as eqx
 
@@ -18,12 +20,21 @@ from mc2.utils.data_inspection import load_and_process_single_from_full_file_ove
 
 
 DATA_ROOT = Path(__file__).parent.parent / "data"
+PRETEST_DATA_ROOT = DATA_ROOT / "pretest_raw"
 MODEL_DUMP_ROOT = DATA_ROOT / "models"
 CACHE_ROOT = DATA_ROOT / "cache"
+PRETEST_CACHE_ROOT = DATA_ROOT / "pretest_cache"
 EXPERIMENT_LOGS_ROOT = DATA_ROOT / "experiment_logs"
 NORMALIZATION_ROOT = DATA_ROOT / "normalization_values"
 
-for root_dir in (CACHE_ROOT, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT):
+for root_dir in (
+    CACHE_ROOT,
+    MODEL_DUMP_ROOT,
+    EXPERIMENT_LOGS_ROOT,
+    PRETEST_DATA_ROOT,
+    PRETEST_CACHE_ROOT,
+    NORMALIZATION_ROOT,
+):
     root_dir.mkdir(parents=True, exist_ok=True)
 
 
@@ -222,7 +233,6 @@ class FrequencySet(eqx.Module):
         return train_set, val_set, test_set
 
     def normalize(self, normalizer: Normalizer = None, transform_H: bool = False, featurize: Callable = None):
-
         if normalizer is None:
             H_max = jnp.max(jnp.abs(self.H))
             B_max = jnp.max(jnp.abs(self.B))
@@ -482,7 +492,6 @@ class MaterialSet(eqx.Module):
         featurize: Callable = None,
         feature_names: list[str] = None,
     ) -> "NormalizedMaterialSet":
-
         if normalizer is None:
             if featurize is None:
                 if feature_names is None:
@@ -569,7 +578,6 @@ class MaterialSet(eqx.Module):
         )
 
     def subsample(self, sampling_freq: int) -> "MaterialSet":
-
         subsampled_freq_set_list = [
             FrequencySet(
                 freq_set.material_name,
@@ -694,7 +702,7 @@ def load_data_into_pandas_df(
             data_ret_d = {}
             csv_file_paths_l = list(mat_folder.glob(f"{material}*.csv"))
             for csv_file in tqdm.tqdm(sorted(csv_file_paths_l), desc=f"Loading data for {material}"):
-                expected_cache_file = CACHE_ROOT / csv_file.with_suffix(".parquet")
+                expected_cache_file = CACHE_ROOT / csv_file.with_suffix(".parquet").name
                 if expected_cache_file.exists():
                     df = pd.read_parquet(expected_cache_file)
                 else:
@@ -741,6 +749,11 @@ def book_keeping(logs_d: Dict):
         np.column_stack([logs_d["loss_trends_train"], logs_d["loss_trends_val"]]), columns=["train", "val"]
     ).to_parquet(logs_root / f"seed_{logs_d['seed']}_loss_trends.parquet", index=False)
 
+    # store model state_dict (pytorch)
+    if "model_state_dict" in logs_d:
+        torch_save_path = logs_root / f"{mat}_{exp_id}.pt"
+        torch.save(logs_d["model_state_dict"], torch_save_path)
+
 
 def get_train_val_test_pandas_dicts(
     data_dict: dict[str, pd.DataFrame] = None,
@@ -772,3 +785,27 @@ def get_train_val_test_pandas_dicts(
     data_test = test_set.to_pandas_dict()
 
     return data_train, data_val, data_test
+
+
+def load_hdf5_pretest_data(
+    mat: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Returns B, T, H_init, H_true, msks_scenarios_N_tup where
+    H_init has NaNs for unknown samples, and msks_scenarios_N_tup is a tuple of boolean masks for each
+    scenario of unknown samples count.
+    B, T, H_init, H_true are all of shape (num_time_series, num_time_steps)."""
+    pretest_root = PRETEST_DATA_ROOT / f"{mat}"
+    with h5py.File(pretest_root / f"{mat}_Testing_Padded.h5", "r") as f:
+        B = f["B_seq"][:]
+        H_init = f["H_seq"][:]
+        T = f["T"][:]
+    with h5py.File(pretest_root / f"{mat}_Testing_True.h5", "r") as f:
+        H_true = f["H_seq"][:]
+    unknowns_N = np.isnan(H_init).sum(axis=1)
+    unknown_samples_variants, counts = np.unique(unknowns_N, return_counts=True)
+    assert len(unknown_samples_variants) == 3, "Expecting 3 variants of unknown samples"
+    msk_scenario_0 = unknowns_N == unknown_samples_variants[0]
+    msk_scenario_1 = unknowns_N == unknown_samples_variants[1]
+    msk_scenario_2 = unknowns_N == unknown_samples_variants[2]
+    print(f"Scenario counts: {counts}")
+    return B, T, H_init, H_true, (msk_scenario_0, msk_scenario_1, msk_scenario_2)
