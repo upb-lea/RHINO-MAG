@@ -62,7 +62,7 @@ def setup_model(
             model = HiddenStateNeuralEulerODE(**model_params_d)
             mdl_interface_cls = NODEwInterface
         case "GRU":
-            model_params_d = dict(hidden_size=3, in_size=7, key=model_key)
+            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
         case _:
