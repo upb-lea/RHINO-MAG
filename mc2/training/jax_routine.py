@@ -6,14 +6,12 @@ import pandas as pd
 import logging as log
 from typing import Tuple
 from tqdm import trange
-
-# from tqdm.notebook import trange
 from mc2.data_management import (
     load_data_into_pandas_df,
     MaterialSet,
     FrequencySet,
 )
-from mc2.training.data_sampling import draw_data_uniformly, load_batches
+from mc2.training.data_sampling import draw_data_uniformly, load_batches, load_batches_material_set
 from mc2.training.optimization import make_step
 from mc2.models.model_interface import ModelInterface
 from itertools import zip_longest
@@ -32,7 +30,6 @@ def compute_MSE_loss(
     H_future: jax.Array,
     T: jax.Array,
 ):
-    # f: jax.Array,
     pred_H = (model.normalized_call)(B_past, H_past, B_future, T)  # , f
     return jnp.mean((pred_H - H_future) ** 2)
 
@@ -48,7 +45,6 @@ def make_step(
     optim: optax.GradientTransformation,
     opt_state: optax.OptState,
 ):
-    # f: jax.Array,
     loss, grads = compute_MSE_loss(model, B_past, H_past, B_future, H_future, T)  # , f
     updates, opt_state = optim.update(grads, opt_state)
     model = eqx.apply_updates(model, updates)
@@ -64,10 +60,6 @@ def process_freq_set(model, opt_state, key, freq_set, optimizer, past_size, tbpt
         training_batch_size=batch_size,
         loader_key=subkey,
     )
-    # batch_H = batch_H[:, :, 0]
-    # batch_B = batch_B[:, :, 0]
-    # batch_T = batch_T[:, 0, 0]
-    # batch_f = freq_set.frequency
 
     batch_H_past = batch_H[:, :past_size]
     batch_H_future = batch_H[:, past_size:]
@@ -82,24 +74,30 @@ def process_freq_set(model, opt_state, key, freq_set, optimizer, past_size, tbpt
         batch_T,
         optimizer,
         opt_state,
-    )  # batch_f,
+    )
 
     return loss, model, opt_state, key
 
 
 @eqx.filter_jit
-def sample_random_indices(seq_idx, seq_len, tbptt_size, past_size, key):
-    max_start_idx = seq_len - (tbptt_size + past_size)
+def sample_random_indices(freq_idx, seq_idx, seq_len, tbptt_size, past_size, key):
+    max_idx = seq_len - (tbptt_size + past_size)
     step = tbptt_size + past_size
-    n_chunks = ((seq_len + step - 1) // step) - 1
     key, subkey = jax.random.split(key)
-    first_start_idx = jax.random.randint(minval=0, maxval=(tbptt_size + past_size - 1), shape=(), key=subkey)
-    indices = first_start_idx + step * jnp.arange(n_chunks)
-    indices = indices.reshape(-1)  # flatten to 1D
-    indices = jnp.concatenate([indices, jnp.array([max_start_idx])], axis=0)
-    # include last values if not yet covered
+    first_start_idx = jax.random.randint(minval=0, maxval=(step), shape=(), key=subkey)
+    n_chunks = (seq_len - step) // step
+    indices = first_start_idx + (step * ((jnp.arange(n_chunks))))  #
+    indices = indices.reshape(-1)
+    last_random_idx = jax.lax.cond(
+        seq_len % step <= first_start_idx,
+        lambda _: jnp.array([-1], dtype=jnp.int32),
+        lambda _: jnp.array([first_start_idx + step * n_chunks], dtype=jnp.int32),
+        operand=None,
+    )
+    indices = jnp.concatenate([jnp.array([0]), indices, last_random_idx, jnp.array([max_idx])], axis=0)
     seq_idx_array = jnp.full(indices.shape, seq_idx)
-    pairs = jnp.stack([seq_idx_array, indices], axis=1)
+    freq_idx_array = jnp.full(indices.shape, freq_idx)
+    pairs = jnp.stack([freq_idx_array, seq_idx_array, indices], axis=1)
     return pairs
 
 
@@ -108,7 +106,7 @@ def create_batch_pairs(pairs, batch_size):
     n = pairs.shape[0]
     n_batches = n // batch_size
     truncated_pairs = pairs[: n_batches * batch_size]
-    batched_pairs = truncated_pairs.reshape(n_batches, batch_size, 2)
+    batched_pairs = truncated_pairs.reshape(n_batches, batch_size, 3)
     return batched_pairs
 
 
@@ -127,55 +125,25 @@ def batched_step(model, batch_H, batch_B, batch_T, past_size, optimizer, opt_sta
         batch_T,
         optimizer,
         opt_state,
-    )  # batch_f,
+    )
 
     return loss, model, opt_state
 
 
 @eqx.filter_jit
-def single_batch_step(freq_set, tbptt_size, past_size, batch_pairs, model, optimizer, opt_state):
-    n_sequence_indices = batch_pairs[:, 0]
-    starting_points = batch_pairs[:, 1]
-    batch_H, batch_B, batch_T = load_batches(
-        freq_set, n_sequence_indices, starting_points, training_sequence_length=tbptt_size + past_size
+def single_batch_step(material_set, tbptt_size, past_size, batch_pairs, model, optimizer, opt_state):
+    n_frequency_indices = batch_pairs[:, 0]
+    n_sequence_indices = batch_pairs[:, 1]
+    starting_points = batch_pairs[:, 2]
+    batch_H, batch_B, batch_T = load_batches_material_set(
+        material_set,
+        n_frequency_indices,
+        n_sequence_indices,
+        starting_points,
+        training_sequence_length=tbptt_size + past_size,
     )
     loss, new_model, new_opt_state = batched_step(model, batch_H, batch_B, batch_T, past_size, optimizer, opt_state)
     return new_model, new_opt_state, loss
-
-
-# def process_freq_set_epoch(model, opt_state, key, freq_set, optimizer, past_size, tbptt_size, batch_size):
-#     seq_len = freq_set.H.shape[1]
-#     n_sequences = freq_set.H.shape[0]
-#     seq_indices = jnp.arange(n_sequences)
-
-#     key, subkey = jax.random.split(key)
-#     keys = jax.random.split(subkey, n_sequences)
-#     idx_pairs = jax.vmap(sample_random_indices, in_axes=(0, None, None, None, 0))(
-#         seq_indices, seq_len, tbptt_size, past_size, keys
-#     )
-#     all_pairs = jnp.concatenate(idx_pairs, axis=0)
-#     key, subkey = jax.random.split(key)
-#     shuffled_pairs = jax.random.permutation(subkey, all_pairs)
-#     batch_pairs = create_batch_pairs(shuffled_pairs, batch_size)
-#     # def scan_fn(carry, batch):
-#     #     model, opt_state = carry
-#     #     new_model, new_opt_state, loss = single_batch_step(batch, model, opt_state)
-#     #     return (new_model, new_opt_state), loss
-
-#     # (model, opt_state), losses = jax.lax.scan(scan_fn, (model, opt_state), batch_pairs)
-#     # mean_loss = jnp.mean(losses)
-#     carry = (model, opt_state)
-#     all_losses = []
-#     for batch in tqdm(batch_pairs):
-#         model, opt_state = carry
-#         new_model, new_opt_state, loss = single_batch_step(
-#             freq_set, tbptt_size, past_size, batch, model, optimizer, opt_state
-#         )
-#         carry = (new_model, new_opt_state)
-#         all_losses.append(loss)
-#     model, opt_state = carry
-#     mean_loss = jnp.mean(jnp.array(all_losses))
-#     return mean_loss, model, opt_state, key
 
 
 def train_step(model, opt_state, train_set_norm, optimizer, key, past_size, tbptt_size, batch_size):
@@ -190,34 +158,49 @@ def train_step(model, opt_state, train_set_norm, optimizer, key, past_size, tbpt
 
 
 def train_epoch(model, opt_state, train_set_norm, optimizer, key, past_size, tbptt_size, batch_size):
-    all_batch_pairs = []
-    for freq_set in train_set_norm.frequency_sets:
+    all_pairs_list = []
+    for freq_idx in range(len(train_set_norm.frequency_sets)):
+        freq_set = train_set_norm.frequency_sets[freq_idx]
         n_sequences, seq_len = freq_set.H.shape
         seq_indices = jnp.arange(n_sequences)
 
         key, subkey = jax.random.split(key)
         keys = jax.random.split(subkey, n_sequences)
-        idx_pairs = jax.vmap(sample_random_indices, in_axes=(0, None, None, None, 0))(
-            seq_indices, seq_len, tbptt_size, past_size, keys
+        idx_pairs = jax.vmap(sample_random_indices, in_axes=(None, 0, None, None, None, 0))(
+            freq_idx, seq_indices, seq_len, tbptt_size, past_size, keys
         )
         all_pairs = jnp.concatenate(idx_pairs, axis=0)
-        key, subkey = jax.random.split(key)
-        shuffled_pairs = jax.random.permutation(subkey, all_pairs)
-        batch_pairs = create_batch_pairs(shuffled_pairs, batch_size)
-        all_batch_pairs.append(batch_pairs)
+        mask = all_pairs[:, 2] != -1
+        all_pairs_filtered = all_pairs[mask]
 
-    all_losses = []
-    for freq_batches in zip_longest(*all_batch_pairs):  # tqdm
-        for i, freq_batch in enumerate(freq_batches):
-            if freq_batch is not None:
-                freq_set = train_set_norm[i]
-                model, opt_state, loss = single_batch_step(
-                    freq_set, tbptt_size, past_size, freq_batch, model, optimizer, opt_state
-                )
-                all_losses.append(loss)
-    mean_loss = jnp.mean(jnp.array(all_losses))
+        all_pairs_list.append(all_pairs_filtered)
 
-    return mean_loss, model, opt_state
+    all_pairs_global = jnp.concatenate(all_pairs_list, axis=0)
+    key, subkey = jax.random.split(key)
+
+    shuffled_pairs = jax.random.permutation(subkey, all_pairs_global)
+    all_batch_pairs = create_batch_pairs(shuffled_pairs, batch_size)
+
+    trainable_model_arrays = eqx.filter(model, eqx.is_inexact_array)
+    carry_init = (trainable_model_arrays, opt_state)
+
+    def scan_step(carry, batch_indices):
+        model_arrays, opt_state = carry
+        full_model = eqx.combine(model_arrays, model)
+        full_model, opt_state, loss = single_batch_step(
+            train_set_norm, tbptt_size, past_size, batch_indices, full_model, optimizer, opt_state
+        )
+        return (eqx.filter(full_model, eqx.is_inexact_array), opt_state), loss
+
+    (final_model_arrays, final_opt_state), losses = jax.lax.scan(
+        scan_step,
+        carry_init,
+        all_batch_pairs,
+    )
+    model = eqx.combine(final_model_arrays, model)
+    mean_loss = jnp.mean(losses)
+
+    return mean_loss, model, final_opt_state
 
 
 @eqx.filter_jit
@@ -225,7 +208,6 @@ def process_freq_set_val(freq_set, model: ModelInterface, past_size):
     B = freq_set.B
     H = freq_set.H
     T = freq_set.T
-    # f = freq_set.frequency
     batch_H_past = H[:, :past_size]
     batch_H_future = H[:, past_size:]
     batch_B_past = B[:, :past_size]

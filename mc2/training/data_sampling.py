@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.data_management import FrequencySet
+from mc2.data_management import FrequencySet, MaterialSet
 
 
 @eqx.filter_jit
@@ -65,6 +65,34 @@ def load_batches(
         return H_seq, B_seq, T_val
 
     batched_H, batched_B, batched_T = jax.vmap(get_H_B_T)(n_sequence_indices, starting_points)
+    return batched_H, batched_B, batched_T
+
+
+@eqx.filter_jit
+def load_batches_material_set(
+    material_set: MaterialSet,
+    n_frequency_indices: jax.Array,
+    n_sequence_indices: jax.Array,
+    starting_points: jax.Array,
+    training_sequence_length: int,
+):
+    """Load batches of data from the dataset using dynamic slicing."""
+
+    def slice_sequence(sequence, start_idx):
+        return jax.lax.dynamic_slice(sequence, (start_idx,), (training_sequence_length,))
+
+    def get_H_B_T(freq_idx, seq_idx, start_idx):
+        def make_case(i):
+            dataset = material_set.frequency_sets[i]
+            H_seq = slice_sequence(dataset.H[seq_idx], start_idx)
+            B_seq = slice_sequence(dataset.B[seq_idx], start_idx)
+            T_val = dataset.T[seq_idx]
+            return H_seq, B_seq, T_val
+
+        cases = [lambda i=i: make_case(i) for i in range(len(material_set.frequency_sets))]
+        return jax.lax.switch(freq_idx, cases)
+
+    batched_H, batched_B, batched_T = jax.vmap(get_H_B_T)(n_frequency_indices, n_sequence_indices, starting_points)
     return batched_H, batched_B, batched_T
 
 
