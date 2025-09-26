@@ -799,8 +799,10 @@ def load_hdf5_pretest_data(
         B = f["B_seq"][:]
         H_init = f["H_seq"][:]
         T = f["T"][:]
+        loss_short = f["Loss"][:]
     with h5py.File(pretest_root / f"{mat}_Testing_True.h5", "r") as f:
         H_true = f["H_seq"][:]
+        Loss = f["Loss"][:]
     unknowns_N = np.isnan(H_init).sum(axis=1)
     unknown_samples_variants, counts = np.unique(unknowns_N, return_counts=True)
     assert len(unknown_samples_variants) == 3, "Expecting 3 variants of unknown samples"
@@ -808,4 +810,4 @@ def load_hdf5_pretest_data(
     msk_scenario_1 = unknowns_N == unknown_samples_variants[1]
     msk_scenario_2 = unknowns_N == unknown_samples_variants[2]
     print(f"Scenario counts: {counts}")
-    return B, T, H_init, H_true, (msk_scenario_0, msk_scenario_1, msk_scenario_2)
+    return B, T, H_init, H_true, Loss, loss_short, (msk_scenario_0, msk_scenario_1, msk_scenario_2)

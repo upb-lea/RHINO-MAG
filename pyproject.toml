@@ -35,6 +35,8 @@ dependencies = [
     "torchinfo",
     "joblib>=1.5.0",
     "scikit-learn>=1.7.0",
+    "concave-hull>=0.0.9",
+    "h5py>=3.14.0",
 ]
 
 [project.urls]
