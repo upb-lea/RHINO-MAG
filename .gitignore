@@ -184,6 +184,8 @@ dev/**/*.eqx
 
 # ignore model files in the data folders
 data/**/*.eqx
+# ignore all data
+data/
 
 # ignore experiment log files
 data/experiment_logs/**/*.json

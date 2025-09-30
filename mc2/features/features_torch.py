@@ -35,17 +35,6 @@ class Featurizer:
         self.rolling_window_size = rolling_window_size
         self.mat_lbl = mat_lbl
         self.device = device if device is not None else torch.device("cpu")
-        df_bh_bounds_QP = pd.read_parquet(CACHE_ROOT / f"{self.mat_lbl}_1_25C_BH_bounds.parquet")
-        self.bh_bounds_MI = {
-            "bins_mT": torch.tensor(df_bh_bounds_QP["bins_mT"].to_numpy(), dtype=torch.float32, device=device)[None, :],
-            "min_H_A_per_m": torch.tensor(
-                df_bh_bounds_QP["min_H_A_per_m"].to_numpy(), dtype=torch.float32, device=device
-            )[None, :],
-            "max_H_A_per_m": torch.tensor(
-                df_bh_bounds_QP["max_H_A_per_m"].to_numpy(), dtype=torch.float32, device=device
-            )[None, :],
-            # "avg_H_A_per_m": torch.tensor(df_bh_bounds_QP["avg_H_A_per_m"].to_numpy(), dtype=torch.float32)[None, :],
-        }
 
     @torch.no_grad()
     def extract_normalization_constants(self, data_MN_l: torch.Tensor) -> None:
@@ -112,16 +101,6 @@ class Featurizer:
             torch.conv1d(data_MN[:, None, :], kernel, padding="same").squeeze(),  # moving average
             torch.sign(db_dt_MN),  # PWM of b
         ]
-        #  generate support vectors
-        """for bound_lbl in ["min_H_A_per_m", "max_H_A_per_m"]:
-            fe_l += [
-                interp(
-                    data_MN,
-                    self.bh_bounds_MI["bins_mT"].to(device=data_MN.device),
-                    self.bh_bounds_MI[bound_lbl].to(device=data_MN.device),
-                    dim=1,
-                )
-            ]"""
 
         if temperature_MI is not None:
             fe_l.append(temperature_MI.repeat(1, data_MN.shape[1])[..., None])

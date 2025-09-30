@@ -32,6 +32,7 @@ def evaluate_recursively(
     n_states: int,
     set_lbl: str = "val",
     model_arch: str = "gru",
+    warm_up_phase_target_MX: torch.Tensor = None,
 ):
     target_lbl = "H_traf" if DO_TRANSFORM_H else "H"
     mdl.eval()
@@ -48,10 +49,23 @@ def evaluate_recursively(
             case "gru":
                 # init hidden state with first H, shape (I, M, I)
                 hidden = torch.tile(hidden, (1, 1, n_states))
+                val_pred_MSR, hidden = mdl(model_in_MSP, hidden)
             case "expleuler":
                 hidden = hidden.squeeze(0)  # init hidden state with first H, shape: (M, I)
+                val_pred_MSR, hidden = mdl(model_in_MSP, hidden)
+            case "gru_cell":
+                assert warm_up_phase_target_MX is not None, "warm_up_phase_target must be provided for gru_cell"
+                _, X = warm_up_phase_target_MX.shape
+                val_pred_MSR = torch.zeros((M, S, n_states), device=model_in_MS.device, dtype=torch.float32)
+                for i in range(S):
+                    if i == 0:
+                        hidden = warm_up_phase_target_MX[:, [i]]
+                        hidden = torch.tile(hidden, (1, n_states))  # overwrite all states with gt
+                    elif i < X:
+                        hidden[:, 0] = warm_up_phase_target_MX[:, i]  # overwrite first state with gt
+                    hidden = mdl(model_in_MSP[:, i, :], hidden)
+                    val_pred_MSR[:, i, :] = hidden
 
-        val_pred_MSR, hidden = mdl(model_in_MSP, hidden)
         if DO_TRANSFORM_H:
             val_pred_untransformed_MS = torch.atanh(torch.clip(val_pred_MSR[:, :, 0], -0.999, 0.999)) / H_FACTOR * max_H
         else:
