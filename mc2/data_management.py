@@ -118,6 +118,7 @@ class FrequencySet(eqx.Module):
     H: jax.Array
     B: jax.Array
     T: jax.Array
+    H_RMS: jax.Array
 
     @classmethod
     def from_dict(cls, data_dict: dict) -> "FrequencySet":
@@ -128,6 +129,7 @@ class FrequencySet(eqx.Module):
             H=jnp.array(data_dict["H"]),
             B=jnp.array(data_dict["B"]),
             T=jnp.array(data_dict["T"]),
+            H_RMS=jnp.sqrt(jnp.mean(jnp.square(jnp.array(data_dict["H"])), axis=1)),
         )
 
     @classmethod
@@ -150,6 +152,7 @@ class FrequencySet(eqx.Module):
             H=self.H[temperature_mask],
             B=self.B[temperature_mask],
             T=self.T[temperature_mask],
+            H_RMS=self.H_RMS[temperature_mask],
         )
 
     def split_into_train_val_test(
@@ -212,6 +215,7 @@ class FrequencySet(eqx.Module):
             H=jnp.concatenate(train_H),
             B=jnp.concatenate(train_B),
             T=jnp.concatenate(train_T),
+            H_RMS=jnp.sqrt(jnp.mean(jnp.square(jnp.concatenate(train_H)), axis=1)),
         )
 
         val_set = FrequencySet(
@@ -220,6 +224,7 @@ class FrequencySet(eqx.Module):
             H=jnp.concatenate(val_H),
             B=jnp.concatenate(val_B),
             T=jnp.concatenate(val_T),
+            H_RMS=jnp.sqrt(jnp.mean(jnp.square(jnp.concatenate(val_H)), axis=1)),
         )
 
         test_set = FrequencySet(
@@ -228,6 +233,7 @@ class FrequencySet(eqx.Module):
             H=jnp.concatenate(test_H),
             B=jnp.concatenate(test_B),
             T=jnp.concatenate(test_T),
+            H_RMS=jnp.sqrt(jnp.mean(jnp.square(jnp.concatenate(test_H)), axis=1)),
         )
 
         return train_set, val_set, test_set
@@ -290,6 +296,7 @@ class FrequencySet(eqx.Module):
             H=norm_H,
             B=norm_B,
             T=norm_T,
+            H_RMS=jnp.sqrt(jnp.mean(jnp.square(norm_H), axis=1)),
             normalizer=normalizer,
         )
 
@@ -305,6 +312,7 @@ class NormalizedFrequencySet(FrequencySet):
             H=H,
             B=B,
             T=T,
+            H_RMS=jnp.sqrt(jnp.mean(jnp.square(H), axis=1)),
         )
 
 
@@ -377,7 +385,14 @@ class MaterialSet(eqx.Module):
             H = jnp.array(data_d[H_key].values)
             T = jnp.array(data_d[T_key].values)[:, 0]
 
-            freq_set = FrequencySet(material_name=material_name, frequency=freq, B=B, H=H, T=T)
+            freq_set = FrequencySet(
+                material_name=material_name,
+                frequency=freq,
+                B=B,
+                H=H,
+                T=T,
+                H_RMS=jnp.sqrt(jnp.mean(jnp.square(H), axis=1)),
+            )
 
             frequency_sets.append(freq_set)
 
@@ -585,6 +600,7 @@ class MaterialSet(eqx.Module):
                 freq_set.H[:, ::sampling_freq],
                 freq_set.B[:, ::sampling_freq],
                 freq_set.T[:],
+                freq_set.H_RMS[:],
             )
             for freq_set in self
         ]
@@ -725,8 +741,9 @@ def load_data_into_pandas_df(
     return data_ret_d
 
 
-def book_keeping(logs_d: Dict):
-    exp_id = str(uuid4())[:8]
+def book_keeping(logs_d: Dict, exp_id: str = None):
+    if exp_id is None:
+        exp_id = str(uuid4())[:8]
     mat = logs_d.get("material", "unknown_material")
     logs_root = EXPERIMENT_LOGS_ROOT / f"{mat}_{exp_id}"
     logs_root.mkdir(parents=True, exist_ok=True)
