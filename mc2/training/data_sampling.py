@@ -53,7 +53,7 @@ def load_batches(
     starting_points: jax.Array,
     training_sequence_length: int,
 ):
-    """Load batches of data from the dataset using dynamic slicing."""
+    """Load batches of data from the frequency set using dynamic slicing."""
 
     def slice_sequence(sequence, start_idx):
         return jax.lax.dynamic_slice(sequence, (start_idx,), (training_sequence_length,))
@@ -62,10 +62,15 @@ def load_batches(
         H_seq = slice_sequence(dataset.H[seq_idx], start_idx)
         B_seq = slice_sequence(dataset.B[seq_idx], start_idx)
         T_val = dataset.T[seq_idx]
-        return H_seq, B_seq, T_val
+        H_rms = dataset.H_RMS[seq_idx]
+        # H_full = dataset.H[seq_idx]
+        # H_rms_full = jnp.sqrt(jnp.mean(jnp.square(H_full)))
 
-    batched_H, batched_B, batched_T = jax.vmap(get_H_B_T)(n_sequence_indices, starting_points)
-    return batched_H, batched_B, batched_T
+        return H_seq, B_seq, T_val, H_rms
+
+    batched_H, batched_B, batched_T, batch_H_rms_full = jax.vmap(get_H_B_T)(n_sequence_indices, starting_points)
+
+    return batched_H, batched_B, batched_T, batch_H_rms_full
 
 
 @eqx.filter_jit
@@ -76,7 +81,7 @@ def load_batches_material_set(
     starting_points: jax.Array,
     training_sequence_length: int,
 ):
-    """Load batches of data from the dataset using dynamic slicing."""
+    """Load batches of data from the material set using dynamic slicing."""
 
     def slice_sequence(sequence, start_idx):
         return jax.lax.dynamic_slice(sequence, (start_idx,), (training_sequence_length,))
@@ -84,16 +89,24 @@ def load_batches_material_set(
     def get_H_B_T(freq_idx, seq_idx, start_idx):
         def make_case(i):
             dataset = material_set.frequency_sets[i]
+
             H_seq = slice_sequence(dataset.H[seq_idx], start_idx)
             B_seq = slice_sequence(dataset.B[seq_idx], start_idx)
             T_val = dataset.T[seq_idx]
-            return H_seq, B_seq, T_val
+            H_rms = dataset.H_RMS[seq_idx]
+            # H_full = dataset.H[seq_idx]
+            # H_rms = jnp.sqrt(jnp.mean(jnp.square(H_full)))
+
+            return H_seq, B_seq, T_val, H_rms
 
         cases = [lambda i=i: make_case(i) for i in range(len(material_set.frequency_sets))]
         return jax.lax.switch(freq_idx, cases)
 
-    batched_H, batched_B, batched_T = jax.vmap(get_H_B_T)(n_frequency_indices, n_sequence_indices, starting_points)
-    return batched_H, batched_B, batched_T
+    batched_H, batched_B, batched_T, batch_H_rms_full = jax.vmap(get_H_B_T)(
+        n_frequency_indices, n_sequence_indices, starting_points
+    )
+
+    return batched_H, batched_B, batched_T, batch_H_rms_full
 
 
 @eqx.filter_jit
@@ -118,7 +131,7 @@ def draw_data_uniformly(
     n_sequence_indices, starting_points, loader_key = sample_batch_indices(
         n_sequences, full_sequence_length, training_sequence_length, training_batch_size, loader_key
     )
-    batched_H, batched_B, batched_T = load_batches(
+    batched_H, batched_B, batched_T, batch_H_rms_full = load_batches(
         dataset, n_sequence_indices, starting_points, training_sequence_length
     )
 
@@ -126,7 +139,7 @@ def draw_data_uniformly(
     batched_B = jnp.squeeze(batched_B)
     batched_T = jnp.squeeze(batched_T)
 
-    return batched_H, batched_B, batched_T, loader_key
+    return batched_H, batched_B, batched_T, batch_H_rms_full, loader_key
 
 
 def data_loader(dataset, training_sequence_length, training_batch_size, loader_key):

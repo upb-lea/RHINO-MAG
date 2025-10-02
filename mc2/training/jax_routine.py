@@ -5,6 +5,8 @@ import optax
 import pandas as pd
 import logging as log
 from typing import Tuple
+
+# from tqdm.notebook import trange  #
 from tqdm import trange
 from mc2.data_management import (
     load_data_into_pandas_df,
@@ -34,6 +36,27 @@ def compute_MSE_loss(
     return jnp.mean((pred_H - H_future) ** 2)
 
 
+@eqx.filter_value_and_grad
+def compute_adapted_RMS_loss(
+    model: eqx.Module,
+    B_past: jax.Array,
+    H_past: jax.Array,
+    B_future: jax.Array,
+    H_future: jax.Array,
+    T: jax.Array,
+    batch_H_rms: jax.Array,
+):
+    pred_H = (model.normalized_call)(B_past, H_past, B_future, T)  # , f
+
+    # B_last_past = B_past[:, -1:]
+    # B_concat = jnp.concatenate([B_last_past, B_future], axis=1)
+    # abs_dB_future = jnp.abs(jnp.diff(B_concat, axis=1))
+
+    H_rms_error = jnp.sqrt(jnp.mean((pred_H - H_future) ** 2, axis=1))  # * abs_dB_future
+    H_rms_norm = H_rms_error / batch_H_rms
+    return jnp.mean(H_rms_norm)
+
+
 @eqx.filter_jit
 def make_step(
     model: eqx.Module,
@@ -42,10 +65,12 @@ def make_step(
     B_future: jax.Array,
     H_future: jax.Array,
     T: jax.Array,
+    batch_H_rms: jax.Array,
     optim: optax.GradientTransformation,
     opt_state: optax.OptState,
 ):
-    loss, grads = compute_MSE_loss(model, B_past, H_past, B_future, H_future, T)  # , f
+    # loss, grads = compute_MSE_loss(model, B_past, H_past, B_future, H_future, T)  # , f
+    loss, grads = compute_adapted_RMS_loss(model, B_past, H_past, B_future, H_future, T, batch_H_rms)
     updates, opt_state = optim.update(grads, opt_state)
     model = eqx.apply_updates(model, updates)
     return loss, model, opt_state
@@ -54,7 +79,7 @@ def make_step(
 @eqx.filter_jit
 def process_freq_set(model, opt_state, key, freq_set, optimizer, past_size, tbptt_size, batch_size):
     key, subkey = jax.random.split(key)
-    batch_H, batch_B, batch_T, _ = draw_data_uniformly(
+    batch_H, batch_B, batch_T, batch_H_rms, _ = draw_data_uniformly(
         freq_set,
         training_sequence_length=tbptt_size + past_size,
         training_batch_size=batch_size,
@@ -72,6 +97,7 @@ def process_freq_set(model, opt_state, key, freq_set, optimizer, past_size, tbpt
         batch_B_future,
         batch_H_future,
         batch_T,
+        batch_H_rms,
         optimizer,
         opt_state,
     )
@@ -111,7 +137,7 @@ def create_batch_pairs(pairs, batch_size):
 
 
 @eqx.filter_jit
-def batched_step(model, batch_H, batch_B, batch_T, past_size, optimizer, opt_state):
+def batched_step(model, batch_H, batch_B, batch_T, batch_H_RMS, past_size, optimizer, opt_state):
     batch_H_past = batch_H[:, :past_size]
     batch_H_future = batch_H[:, past_size:]
     batch_B_past = batch_B[:, :past_size]
@@ -123,6 +149,7 @@ def batched_step(model, batch_H, batch_B, batch_T, past_size, optimizer, opt_sta
         batch_B_future,
         batch_H_future,
         batch_T,
+        batch_H_RMS,
         optimizer,
         opt_state,
     )
@@ -135,14 +162,16 @@ def single_batch_step(material_set, tbptt_size, past_size, batch_pairs, model, o
     n_frequency_indices = batch_pairs[:, 0]
     n_sequence_indices = batch_pairs[:, 1]
     starting_points = batch_pairs[:, 2]
-    batch_H, batch_B, batch_T = load_batches_material_set(
+    batch_H, batch_B, batch_T, batch_H_RMS = load_batches_material_set(
         material_set,
         n_frequency_indices,
         n_sequence_indices,
         starting_points,
         training_sequence_length=tbptt_size + past_size,
     )
-    loss, new_model, new_opt_state = batched_step(model, batch_H, batch_B, batch_T, past_size, optimizer, opt_state)
+    loss, new_model, new_opt_state = batched_step(
+        model, batch_H, batch_B, batch_T, batch_H_RMS, past_size, optimizer, opt_state
+    )
     return new_model, new_opt_state, loss
 
 
@@ -203,11 +232,12 @@ def train_epoch(model, opt_state, train_set_norm, optimizer, key, past_size, tbp
     return mean_loss, model, final_opt_state
 
 
-@eqx.filter_jit
+# @eqx.filter_jit
 def process_freq_set_val(freq_set, model: ModelInterface, past_size):
     B = freq_set.B
     H = freq_set.H
     T = freq_set.T
+
     batch_H_past = H[:, :past_size]
     batch_H_future = H[:, past_size:]
     batch_B_past = B[:, :past_size]
@@ -215,8 +245,13 @@ def process_freq_set_val(freq_set, model: ModelInterface, past_size):
 
     pred_H = model.normalized_call(batch_B_past, batch_H_past, batch_B_future, T)  # , f
     pred_H = model.normalizer.denormalize_H(pred_H)
+    denorm_H = model.normalizer.denormalize_H(H)
     batch_H_future = model.normalizer.denormalize_H(batch_H_future)
-    loss = jnp.mean((pred_H - batch_H_future) ** 2)
+
+    H_rms_full = jnp.sqrt(jnp.mean(jnp.square(denorm_H), axis=1))
+    rms_loss = jnp.sqrt(jnp.mean((pred_H - batch_H_future) ** 2, axis=1))
+    norm_rms_loss = rms_loss / H_rms_full
+    loss = jnp.mean(norm_rms_loss)
     return loss, pred_H, batch_H_future
 
 

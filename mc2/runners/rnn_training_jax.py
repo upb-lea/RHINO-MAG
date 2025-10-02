@@ -4,11 +4,14 @@ from copy import deepcopy
 import logging as log
 import os
 
+os.environ["JAX_PLATFORMS"] = "cpu"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
 
-# jax.config.update("jax_enable_x64", True)
+jax.config.update("jax_enable_x64", True)
+
 import jax.numpy as jnp
 import numpy as np
 import json
@@ -58,18 +61,19 @@ def parse_args() -> argparse.Namespace:
 def main():
     args = parse_args()
 
-    if args.gpu_id != -1:
-        gpus = jax.devices()
-        jax.config.update("jax_default_device", gpus[args.gpu_id])
+    # if args.gpu_id != -1:
+    #     gpus = jax.devices()
+    #     jax.config.update("jax_default_device", gpus[args.gpu_id])
+    jax.config.update("jax_platform_name", "cpu")
 
     # setup
     seed = 0
     key = jax.random.PRNGKey(seed)
     key, training_key, model_key = jax.random.split(key, 3)
 
-    assert args.material in AVAILABLE_MATERIALS, (
-        f"Material {args.material} is not available. Choose on of {AVAILABLE_MATERIALS}."
-    )
+    assert (
+        args.material in AVAILABLE_MATERIALS
+    ), f"Material {args.material} is not available. Choose on of {AVAILABLE_MATERIALS}."
 
     # TODO: params as .yaml files?
     wrapped_model, optimizer, params, data_tuple = setup_model(
@@ -99,7 +103,7 @@ def main():
     log.info("Evaluation done. Proceeding with storing experiment data..")
 
     json_dump_d = dict(params=params, metrics=eval_metrics)
-    book_keeping(logs)
+    book_keeping(logs, exp_id=exp_id)
 
     # create missing folders
     experiment_path = EXPERIMENT_LOGS_ROOT / "jax_experiments"

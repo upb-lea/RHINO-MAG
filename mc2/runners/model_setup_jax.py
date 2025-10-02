@@ -5,10 +5,10 @@ import optax
 import equinox as eqx
 from mc2.features.features_jax import compute_fe_single
 from mc2.data_management import MaterialSet, FrequencySet, load_data_into_pandas_df
-from mc2.models.model_interface import ModelInterface, NODEwInterface, RNNwInterface
+from mc2.models.model_interface import ModelInterface, NODEwInterface, RNNwInterface, JAwGRUwInterface, JAwInterface, JAGRUwInterface
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU
-
+from mc2.models.jiles_atherton import JilesAthertonStatic, JilesAthertonWithGRU, JilesAthertonGRU,JilesAthertonStatic2
 from mc2.data_management import Normalizer
 
 SUPPORTED_MODELS = ["GRU", "HNODE"]  # TODO: ["EulerNODE", "HNODE", "GRU"]
@@ -48,6 +48,21 @@ def setup_model(
     tbptt_size=1024,
     batch_size=256,
 ):
+    def featurize(norm_B_past, norm_H_past, norm_B_future, temperature):
+        past_length = norm_B_past.shape[0]
+        future_length = norm_B_future.shape[0]
+
+        featurized_B = compute_fe_single(jnp.hstack([norm_B_past, norm_B_future]), n_s=10)
+
+        return featurized_B[past_length:]
+
+    normalizer, data_tuple = get_normalizer(
+        material_name,
+        featurize,
+        subsample_freq,
+        True,
+    )
+   
     match model_label:
         case "HNODE":
             model_params_d = dict(
@@ -65,6 +80,22 @@ def setup_model(
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
+        case "JA_with_GRU":
+            model_params_d = dict(hidden_size=8, in_size=8, key=model_key)
+            model = JilesAthertonWithGRU(**model_params_d)
+            mdl_interface_cls = JAwGRUwInterface
+        case "JAGRU":
+            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
+            model = JilesAthertonGRU(normalizer=normalizer,**model_params_d)
+            mdl_interface_cls = JAGRUwInterface
+        case "JA":
+            model_params_d= dict(key=model_key)
+            model = JilesAthertonStatic(key=model_key)
+            mdl_interface_cls = JAwInterface
+        case "JA2":
+            model_params_d= dict(key=model_key)
+            model = JilesAthertonStatic2(key=model_key)
+            mdl_interface_cls = JAwInterface
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
 
@@ -74,7 +105,7 @@ def setup_model(
             n_steps=0,  # 10_000
             val_every=1,
             tbptt_size=tbptt_size,
-            past_size=20,
+            past_size=1,
             batch_size=batch_size,
         ),
         lr_params=dict(
@@ -89,25 +120,12 @@ def setup_model(
     lr_schedule = optax.schedules.exponential_decay(**params["lr_params"])
     optimizer = optax.adam(lr_schedule)
 
-    def featurize(norm_B_past, norm_H_past, norm_B_future, temperature):
-        past_length = norm_B_past.shape[0]
-        future_length = norm_B_future.shape[0]
-
-        featurized_B = compute_fe_single(jnp.hstack([norm_B_past, norm_B_future]), n_s=10)
-
-        return featurized_B[past_length:]
-
-    normalizer, data_tuple = get_normalizer(
-        material_name,
-        featurize,
-        subsample_freq,
-        True,
-    )
     wrapped_model = mdl_interface_cls(
         model=model,
         normalizer=normalizer,
         featurize=featurize,
     )
+    
 
     params["model_params"] = model_params_d  # defined from outside
     params["model_params"]["key"] = params["model_params"]["key"].tolist()
