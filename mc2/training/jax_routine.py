@@ -47,13 +47,14 @@ def compute_adapted_RMS_loss(
     batch_H_rms: jax.Array,
 ):
     pred_H = (model.normalized_call)(B_past, H_past, B_future, T)  # , f
-
-    # B_last_past = B_past[:, -1:]
-    # B_concat = jnp.concatenate([B_last_past, B_future], axis=1)
-    # abs_dB_future = jnp.abs(jnp.diff(B_concat, axis=1))
-
-    H_rms_error = jnp.sqrt(jnp.mean((pred_H - H_future) ** 2, axis=1))  # * abs_dB_future
-    H_rms_norm = H_rms_error / batch_H_rms
+    B_last_past = B_past[:, -1:]
+    B_concat = jnp.concatenate([B_last_past, B_future], axis=1)
+    abs_dB_future = jnp.abs(jnp.diff(B_concat, axis=1))
+    pred_H_inv_transf = model.normalizer.H_inverse_transform(pred_H)  # denormalize prediction coz of tanh at the output
+    H_future_inv_transf = model.normalizer.H_inverse_transform(H_future)
+    batch_H_rms_norm = batch_H_rms / model.normalizer.H_max
+    H_rms_error = jnp.sqrt(jnp.mean((pred_H_inv_transf - H_future_inv_transf) ** 2 * abs_dB_future, axis=1))  #
+    H_rms_norm = H_rms_error / batch_H_rms_norm
     return jnp.mean(H_rms_norm)
 
 
@@ -105,22 +106,50 @@ def process_freq_set(model, opt_state, key, freq_set, optimizer, past_size, tbpt
     return loss, model, opt_state, key
 
 
+# @eqx.filter_jit
+# @jax.jit
+# def sample_random_indices(freq_idx, seq_idx, seq_len, tbptt_size, past_size, key):
+#     max_idx = seq_len - (tbptt_size + past_size)
+#     step = tbptt_size + past_size
+#     key, subkey = jax.random.split(key)
+#     first_start_idx = jax.random.randint(minval=0, maxval=(step), shape=(), key=subkey)
+#     n_chunks = (seq_len - step) // step
+#     indices = first_start_idx + (step * ((jnp.arange(n_chunks))))  #
+#     indices = indices.reshape(-1)
+#     last_random_idx = jax.lax.cond(
+#         seq_len % step <= first_start_idx,
+#         lambda _: jnp.array([-1], dtype=jnp.int32),
+#         lambda _: jnp.array([first_start_idx + step * n_chunks], dtype=jnp.int32),
+#         operand=None,
+#     )
+#     indices = jnp.concatenate([jnp.array([0]), indices, last_random_idx, jnp.array([max_idx])], axis=0)
+#     seq_idx_array = jnp.full(indices.shape, seq_idx)
+#     freq_idx_array = jnp.full(indices.shape, freq_idx)
+#     pairs = jnp.stack([freq_idx_array, seq_idx_array, indices], axis=1)
+#     return pairs
+
+
 @eqx.filter_jit
 def sample_random_indices(freq_idx, seq_idx, seq_len, tbptt_size, past_size, key):
-    max_idx = seq_len - (tbptt_size + past_size)
     step = tbptt_size + past_size
-    key, subkey = jax.random.split(key)
-    first_start_idx = jax.random.randint(minval=0, maxval=(step), shape=(), key=subkey)
+    max_idx = seq_len - step
+
+    key, subkey1 = jax.random.split(key)
+    first_start_idx = jax.random.randint(subkey1, shape=(), minval=0, maxval=step)
+
     n_chunks = (seq_len - step) // step
-    indices = first_start_idx + (step * ((jnp.arange(n_chunks))))  #
-    indices = indices.reshape(-1)
+    indices = first_start_idx + step * jnp.arange(n_chunks)
+
+    key, subkey2 = jax.random.split(key)
     last_random_idx = jax.lax.cond(
         seq_len % step <= first_start_idx,
-        lambda _: jnp.array([-1], dtype=jnp.int32),
-        lambda _: jnp.array([first_start_idx + step * n_chunks], dtype=jnp.int32),
+        lambda _: jax.random.randint(subkey2, shape=(1,), minval=0, maxval=max_idx + 1),
+        lambda _: jnp.array([first_start_idx + step * n_chunks]),
         operand=None,
     )
+
     indices = jnp.concatenate([jnp.array([0]), indices, last_random_idx, jnp.array([max_idx])], axis=0)
+
     seq_idx_array = jnp.full(indices.shape, seq_idx)
     freq_idx_array = jnp.full(indices.shape, freq_idx)
     pairs = jnp.stack([freq_idx_array, seq_idx_array, indices], axis=1)
@@ -186,6 +215,20 @@ def train_step(model, opt_state, train_set_norm, optimizer, key, past_size, tbpt
     return train_loss, model, opt_state
 
 
+from functools import partial
+
+
+@eqx.filter_jit
+def scan_step(carry, batch_indices, model, train_set_norm, tbptt_size, past_size, optimizer):
+    model_arrays, opt_state = carry
+    full_model = eqx.combine(model_arrays, model)
+    full_model, opt_state, loss = single_batch_step(
+        train_set_norm, tbptt_size, past_size, batch_indices, full_model, optimizer, opt_state
+    )
+    return (eqx.filter(full_model, eqx.is_inexact_array), opt_state), loss
+
+
+@eqx.filter_jit
 def train_epoch(model, opt_state, train_set_norm, optimizer, key, past_size, tbptt_size, batch_size):
     all_pairs_list = []
     for freq_idx in range(len(train_set_norm.frequency_sets)):
@@ -199,14 +242,10 @@ def train_epoch(model, opt_state, train_set_norm, optimizer, key, past_size, tbp
             freq_idx, seq_indices, seq_len, tbptt_size, past_size, keys
         )
         all_pairs = jnp.concatenate(idx_pairs, axis=0)
-        mask = all_pairs[:, 2] != -1
-        all_pairs_filtered = all_pairs[mask]
-
-        all_pairs_list.append(all_pairs_filtered)
+        all_pairs_list.append(all_pairs)
 
     all_pairs_global = jnp.concatenate(all_pairs_list, axis=0)
     key, subkey = jax.random.split(key)
-
     shuffled_pairs = jax.random.permutation(subkey, all_pairs_global)
     all_batch_pairs = create_batch_pairs(shuffled_pairs, batch_size)
 
@@ -232,7 +271,86 @@ def train_epoch(model, opt_state, train_set_norm, optimizer, key, past_size, tbp
     return mean_loss, model, final_opt_state
 
 
-# @eqx.filter_jit
+def train_epoch2(model, opt_state, train_set_norm, optimizer, key, past_size, tbptt_size, batch_size):
+    all_pairs_list = []
+    for freq_idx in range(len(train_set_norm.frequency_sets)):
+        freq_set = train_set_norm.frequency_sets[freq_idx]
+        n_sequences, seq_len = freq_set.H.shape
+        seq_indices = jnp.arange(n_sequences)
+
+        key, subkey = jax.random.split(key)
+        keys = jax.random.split(subkey, n_sequences)
+        idx_pairs = jax.vmap(sample_random_indices, in_axes=(None, 0, None, None, None, 0))(
+            freq_idx, seq_indices, seq_len, tbptt_size, past_size, keys
+        )
+        all_pairs = jnp.concatenate(idx_pairs, axis=0)
+        all_pairs_list.append(all_pairs)
+
+    all_pairs_global = jnp.concatenate(all_pairs_list, axis=0)
+    key, subkey = jax.random.split(key)
+    shuffled_pairs = jax.random.permutation(subkey, all_pairs_global)
+    all_batch_pairs = create_batch_pairs(shuffled_pairs, batch_size)
+    # Filterbare Arrays für das Model
+    trainable_model_arrays = eqx.filter(model, eqx.is_inexact_array)
+
+    losses = []
+    for batch_indices in all_batch_pairs:
+        model, opt_state, loss = single_batch_step(
+            train_set_norm, tbptt_size, past_size, batch_indices, model, optimizer, opt_state
+        )
+        losses.append(loss)
+
+    mean_loss = jnp.mean(jnp.array(losses))
+    return mean_loss, model, opt_state
+
+
+# def train_epoch(model, opt_state, train_set_norm, optimizer, key, past_size, tbptt_size, batch_size):
+#     all_pairs_list = []
+#     for freq_idx in range(len(train_set_norm.frequency_sets)):
+#         freq_set = train_set_norm.frequency_sets[freq_idx]
+#         n_sequences, seq_len = freq_set.H.shape
+#         seq_indices = jnp.arange(n_sequences)
+
+#         key, subkey = jax.random.split(key)
+#         keys = jax.random.split(subkey, n_sequences)
+#         idx_pairs = jax.vmap(sample_random_indices, in_axes=(None, 0, None, None, None, 0))(
+#             freq_idx, seq_indices, seq_len, tbptt_size, past_size, keys
+#         )
+#         all_pairs = jnp.concatenate(idx_pairs, axis=0)
+#         mask = all_pairs[:, 2] != -1
+#         all_pairs_filtered = all_pairs[mask]
+
+#         all_pairs_list.append(all_pairs_filtered)
+
+#     all_pairs_global = jnp.concatenate(all_pairs_list, axis=0)
+#     key, subkey = jax.random.split(key)
+
+#     shuffled_pairs = jax.random.permutation(subkey, all_pairs_global)
+#     all_batch_pairs = create_batch_pairs(shuffled_pairs, batch_size)
+
+#     trainable_model_arrays = eqx.filter(model, eqx.is_inexact_array)
+#     carry_init = (trainable_model_arrays, opt_state)
+
+#     def scan_step(carry, batch_indices):
+#         model_arrays, opt_state = carry
+#         full_model = eqx.combine(model_arrays, model)
+#         full_model, opt_state, loss = single_batch_step(
+#             train_set_norm, tbptt_size, past_size, batch_indices, full_model, optimizer, opt_state
+#         )
+#         return (eqx.filter(full_model, eqx.is_inexact_array), opt_state), loss
+
+#     (final_model_arrays, final_opt_state), losses = jax.lax.scan(
+#         scan_step,
+#         carry_init,
+#         all_batch_pairs,
+#     )
+#     model = eqx.combine(final_model_arrays, model)
+#     mean_loss = jnp.mean(losses)
+
+#     return mean_loss, model, final_opt_state
+
+
+@eqx.filter_jit
 def process_freq_set_val(freq_set, model: ModelInterface, past_size):
     B = freq_set.B
     H = freq_set.H
@@ -243,16 +361,36 @@ def process_freq_set_val(freq_set, model: ModelInterface, past_size):
     batch_B_past = B[:, :past_size]
     batch_B_future = B[:, past_size:]
 
-    pred_H = model.normalized_call(batch_B_past, batch_H_past, batch_B_future, T)  # , f
-    pred_H = model.normalizer.denormalize_H(pred_H)
-    denorm_H = model.normalizer.denormalize_H(H)
-    batch_H_future = model.normalizer.denormalize_H(batch_H_future)
+    pred_H = model(batch_B_past, batch_H_past, batch_B_future, T)  # , f
 
-    H_rms_full = jnp.sqrt(jnp.mean(jnp.square(denorm_H), axis=1))
+    H_rms_full = jnp.sqrt(jnp.mean(jnp.square(H), axis=1))
     rms_loss = jnp.sqrt(jnp.mean((pred_H - batch_H_future) ** 2, axis=1))
     norm_rms_loss = rms_loss / H_rms_full
     loss = jnp.mean(norm_rms_loss)
     return loss, pred_H, batch_H_future
+
+
+# @eqx.filter_jit
+# def process_freq_set_val(freq_set, model: ModelInterface, past_size):
+#     B = freq_set.B
+#     H = freq_set.H
+#     T = freq_set.T
+
+#     batch_H_past = H[:, :past_size]
+#     batch_H_future = H[:, past_size:]
+#     batch_B_past = B[:, :past_size]
+#     batch_B_future = B[:, past_size:]
+
+#     pred_H = model.normalized_call(batch_B_past, batch_H_past, batch_B_future, T)  # , f
+#     pred_H = model.normalizer.denormalize_H(pred_H)
+#     denorm_H = model.normalizer.denormalize_H(H)
+#     batch_H_future = model.normalizer.denormalize_H(batch_H_future)
+
+#     H_rms_full = jnp.sqrt(jnp.mean(jnp.square(denorm_H), axis=1))
+#     rms_loss = jnp.sqrt(jnp.mean((pred_H - batch_H_future) ** 2, axis=1))
+#     norm_rms_loss = rms_loss / H_rms_full
+#     loss = jnp.mean(norm_rms_loss)
+#     return loss, pred_H, batch_H_future
 
 
 def val_test(set, model, past_size):
@@ -281,6 +419,7 @@ def train_model(
     tbptt_size: int,
     past_size: int,
     batch_size: int,
+    tbptt_size_start: list[int] | None = None,  # (size, n_epochs_steps)
 ):
     train_set, val_set, test_set = data_tuple
 
@@ -301,7 +440,7 @@ def train_model(
     }
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
-    test_loss, *_ = val_test(test_set_norm, model, past_size)
+    test_loss, *_ = val_test(test_set, model, past_size)  # test_set_norm
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
     if (n_steps > 0 and n_epochs > 0) or (n_steps == 0 and n_epochs == 0):
         raise ValueError("Please set either `n_steps` or `n_epochs` to a value greater than 0.")
@@ -312,15 +451,24 @@ def train_model(
         pbar = trange(n_epochs, desc=f"Seed {seed}", position=seed, unit="epoch")
         train_func = train_epoch
 
-    for step in pbar:
+    for step_epoch in pbar:
+        if tbptt_size_start is not None:
+            tbptt_size_st, n_epochs_start = tbptt_size_start
+            if step_epoch < n_epochs_start:
+                current_tbptt_size = tbptt_size_st
+            else:
+                current_tbptt_size = tbptt_size
+        else:
+            current_tbptt_size = tbptt_size
+
         train_loss = 0
         key, subkey = jax.random.split(key)
         train_loss, model, opt_state = train_func(
-            model, opt_state, train_set_norm, optimizer, subkey, past_size, tbptt_size, batch_size
+            model, opt_state, train_set_norm, optimizer, subkey, past_size, current_tbptt_size, batch_size
         )
         pbar_str = f"Loss {train_loss:.2e}"
-        if step % val_every == 0:
-            val_loss, *_ = val_test(val_set_norm, model, past_size)
+        if step_epoch % val_every == 0:
+            val_loss, *_ = val_test(val_set, model, past_size)  # val_set_norm
             logs["loss_trends_val"].append(val_loss.item())
         pbar_str += f"| val loss {val_loss:.2e}"
         logs["loss_trends_train"].append(train_loss.item())
@@ -328,7 +476,7 @@ def train_model(
 
     pbar.close()
 
-    test_loss, test_pred_l, test_gt_l = val_test(test_set_norm, model, past_size)
+    test_loss, test_pred_l, test_gt_l = val_test(test_set, model, past_size)  # test_set_norm
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
 
     logs["end_time"] = str(pd.Timestamp.now().round(freq="s"))

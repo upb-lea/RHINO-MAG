@@ -296,7 +296,7 @@ class FrequencySet(eqx.Module):
             H=norm_H,
             B=norm_B,
             T=norm_T,
-            H_RMS=jnp.sqrt(jnp.mean(jnp.square(norm_H), axis=1)),
+            H_RMS=self.H_RMS,
             normalizer=normalizer,
         )
 
@@ -312,7 +312,7 @@ class NormalizedFrequencySet(FrequencySet):
             H=H,
             B=B,
             T=T,
-            H_RMS=jnp.sqrt(jnp.mean(jnp.square(H), axis=1)),
+            H_RMS=self.H_RMS,
         )
 
 

@@ -8,7 +8,7 @@ from mc2.data_management import MaterialSet, FrequencySet, load_data_into_pandas
 from mc2.models.model_interface import ModelInterface, NODEwInterface, RNNwInterface, JAwGRUwInterface, JAwInterface, JAGRUwInterface
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU
-from mc2.models.jiles_atherton import JilesAthertonStatic, JilesAthertonWithGRU, JilesAthertonGRU,JilesAthertonStatic2
+from mc2.models.jiles_atherton import JilesAthertonStatic, JilesAthertonWithGRU, JilesAthertonGRUlin, JilesAthertonGRU,JilesAthertonStatic2
 from mc2.data_management import Normalizer
 
 SUPPORTED_MODELS = ["GRU", "HNODE"]  # TODO: ["EulerNODE", "HNODE", "GRU"]
@@ -47,6 +47,7 @@ def setup_model(
     n_epochs=100,
     tbptt_size=1024,
     batch_size=256,
+    tbptt_size_start=None,  # (size, n_epochs_steps)
 ):
     def featurize(norm_B_past, norm_H_past, norm_B_future, temperature):
         past_length = norm_B_past.shape[0]
@@ -84,6 +85,10 @@ def setup_model(
             model_params_d = dict(hidden_size=8, in_size=8, key=model_key)
             model = JilesAthertonWithGRU(**model_params_d)
             mdl_interface_cls = JAwGRUwInterface
+        case "JAGRUlin":
+            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
+            model = JilesAthertonGRUlin(normalizer=normalizer,**model_params_d)
+            mdl_interface_cls = JAGRUwInterface
         case "JAGRU":
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = JilesAthertonGRU(normalizer=normalizer,**model_params_d)
@@ -107,6 +112,7 @@ def setup_model(
             tbptt_size=tbptt_size,
             past_size=1,
             batch_size=batch_size,
+            tbptt_size_start=tbptt_size_start
         ),
         lr_params=dict(
             init_value=1e-3,

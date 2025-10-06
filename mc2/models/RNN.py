@@ -25,6 +25,20 @@ class GRU(eqx.Module):
         _, out = jax.lax.scan(f, hidden, input)
         return out
 
+    def warmup_call(self, input, init_hidden, H_true):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_t, h_true_t = inp
+            rnn_out = self.cell(inp_t, carry)
+            rnn_out = rnn_out.at[0].set(h_true_t)
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+            out = rnn_out_o[:, 0]
+            return rnn_out, out
+
+        final_hidden, out = jax.lax.scan(f, hidden, (input, H_true))
+        return out, final_hidden
+
 
 class GRUwLinear(eqx.Module):
 

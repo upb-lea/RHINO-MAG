@@ -5,12 +5,13 @@ import logging as log
 import os
 
 os.environ["JAX_PLATFORMS"] = "cpu"
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
 
 jax.config.update("jax_enable_x64", True)
+# jax.config.update("jax_log_compiles", True)
 
 import jax.numpy as jnp
 import numpy as np
@@ -53,6 +54,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-t", "--tbptt_size", default=1024, required=False, type=int, help="Truncated backpropagation through time size"
     )
+    parser.add_argument(
+        "-ts",
+        "--tbptt_size_start",
+        default=None,
+        nargs=2,
+        type=int,
+        help="Starting tbptt size and number of epochs/steps to use it for, before switching to tbptt_size. Format: size n_epochs",
+    )
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
     return args
@@ -83,6 +92,7 @@ def main():
         n_epochs=args.epochs,
         tbptt_size=args.tbptt_size,
         batch_size=args.batch_size,
+        tbptt_size_start=args.tbptt_size_start,
     )
     # run training
     logs, model = train_model(
