@@ -107,7 +107,7 @@ class JilesAthertonStatic(eqx.Module):
 
         B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
         _, H_seq = jax.lax.scan(body_fun, H0, B_pairs)
-        H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
         return H_seq
 
 
@@ -243,7 +243,7 @@ from mc2.models.model_interface import load_model
 
 
 class JilesAthertonWithGRU(eqx.Module):
-    ja: JilesAthertonStatic
+    ja: JilesAthertonStatic = eqx.field(static=True)
     gru: GRU
 
     def __init__(self, key, in_size, hidden_size=8, **kwargs):
