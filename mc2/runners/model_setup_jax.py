@@ -82,7 +82,7 @@ def setup_model(
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
         case "JA_with_GRU":
-            model_params_d = dict(hidden_size=8, in_size=8, key=model_key)
+            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = JilesAthertonWithGRU(**model_params_d)
             mdl_interface_cls = JAwGRUwInterface
         case "JAGRUlin":
