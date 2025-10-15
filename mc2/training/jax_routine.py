@@ -18,6 +18,8 @@ from mc2.training.optimization import make_step
 from mc2.models.model_interface import ModelInterface
 from itertools import zip_longest
 
+# import orbax.checkpoint as ocp
+
 DO_TRANSFORM_H = True
 H_FACTOR = 1.2
 VAL_EVERY = 100
@@ -53,9 +55,11 @@ def compute_adapted_RMS_loss(
     pred_H_inv_transf = model.normalizer.H_inverse_transform(pred_H)  # denormalize prediction coz of tanh at the output
     H_future_inv_transf = model.normalizer.H_inverse_transform(H_future)
     batch_H_rms_norm = batch_H_rms / model.normalizer.H_max
-    H_rms_error = jnp.sqrt(jnp.mean((pred_H_inv_transf - H_future_inv_transf) ** 2 * abs_dB_future, axis=1))  #
+    H_rms_error = jnp.sqrt(jnp.mean((pred_H_inv_transf - H_future_inv_transf ) ** 2 * abs_dB_future, axis=1))  #
     H_rms_norm = H_rms_error / batch_H_rms_norm
-    return jnp.mean(H_rms_norm)
+    loss = jnp.mean(H_rms_norm)
+    loss = jnp.nan_to_num(loss, nan=0.0, posinf=1e7, neginf=-1e7)
+    return loss
 
 
 @eqx.filter_jit
@@ -72,6 +76,9 @@ def make_step(
 ):
     # loss, grads = compute_MSE_loss(model, B_past, H_past, B_future, H_future, T)  # , f
     loss, grads = compute_adapted_RMS_loss(model, B_past, H_past, B_future, H_future, T, batch_H_rms)
+   
+    grads = jax.tree_map(lambda g: jnp.nan_to_num(g, nan=0.0, posinf=1.0, neginf=-1.0), grads)
+
     updates, opt_state = optim.update(grads, opt_state)
     model = eqx.apply_updates(model, updates)
     return loss, model, opt_state
@@ -439,6 +446,11 @@ def train_model(
         "start_time": str(pd.Timestamp.now().round(freq="s")),
     }
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
+
+    # options = ocp.CheckpointManagerOptions(max_to_keep=3, create=True)
+    # manager = ocp.CheckpointManager(
+    #     checkpoint_dir, ocp.PyTreeCheckpointer(), options
+    # )
 
     test_loss, *_ = val_test(test_set, model, past_size)  # test_set_norm
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")

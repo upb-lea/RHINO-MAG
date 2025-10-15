@@ -129,7 +129,7 @@ def setup_model(
 
     lr_schedule = optax.schedules.exponential_decay(**params["lr_params"])
     optimizer = optax.adam(lr_schedule)
-
+    
     wrapped_model = mdl_interface_cls(
         model=model,
         normalizer=normalizer,
