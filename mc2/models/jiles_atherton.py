@@ -107,7 +107,7 @@ class JilesAthertonStatic(eqx.Module):
 
         B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
         _, H_seq = jax.lax.scan(body_fun, H0, B_pairs)
-        #H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
         return H_seq
 
 
@@ -231,7 +231,7 @@ class JilesAthertonStatic2(eqx.Module):
 
         B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
         _, H_seq = jax.lax.scan(body_fun, H0, B_pairs)
-        #H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
         return H_seq
 
 
@@ -248,10 +248,8 @@ class JilesAthertonWithGRU(eqx.Module):
 
     def __init__(self, key, in_size, hidden_size=8, **kwargs):
         ja_key, gru_key = jax.random.split(key, 2)
-        #self.ja = JilesAthertonStatic(ja_key, **kwargs)
-        self.ja = load_model(
-            MODEL_DUMP_ROOT / "4ec8f810-298b-49.eqx", JilesAthertonStatic
-        )
+        # self.ja = JilesAthertonStatic(ja_key, **kwargs)
+        self.ja = load_model(MODEL_DUMP_ROOT / "4ec8f810-298b-49.eqx", JilesAthertonStatic)
         self.gru = GRU(in_size, hidden_size=hidden_size, key=gru_key)
 
 
@@ -289,7 +287,7 @@ class JilesAthertonGRUlin(eqx.Module):
         h0 = jnp.zeros(self.gru.hidden_size)
 
         (_, _), H_seq = jax.lax.scan(body_fun, (H0, h0), inputs)
-        #H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
         return H_seq
 
 
@@ -303,7 +301,7 @@ class JilesAthertonGRU(eqx.Module):
         self.ja = load_model(
             MODEL_DUMP_ROOT / "4ec8f810-298b-49.eqx", JilesAthertonStatic
         )  # using pretrained ja model # b8d1fe17-2f6f-40,
-        #self.ja = JilesAthertonStatic(ja_key, **kwargs)
+        # self.ja = JilesAthertonStatic(ja_key, **kwargs)
         self.gru = GRU(in_size=in_size, hidden_size=hidden_size, key=gru_key)
         self.normalizer = normalizer
 
@@ -326,7 +324,7 @@ class JilesAthertonGRU(eqx.Module):
         inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:])  # features_seq[:-1] # 1:]
 
         (_, _), H_seq = jax.lax.scan(body_fun, (H0, init_hidden), inputs)
-        #H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
         return H_seq
 
     def warmup_call(self, H0, B_seq, features_seq, init_hidden, H_true):
@@ -338,7 +336,7 @@ class JilesAthertonGRU(eqx.Module):
             H_next_phys_norm = self.normalizer.normalize_H(H_next_phys)
             gru_in = jnp.concatenate([jnp.array([H_next_phys_norm]), feat_next])
             h_gru_new = self.gru.cell(gru_in, h_gru)
-            h_gru_new.at[0].set(self.normalizer.normalize_H(h_true-H_next_phys))
+            h_gru_new = h_gru_new.at[0].set(self.normalizer.normalize_H(h_true - H_next_phys))
             delta_H_norm = h_gru_new[0]
             delta_H = self.normalizer.denormalize_H(jnp.squeeze(delta_H_norm))
             H_next = H_next_phys + delta_H
@@ -349,5 +347,86 @@ class JilesAthertonGRU(eqx.Module):
         inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:], H_true)  # features_seq[:-1] # 1:]
 
         (_, final_hidden), H_seq = jax.lax.scan(body_fun, (H0, init_hidden), inputs)
-        #H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        return H_seq, final_hidden
+
+
+class JilesAthertonDynamic(JilesAthertonStatic):
+    param_scale: jax.Array
+
+    def __init__(self, base_model: JilesAthertonStatic, param_scale):
+        self.Ms_param = base_model.Ms_param
+        self.a_param = base_model.a_param
+        self.alpha_param = base_model.alpha_param
+        self.k_param = base_model.k_param
+        self.c_param = base_model.c_param
+        self.mu_0 = base_model.mu_0
+        self.tau = base_model.tau
+        self.param_scale = param_scale
+
+    @property
+    def Ms(self):
+        return 6e6 * jax.nn.sigmoid(self.Ms_param) * self.param_scale[0]
+
+    @property
+    def a(self):
+        return 2000 * jax.nn.sigmoid(self.a_param) * self.param_scale[1]
+
+    @property
+    def alpha(self):
+        return 1e-2 * jax.nn.sigmoid(self.alpha_param) * self.param_scale[2]
+
+    @property
+    def k(self):
+        return 1000.0 * jax.nn.sigmoid(self.k_param) * self.param_scale[3]
+
+    @property
+    def c(self):
+        return jax.nn.sigmoid(self.c_param) * self.param_scale[4]
+
+
+class JilesAthertonParamGRUlin(eqx.Module):
+    ja: JilesAthertonStatic = eqx.field(static=True)
+    gru: GRUwLinear
+    normalizer: eqx.Module = eqx.field(static=True)
+
+    def __init__(self, normalizer, key, in_size, hidden_size=8):
+        ja, gru_key = jax.random.split(key, 2)
+        self.ja = load_model(MODEL_DUMP_ROOT / "4ec8f810-298b-49.eqx", JilesAthertonStatic)
+        self.gru = GRUwLinear(in_size=in_size, out_size=5, hidden_size=hidden_size, key=gru_key)
+        self.normalizer = normalizer
+
+    def __call__(self, H0, B_seq, features_seq, init_hidden):
+        def body_fun(carry, inputs):
+            H_prev, h_gru = carry
+            B_prev, B_next, feat_next = inputs
+
+            gru_in = jnp.concatenate([jnp.array([H_prev]), feat_next])
+            h_gru_new = self.gru.cell(gru_in, h_gru)
+            raw_scales = self.gru.linear(h_gru_new) + self.gru.bias
+            param_scale = 1.0 + jnp.tanh(raw_scales)
+
+            ja_dyn = JilesAthertonDynamic(self.ja, param_scale)
+
+            H_next, _ = ja_dyn.step(H_prev, B_prev, B_next)
+
+            return (H_next, h_gru_new), H_next
+
+        B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
+        inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:])
+        (_, _), H_seq = jax.lax.scan(body_fun, (H0, init_hidden), inputs)
+        return H_seq
+
+    def warmup_call(self, H0, B_seq, features_seq, init_hidden, H_true):
+        def body_fun(carry, inputs):
+            H_prev, h_gru = carry
+            B_prev, B_next, feat_next, h_true = inputs
+
+            gru_in = jnp.concatenate([jnp.array([H_prev]), feat_next])
+            h_gru_new = self.gru.cell(gru_in, h_gru)
+            return (h_true, h_gru_new), h_true
+
+        B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
+        inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:], H_true)
+        (_, final_hidden), H_seq = jax.lax.scan(body_fun, (H0, init_hidden), inputs)
         return H_seq, final_hidden
