@@ -338,9 +338,10 @@ class JAwGRUwInterface(ModelInterface):
         batch_x = jnp.concatenate(
             [batch_H_pred_norm_ja[..., None], T_norm_broad[..., None], features_norm], axis=-1
         )
-        init_hidden = jnp.hstack(
-            [jnp.zeros((H_past_norm.shape[0], self.model.gru.hidden_size - 1)), H_past_norm[:, -1, None]]
-        )
+        # init_hidden = jnp.hstack(
+        #     [jnp.zeros((H_past_norm.shape[0], self.model.gru.hidden_size - 1)), H_past_norm[:, -1, None]]
+        # )
+        init_hidden = jnp.zeros((H_past_norm.shape[0], self.model.gru.hidden_size))
         batch_H_diff_pred = jax.vmap(self.model.gru)(batch_x, init_hidden)
 
         return batch_H_pred_norm_ja + batch_H_diff_pred[:, :, 0]
@@ -439,7 +440,6 @@ class JAGRUwInterface(ModelInterface):
         T_norm_broad = jnp.broadcast_to(T_norm[:, None], B_future_norm.shape)
 
         batch_x = jnp.concatenate([T_norm_broad[..., None], features_norm], axis=-1)
-        print(batch_x.shape)
         init_hidden = jnp.zeros((H_past_norm.shape[0], self.model.gru.hidden_size))
 
         def single_batch(H0_i, B_future_i, features_i, init_hidden_i):
