@@ -8,7 +8,7 @@ from mc2.data_management import MaterialSet, FrequencySet, load_data_into_pandas
 from mc2.models.model_interface import ModelInterface, NODEwInterface, RNNwInterface, JAwGRUwInterface, JAwInterface, JAGRUwInterface
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU
-from mc2.models.jiles_atherton import JilesAthertonStatic, JilesAthertonWithGRU, JilesAthertonGRUlin, JilesAthertonGRU,JilesAthertonStatic2
+from mc2.models.jiles_atherton import JilesAthertonStatic, JilesAthertonWithGRU, JilesAthertonGRUlin, JilesAthertonGRU,JilesAthertonStatic2, JilesAthertonParamGRUlin
 from mc2.data_management import Normalizer
 
 SUPPORTED_MODELS = ["GRU", "HNODE"]  # TODO: ["EulerNODE", "HNODE", "GRU"]
@@ -92,6 +92,10 @@ def setup_model(
         case "JAGRU":
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = JilesAthertonGRU(normalizer=normalizer,**model_params_d)
+            mdl_interface_cls = JAGRUwInterface
+        case "JAParamGRUlin":
+            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
+            model = JilesAthertonParamGRUlin(normalizer=normalizer,**model_params_d)
             mdl_interface_cls = JAGRUwInterface
         case "JA":
             model_params_d= dict(key=model_key)
