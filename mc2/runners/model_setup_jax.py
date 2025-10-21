@@ -5,10 +5,10 @@ import optax
 import equinox as eqx
 from mc2.features.features_jax import compute_fe_single
 from mc2.data_management import MaterialSet, FrequencySet, load_data_into_pandas_df
-from mc2.models.model_interface import ModelInterface, NODEwInterface, RNNwInterface, JAwGRUwInterface, JAwInterface, JAGRUwInterface
+from mc2.models.model_interface import ModelInterface, NODEwInterface, RNNwInterface, JAwInterface, JAParamMLPwInterface, JAWithGRUwInterface, JAWithExternGRUwInterface
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU
-from mc2.models.jiles_atherton import JilesAthertonStatic, JilesAthertonWithGRU, JilesAthertonGRUlin, JilesAthertonGRU,JilesAthertonStatic2, JilesAthertonParamGRUlin
+from mc2.models.jiles_atherton import JAStatic, JAStatic2, JAParamGRUlin, JAParamMLP,JAWithExternGRU,JAWithGRU,JAWithGRUlin,JAWithGRUlinFinal
 from mc2.data_management import Normalizer
 
 SUPPORTED_MODELS = ["GRU", "HNODE"]  # TODO: ["EulerNODE", "HNODE", "GRU"]
@@ -81,29 +81,37 @@ def setup_model(
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
-        case "JA_with_GRU":
+        case "JAWithExternGRU":
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
-            model = JilesAthertonWithGRU(**model_params_d)
-            mdl_interface_cls = JAwGRUwInterface
-        case "JAGRUlin":
+            model = JAWithExternGRU(**model_params_d)
+            mdl_interface_cls = JAWithExternGRUwInterface
+        case "JAWithGRUlin":
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
-            model = JilesAthertonGRUlin(normalizer=normalizer,**model_params_d)
-            mdl_interface_cls = JAGRUwInterface
-        case "JAGRU":
+            model = JAWithGRUlin(normalizer=normalizer,**model_params_d)
+            mdl_interface_cls = JAWithGRUwInterface
+        case "JAWithGRUlinFinal":
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
-            model = JilesAthertonGRU(normalizer=normalizer,**model_params_d)
-            mdl_interface_cls = JAGRUwInterface
+            model = JAWithGRUlinFinal(normalizer=normalizer,**model_params_d)
+            mdl_interface_cls = JAWithGRUwInterface
+        case "JAWithGRU":
+            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
+            model = JAWithGRU(normalizer=normalizer,**model_params_d)
+            mdl_interface_cls = JAWithGRUwInterface
         case "JAParamGRUlin":
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
-            model = JilesAthertonParamGRUlin(normalizer=normalizer,**model_params_d)
-            mdl_interface_cls = JAGRUwInterface
+            model = JAParamGRUlin(normalizer=normalizer,**model_params_d)
+            mdl_interface_cls = JAWithGRUwInterface
+        case "JAParamMLP":
+            model_params_d = dict(hidden_size=32, depth=2,in_size=7, key=model_key)
+            model = JAParamMLP(normalizer=normalizer,**model_params_d)
+            mdl_interface_cls = JAParamMLPwInterface
         case "JA":
             model_params_d= dict(key=model_key)
-            model = JilesAthertonStatic(key=model_key)
+            model = JAStatic(key=model_key)
             mdl_interface_cls = JAwInterface
         case "JA2":
             model_params_d= dict(key=model_key)
-            model = JilesAthertonStatic2(key=model_key)
+            model = JAStatic2(key=model_key)
             mdl_interface_cls = JAwInterface
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
