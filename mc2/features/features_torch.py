@@ -43,7 +43,7 @@ class Featurizer:
 
         # for each time series matrix, for each feature, extend min and max
         for data_B_MN, data_T_MI in data_MN_l:
-            featurized_data_MN_l = self.add_fe(data_B_MN, with_original=True, temperature_MI=data_T_MI)
+            featurized_data_MN_l, _ = self.add_fe(data_B_MN, with_original=True, temperature_MI=data_T_MI)
             if self.norm_consts_BP is None:
                 self.norm_consts_BP = torch.zeros((2, self.n_inputs), dtype=torch.float32)
             for i, feat_data_MN in enumerate(featurized_data_MN_l):
@@ -81,7 +81,7 @@ class Featurizer:
         - PWM of b (sign of db/dt)
 
         :param data: m x n array (m sequences of length n)
-        :return: list of 2d tensors
+        :return: 2-tuple: list of 2d tensors, and dbdt tensor MxN
         """
         assert data_MN.ndim == 2, "Input must be a 2D array (m x n)"
         db_dt_MN = torch.gradient(data_MN, dim=1)[0]  # db/dt
@@ -106,7 +106,7 @@ class Featurizer:
             fe_l.append(temperature_MI.repeat(1, data_MN.shape[1])[..., None])
         if self.n_inputs is None:
             self.n_inputs = len(fe_l)
-        return fe_l
+        return fe_l, db_dt_MN
 
 
 # Source: https://github.com/pytorch/pytorch/issues/50334
@@ -151,3 +151,19 @@ def interp(
     values = m.ravel()[indices] * x + b.ravel()[indices]
 
     return values.movedim(-1, dim)
+
+class MC2Loss(torch.nn.Module):
+    """Custom loss function for the Magnet Challenge 2.
+    This computes the RMSE, but all timesteps are weighted by db/dt and all whole time series are weighted by the RMSE of the H ground truth.
+    These weightings are to accommodate the competition metrics, sequence relative error and normalized energy relative error."""
+    def __init__(self):
+        super().__init__()
+        self.mse_loss_fn = torch.nn.MSELoss(reduction="none")
+
+    def forward(self, pred: torch.Tensor, target: torch.Tensor, dbdt: torch.Tensor) -> torch.Tensor:
+        pred_mse_BQ = self.mse_loss_fn(pred, target)
+        H_rmse_B = torch.sqrt((target.squeeze()**2).mean(dim=1))
+        abs_dbdt_BQ = torch.abs(dbdt)
+        weighted_pred_rmse_B = torch.sqrt((pred_mse_BQ * abs_dbdt_BQ).mean(dim=1))
+        weighted_pred_rmse_B = weighted_pred_rmse_B / (H_rmse_B + 1e-12)
+        return weighted_pred_rmse_B.mean()  # mean over batch
