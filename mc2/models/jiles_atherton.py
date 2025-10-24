@@ -442,10 +442,10 @@ class JADynamic(JAStatic):
 
 class JAParamGRUlin(eqx.Module):
     """
-    Dynamic scaling of Jiles-Atherton parameters via GRU.
+    Dynamic scaling of Jiles-Atherton parameters via GRU + linear layer.
 
     Each timestep:
-        1. GRU predicts parameter scaling factors.
+        1. GRU + linear layer predicts parameter scaling factors.
         2. The scaled JA model is applied to compute the next H-field.
     """
     ja: JAStatic = eqx.field(static=True)
@@ -480,6 +480,7 @@ class JAParamGRUlin(eqx.Module):
         return H_seq
 
     def warmup_call(self, H0, B_seq, features_seq, init_hidden, H_true):
+        
         def body_fun(carry, inputs):
             H_prev, h_gru = carry
             B_prev, B_next, feat_next, h_true = inputs
@@ -491,6 +492,8 @@ class JAParamGRUlin(eqx.Module):
         B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
         inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:], H_true)
         (_, final_hidden), H_seq = jax.lax.scan(body_fun, (H0, init_hidden), inputs)
+        #does not work well therefore just using default init_hidden
+        final_hidden=init_hidden
         return H_seq, final_hidden
 
 class JAParamMLP(eqx.Module):
@@ -501,7 +504,7 @@ class JAParamMLP(eqx.Module):
         1. MLP predicts parameter scaling factors from H-field and features.
         2. The scaled JA model is applied to compute the next H-field.
     """
-    ja: JAStatic #= eqx.field(static=True)
+    ja: JAStatic = eqx.field(static=True)
     mlp:eqx.nn.MLP
     normalizer: eqx.Module = eqx.field(static=True)
 

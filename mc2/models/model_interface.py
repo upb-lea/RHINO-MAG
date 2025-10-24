@@ -348,6 +348,8 @@ class JAWithExternGRUwInterface(ModelInterface):
 
         B_all_norm = jnp.concatenate([B_past_norm, B_future_norm], axis=1)
         B_all, H_past, T = self.normalizer.denormalize(B_all_norm, H_past_norm, T_norm)
+
+        B_past_norm_plus= B_all_norm[:,: B_past_norm.shape[1]+1]
         B_past = B_all[:, : B_past_norm.shape[1]]
         B_curr_and_future = B_all[:, B_past_norm.shape[1] - 1 :]
         H0_past = H_past[:, 0]
@@ -359,7 +361,8 @@ class JAWithExternGRUwInterface(ModelInterface):
         batch_H_pred = jax.vmap(single_batch_warmup)(H0_past, B_past)
         batch_H_pred_norm_ja = jax.vmap(jax.vmap(self.normalizer.normalize_H))(batch_H_pred)
 
-        features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(B_past_norm, H_past_norm, B_past_norm, T_norm)
+        features_plus = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(B_past_norm, H_past_norm, B_past_norm_plus, T_norm)
+        features = features_plus[:,:-1]
         features_norm = jax.vmap(jax.vmap(self.normalizer.normalize_fe))(features)
 
         T_norm_broad = jnp.broadcast_to(T_norm[:, None], B_past_norm.shape)
@@ -372,6 +375,9 @@ class JAWithExternGRUwInterface(ModelInterface):
         _, final_hidden_warmup = jax.vmap(self.model.gru.warmup_call)(
             batch_x, init_hidden, H_past_norm[:, 1:] - batch_H_pred_norm_ja
         )
+        # _, final_hidden_warmup = jax.vmap(self.model.gru.warmup_call)(
+        #     batch_x, init_hidden, jnp.zeros_like(H_past_norm[:, 1:] - batch_H_pred_norm_ja)
+        # )
 
         B_all_norm = jnp.concatenate([B_past_norm, B_future_norm], axis=1)
         B_all, H_past, T = self.normalizer.denormalize(B_all_norm, H_past_norm, T_norm)
@@ -420,7 +426,7 @@ class JAWithGRUwInterface(ModelInterface):
         B_past_norm = B_all_norm[:, : B_past.shape[1]]
         B_future_norm = B_all_norm[:, B_past.shape[1] :]
 
-        batch_H_pred_norm = self.normalized_call(B_past_norm, H_past_norm, B_future_norm, T_norm) # normalized_warmup_call seems to be not benficial here -> Bug?
+        batch_H_pred_norm = self.normalized_warmup_call(B_past_norm, H_past_norm, B_future_norm, T_norm) # normalized_warmup_call seems to be not benficial here -> Bug?
 
         batch_H_pred_denorm = jax.vmap(jax.vmap(self.normalizer.denormalize_H))(batch_H_pred_norm)
         return batch_H_pred_denorm
@@ -451,11 +457,13 @@ class JAWithGRUwInterface(ModelInterface):
         B_all_norm = jnp.concatenate([B_past_norm, B_future_norm], axis=1)
         B_all, H_past, T = self.normalizer.denormalize(B_all_norm, H_past_norm, T_norm)
 
+        B_past_norm_plus= B_all_norm[:,: B_past_norm.shape[1]+1]
         B_past = B_all[:, : B_past_norm.shape[1]]
         B_curr_and_future = B_all[:, B_past_norm.shape[1] - 1 :]
         H0_past = H_past[:, 0]
 
-        features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(B_past_norm, H_past_norm, B_past_norm, T_norm)
+        features_plus = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(B_past_norm, H_past_norm, B_past_norm_plus, T_norm)
+        features = features_plus[:,:-1]
         features_norm = jax.vmap(jax.vmap(self.normalizer.normalize_fe))(features)
         T_norm_broad = jnp.broadcast_to(T_norm[:, None], B_past_norm.shape)
 
