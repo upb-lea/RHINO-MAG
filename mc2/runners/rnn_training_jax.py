@@ -4,14 +4,14 @@ from copy import deepcopy
 import logging as log
 import os
 
-#os.environ["JAX_PLATFORMS"] = "cpu"
-#os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+# os.environ["JAX_PLATFORMS"] = "cpu"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
 
 jax.config.update("jax_enable_x64", True)
-#jax.config.update("jax_debug_nans", True)
+# jax.config.update("jax_debug_nans", True)
 # jax.config.update("jax_log_compiles", True)
 
 import jax.numpy as jnp
@@ -74,7 +74,7 @@ def main():
     if args.gpu_id != -1:
         gpus = jax.devices()
         jax.config.update("jax_default_device", gpus[args.gpu_id])
-    #jax.config.update("jax_platform_name", "cpu")
+    # jax.config.update("jax_platform_name", "cpu")
 
     # setup
     seed = 0

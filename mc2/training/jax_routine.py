@@ -55,7 +55,7 @@ def compute_adapted_RMS_loss(
     pred_H_inv_transf = model.normalizer.H_inverse_transform(pred_H)  # denormalize prediction coz of tanh at the output
     H_future_inv_transf = model.normalizer.H_inverse_transform(H_future)
     batch_H_rms_norm = batch_H_rms / model.normalizer.H_max
-    H_rms_error = jnp.sqrt(jnp.mean((pred_H_inv_transf - H_future_inv_transf ) ** 2 * abs_dB_future, axis=1))  #
+    H_rms_error = jnp.sqrt(jnp.mean((pred_H_inv_transf - H_future_inv_transf) ** 2 * abs_dB_future, axis=1))  #
     H_rms_norm = H_rms_error / batch_H_rms_norm
     loss = jnp.mean(H_rms_norm)
     loss = jnp.nan_to_num(loss, nan=0.0, posinf=1e7, neginf=-1e7)
@@ -76,7 +76,7 @@ def make_step(
 ):
     # loss, grads = compute_MSE_loss(model, B_past, H_past, B_future, H_future, T)  # , f
     loss, grads = compute_adapted_RMS_loss(model, B_past, H_past, B_future, H_future, T, batch_H_rms)
-   
+
     grads = jax.tree_map(lambda g: jnp.nan_to_num(g, nan=0.0, posinf=1.0, neginf=-1.0), grads)
 
     updates, opt_state = optim.update(grads, opt_state)
