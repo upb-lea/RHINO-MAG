@@ -1,12 +1,14 @@
-from typing import Callable, Dict
+from typing import Callable
+
 import jax
 import jax.numpy as jnp
-import optax
 import equinox as eqx
+import optax
+
+from mc2.losses import MSE_loss, adapted_RMS_loss
 from mc2.features.features_jax import compute_fe_single
-from mc2.data_management import MaterialSet, FrequencySet, load_data_into_pandas_df
+from mc2.data_management import MaterialSet, load_data_into_pandas_df
 from mc2.models.model_interface import (
-    ModelInterface,
     NODEwInterface,
     RNNwInterface,
     JAwInterface,
@@ -28,7 +30,10 @@ from mc2.models.jiles_atherton import (
 )
 from mc2.data_management import Normalizer
 
+
 SUPPORTED_MODELS = ["GRU", "HNODE"]  # TODO: ["EulerNODE", "HNODE", "GRU"]
+
+SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
 
 
 def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: int, do_normalization: bool):
@@ -165,3 +170,19 @@ def setup_model(
     params["model_params"]["key"] = params["model_params"]["key"].tolist()
 
     return wrapped_model, optimizer, params, data_tuple
+
+
+def setup_loss(loss_label: str) -> Callable:
+
+    match loss_label:
+        case "MSE":
+            loss_function = MSE_loss
+        case "adapted_RMS":
+            loss_function = adapted_RMS_loss
+        case _:
+            raise ValueError(f"Unknown loss type: {loss_label}. Choose on of {SUPPORTED_LOSSES}")
+
+    # loss function is expected to return the value and the gradient w.r.t. to the model parameters
+    loss_function = eqx.filter_value_and_grad(loss_function)
+
+    return loss_function

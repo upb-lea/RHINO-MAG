@@ -22,7 +22,7 @@ from uuid import uuid4
 
 from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
-from mc2.runners.model_setup_jax import setup_model, SUPPORTED_MODELS
+from mc2.runners.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.models.model_interface import save_model
 
@@ -41,6 +41,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         required=True,
         help=f"Model type to train with. One of {SUPPORTED_MODELS}",
+    )
+    parser.add_argument(
+        "--loss_type",
+        default="adapted_RMS",
+        required=False,
+        help=f"Loss type to train with. One of {SUPPORTED_LOSSES}",
     )
     parser.add_argument(
         "--gpu_id",
@@ -95,9 +101,13 @@ def main():
         batch_size=args.batch_size,
         tbptt_size_start=args.tbptt_size_start,
     )
+
+    loss_function = setup_loss(args.loss_type)
+
     # run training
     logs, model = train_model(
         model=wrapped_model,
+        loss_function=loss_function,
         optimizer=optimizer,
         material_name=args.material,
         data_tuple=data_tuple,
