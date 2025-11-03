@@ -104,6 +104,9 @@ def main():
 
     loss_function = setup_loss(args.loss_type)
 
+    exp_id = f"{args.material}_{args.model_type}_{str(uuid4())[:16]}"
+    log.info(f"Training starting. Experiment ID is {exp_id}.")
+
     # run training
     logs, model = train_model(
         model=wrapped_model,
@@ -118,7 +121,6 @@ def main():
     train_set, val_set, test_set = data_tuple
     log.info("Training done. Proceeding with evaluation..")
 
-    exp_id = str(uuid4())[:16]
     eval_metrics = evaluate_model_on_test_set(model, test_set)
 
     log.info("Evaluation done. Proceeding with storing experiment data..")
