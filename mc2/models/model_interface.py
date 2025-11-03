@@ -249,12 +249,19 @@ def load_model(filename: str | pathlib.Path, model_class: Type[ModelInterface]):
         return eqx.tree_deserialise_leaves(f, model)
 
 
+def count_model_parameters(model: ModelInterface) -> int:
+    """Returns the number of Parameters in the model by summing the sizes of the jax.Arrays.
+    That is, all parameters of the model must be jax.Arrays for this function to work!
+    """
+    return sum([p.size for p in jax.tree_leaves(eqx.filter(model, eqx.is_inexact_array, None))])
+
+
 from typing import Callable
 
 
 class JAwInterface(ModelInterface):
     model: eqx.Module
-    normalizer: eqx.Module
+    normalizer: Normalizer
     featurize: Callable = eqx.field(static=True)
 
     def __call__(self, B_past, H_past, B_future, T):
@@ -293,7 +300,7 @@ class JAwInterface(ModelInterface):
 
 class JAWithExternGRUwInterface(ModelInterface):
     model: eqx.Module
-    normalizer: eqx.Module
+    normalizer: Normalizer
     featurize: Callable = eqx.field(static=True)
 
     def __call__(self, B_past, H_past, B_future, T):
@@ -410,7 +417,7 @@ class JAWithExternGRUwInterface(ModelInterface):
 
 class JAWithGRUwInterface(ModelInterface):
     model: eqx.Module
-    normalizer: eqx.Module
+    normalizer: Normalizer
     featurize: Callable = eqx.field(static=True)
 
     def __call__(self, B_past, H_past, B_future, T):
@@ -502,7 +509,7 @@ class JAWithGRUwInterface(ModelInterface):
 
 class JAParamMLPwInterface(ModelInterface):
     model: eqx.Module
-    normalizer: eqx.Module
+    normalizer: Normalizer
     featurize: Callable = eqx.field(static=True)
 
     def __call__(self, B_past, H_past, B_future, T):
