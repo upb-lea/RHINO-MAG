@@ -10,6 +10,43 @@ from mc2.runners.model_setup_jax import setup_model
 from mc2.models.model_interface import load_model
 
 
+def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | list[str] | None = None):
+    model_paths = list(MODEL_DUMP_ROOT.glob("*.eqx"))
+    exp_ids = [model_path.stem for model_path in model_paths]
+
+    if material_name is None:
+        relevant_exp_ids = exp_ids
+    elif isinstance(material_name, str):
+        relevant_exp_ids = [exp_id for exp_id in exp_ids if exp_id.split("_")[0] == material_name]
+    elif isinstance(material_name, list):
+        relevant_exp_ids = [exp_id for exp_id in exp_ids if exp_id.split("_")[0] in material_name]
+    else:
+        raise ValueError("'material_name' needs to be a string, list of strings, or None.")
+
+    exp_ids = relevant_exp_ids
+
+    if model_type is None:
+        relevant_exp_ids = exp_ids
+    elif isinstance(model_type, str):
+        relevant_exp_ids = []
+        for exp_id in exp_ids:
+            if len(exp_id.split("_")) < 2:
+                continue
+            elif exp_id.split("_")[1] == model_type:
+                relevant_exp_ids.append(exp_id)
+    elif isinstance(model_type, list):
+        relevant_exp_ids = []
+        for exp_id in exp_ids:
+            if len(exp_id.split("_")) < 2:
+                continue
+            elif exp_id.split("_")[1] in model_type:
+                relevant_exp_ids.append(exp_id)
+    else:
+        raise ValueError("'model_type' needs to be a string, list of strings, or None.")
+
+    return relevant_exp_ids
+
+
 def reconstruct_model_from_exp_id(exp_id):
     material_name = exp_id.split("_")[0]
     model_type = exp_id.split("_")[1]
