@@ -111,6 +111,7 @@ class FrequencySet(eqx.Module):
         H (jax.Array): Magnetic field strength data in shape (n_sequences, sequence_length).
         B (jax.Array): Magnetic flux density data in space (n_sequences, sequence_length).
         T (jax.Array): Temperature data in shape (n_sequences).
+        H_RMS (jax.Array): RMS value of each sequence (n_sequences).
     """
 
     material_name: str
