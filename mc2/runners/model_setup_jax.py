@@ -31,7 +31,7 @@ from mc2.models.jiles_atherton import (
 from mc2.data_management import Normalizer
 
 
-SUPPORTED_MODELS = ["GRU", "HNODE"]  # TODO: ["EulerNODE", "HNODE", "GRU"]
+SUPPORTED_MODELS = ["GRU", "HNODE", "JA"]
 
 SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
 
