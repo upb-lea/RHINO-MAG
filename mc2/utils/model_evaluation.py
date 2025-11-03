@@ -2,19 +2,41 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from mc2.data_management import EXPERIMENT_LOGS_ROOT
+import jax
+import equinox as eqx
+
+from mc2.data_management import EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT
+from mc2.runners.model_setup_jax import setup_model
+from mc2.models.model_interface import load_model
 
 
-def load_gt_and_pred(exp_id, material_name, seed, freq_idx):
-    gt = EXPERIMENT_LOGS_ROOT / f"{material_name}_{exp_id}/seed_{seed}_seq_{freq_idx}_gt.parquet"
-    pred = EXPERIMENT_LOGS_ROOT / f"{material_name}_{exp_id}/seed_{seed}_seq_{freq_idx}_preds.parquet"
+def reconstruct_model_from_exp_id(exp_id):
+    material_name = exp_id.split("_")[0]
+    model_type = exp_id.split("_")[1]
+
+    fresh_wrapped_model, _, params, (train_set, val_set, test_set) = setup_model(
+        model_label=model_type,
+        material_name=material_name,
+        model_key=jax.random.PRNGKey(0),
+    )
+
+    model_path = MODEL_DUMP_ROOT / f"{exp_id}.eqx"
+    model = load_model(model_path, type(fresh_wrapped_model.model))
+
+    wrapped_model = eqx.tree_at(lambda t: t.model, fresh_wrapped_model, model)
+    return wrapped_model
+
+
+def load_gt_and_pred(exp_id, seed, freq_idx):
+    gt = EXPERIMENT_LOGS_ROOT / f"{exp_id}/seed_{seed}_seq_{freq_idx}_gt.parquet"
+    pred = EXPERIMENT_LOGS_ROOT / f"{exp_id}/seed_{seed}_seq_{freq_idx}_preds.parquet"
     gt = pd.read_parquet(gt).to_numpy()
     pred = pd.read_parquet(pred).to_numpy()
     return gt, pred
 
 
-def plot_loss_trends(exp_id, material_name, seed):
-    loss_trend = EXPERIMENT_LOGS_ROOT / f"{material_name}_{exp_id}/seed_{seed}_loss_trends.parquet"
+def plot_loss_trends(exp_id, seed):
+    loss_trend = EXPERIMENT_LOGS_ROOT / f"{exp_id}/seed_{seed}_loss_trends.parquet"
     loss_train_val = pd.read_parquet(loss_trend).to_numpy()
 
     epochs = np.arange(1, len(loss_train_val) + 1)
@@ -46,14 +68,14 @@ def plot_loss_trends(exp_id, material_name, seed):
     return fig, axes
 
 
-def load_and_plot_worst_predictions(exp_id, material_name, seed, freq_idx):
-    gt, pred = load_gt_and_pred(exp_id, material_name, seed, freq_idx)
+def load_and_plot_worst_predictions(exp_id, seed, freq_idx):
+    gt, pred = load_gt_and_pred(exp_id, seed, freq_idx)
     fig, axes = plot_first_predictions(gt, pred)
     return fig, axes
 
 
-def load_and_plot_first_prediction(exp_id, material_name, seed, freq_idx):
-    gt, pred = load_gt_and_pred(exp_id, material_name, seed, freq_idx)
+def load_and_plot_first_prediction(exp_id, seed, freq_idx):
+    gt, pred = load_gt_and_pred(exp_id, seed, freq_idx)
     fig, axes = plot_first_predictions(gt, pred)
     return fig, axes
 

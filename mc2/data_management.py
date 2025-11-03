@@ -747,7 +747,7 @@ def book_keeping(logs_d: Dict, exp_id: str = None):
         exp_id = str(uuid4())[:8]
     mat = logs_d.get("material", "unknown_material")
 
-    if exp_id.split()[0] == mat:
+    if exp_id.split("_")[0] == mat:
         # if the first part of the experiment ID is already the material name, skip adding it.
         logs_root = EXPERIMENT_LOGS_ROOT / exp_id
     else:
