@@ -14,7 +14,7 @@ from mc2.data_management import (
     get_train_val_test_pandas_dicts,
     setup_package_logging,
 )
-from mc2.features.features_torch import Featurizer
+from mc2.features.features_torch import Featurizer, MC2Loss
 from mc2.models.topologies_torch import DifferenceEqLayer, ExplEulerCell
 
 SUPPORTED_ARCHS = ["gru", "expleuler"]
@@ -22,11 +22,12 @@ DO_TRANSFORM_H = False
 H_FACTOR = 1.2
 
 
+
 @torch.no_grad()
 def evaluate_recursively(
     mdl: torch.nn.Module,
     tensors_d: Dict[str, Dict[str, torch.Tensor]],
-    loss: torch.nn.Module,
+    loss_fn: torch.nn.Module,
     featurizer: Featurizer,
     max_H: float,
     n_states: int,
@@ -40,9 +41,8 @@ def evaluate_recursively(
     preds_MS_l = []
     for (model_in_MS, temp_MI), h_MS in zip(tensors_d[set_lbl]["model_in_AS_l"], tensors_d[set_lbl][target_lbl]):
         # featurize
-        model_in_MSP = torch.dstack(
-            featurizer.normalize(featurizer.add_fe(model_in_MS, with_original=True, temperature_MI=temp_MI))
-        )
+        fe_l, dbdt_MS = featurizer.add_fe(model_in_MS, with_original=True, temperature_MI=temp_MI)
+        model_in_MSP = torch.dstack(featurizer.normalize(fe_l))
         M, S, P = model_in_MSP.shape
         hidden = h_MS[:, 0].reshape(1, M, 1)
         match model_arch:
@@ -70,7 +70,7 @@ def evaluate_recursively(
             val_pred_untransformed_MS = torch.atanh(torch.clip(val_pred_MSR[:, :, 0], -0.999, 0.999)) / H_FACTOR * max_H
         else:
             val_pred_untransformed_MS = val_pred_MSR[:, :, 0] * max_H
-        val_loss += loss(val_pred_untransformed_MS, h_MS * max_H).cpu().numpy()
+        val_loss += loss_fn(val_pred_untransformed_MS, h_MS * max_H, dbdt_MS).cpu().numpy()
         preds_MS_l += [val_pred_untransformed_MS]
     return val_loss / len(tensors_d[set_lbl]["model_in_AS_l"][0]), preds_MS_l
 
@@ -171,7 +171,7 @@ def train_recursive_nn(
 
         mdl = mdl.to(device)
         opt = torch.optim.Adam(mdl.parameters(), lr=1e-3)
-        loss = torch.nn.MSELoss()
+        loss_fn = MC2Loss()
 
         pbar = trange(n_epochs, desc=f"Seed {seed}", position=seed, unit="epoch")
 
@@ -202,20 +202,16 @@ def train_recursive_nn(
                     train_h_BS = train_shuff_h_AS[batch_start:batch_end]
 
                     # featurize
-                    train_BSP = torch.dstack(
-                        featurizer.normalize(featurizer.add_fe(train_BS, with_original=True, temperature_MI=temp_BI))
-                    )
-
+                    fe_l, dbdt_BS = featurizer.add_fe(train_BS, with_original=True, temperature_MI=temp_BI)
+                    train_BSP = torch.dstack(featurizer.normalize(fe_l))
                     B = len(train_BSP)
                     hidden_IBI = train_h_BS[:, 0].reshape(1, B, 1)
-                    """hidden_IBR = torch.cat(
-                        [hidden_IBI, torch.zeros((1, B, R - 1), dtype=torch.float32, device=device)], dim=2
-                    )"""
+
                     match model_arch:
                         case "gru":
                             hidden = torch.tile(
                                 hidden_IBI, (1, 1, R)
-                            )  # init hidden state with first H, shape (I, B, I)
+                            )  # init hidden state with first H, shape (I, B, R)
                         case "expleuler":
                             hidden = hidden_IBI.squeeze(0)  # init hidden state with first H, shape: (B, I)
 
@@ -227,7 +223,7 @@ def train_recursive_nn(
                         train_BQP = train_BSP[:, seq_start:seq_end, :]
                         train_h_BQ = train_h_BS[:, seq_start:seq_end]
                         output_BQR, hidden = mdl(train_BQP, hidden)
-                        train_loss = loss(output_BQR[:, :, 0], train_h_BQ)
+                        train_loss = loss_fn(output_BQR[:, :, 0], train_h_BQ, dbdt_BS[:, seq_start:seq_end])
                         train_loss.backward()
                         opt.step()
                         with torch.no_grad():
@@ -239,7 +235,7 @@ def train_recursive_nn(
             pbar_str = f"Loss {train_loss_avg_per_epoch:.2e}"
 
             val_loss, _ = evaluate_recursively(
-                mdl, tensors_d, loss, featurizer, max_d["H"], R, set_lbl="val", model_arch=model_arch
+                mdl, tensors_d, loss_fn, featurizer, max_d["H"], R, set_lbl="val", model_arch=model_arch
             )
             logs["loss_trends_val"].append(val_loss)
             pbar_str += f"| val loss {val_loss:.2e}"
@@ -248,7 +244,7 @@ def train_recursive_nn(
                 break
 
         test_loss, test_pred_MS_l = evaluate_recursively(
-            mdl, tensors_d, loss, featurizer, max_d["H"], R, set_lbl="test", model_arch=model_arch
+            mdl, tensors_d, loss_fn, featurizer, max_d["H"], R, set_lbl="test", model_arch=model_arch
         )
         log.info(f"Test loss seed {seed}: {test_loss:.3f} A/m")
         # book keeping

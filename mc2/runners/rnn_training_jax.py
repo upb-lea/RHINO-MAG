@@ -4,14 +4,14 @@ from copy import deepcopy
 import logging as log
 import os
 
-#os.environ["JAX_PLATFORMS"] = "cpu"
-#os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+# os.environ["JAX_PLATFORMS"] = "cpu"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
 
 jax.config.update("jax_enable_x64", True)
-#jax.config.update("jax_debug_nans", True)
+# jax.config.update("jax_debug_nans", True)
 # jax.config.update("jax_log_compiles", True)
 
 import jax.numpy as jnp
@@ -22,7 +22,7 @@ from uuid import uuid4
 
 from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
-from mc2.runners.model_setup_jax import setup_model, SUPPORTED_MODELS
+from mc2.runners.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.models.model_interface import save_model
 
@@ -41,6 +41,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         required=True,
         help=f"Model type to train with. One of {SUPPORTED_MODELS}",
+    )
+    parser.add_argument(
+        "--loss_type",
+        default="adapted_RMS",
+        required=False,
+        help=f"Loss type to train with. One of {SUPPORTED_LOSSES}",
     )
     parser.add_argument(
         "--gpu_id",
@@ -74,7 +80,7 @@ def main():
     if args.gpu_id != -1:
         gpus = jax.devices()
         jax.config.update("jax_default_device", gpus[args.gpu_id])
-    #jax.config.update("jax_platform_name", "cpu")
+    # jax.config.update("jax_platform_name", "cpu")
 
     # setup
     seed = 0
@@ -95,9 +101,16 @@ def main():
         batch_size=args.batch_size,
         tbptt_size_start=args.tbptt_size_start,
     )
+
+    loss_function = setup_loss(args.loss_type)
+
+    exp_id = f"{args.material}_{args.model_type}_{str(uuid4())[:16]}"
+    log.info(f"Training starting. Experiment ID is {exp_id}.")
+
     # run training
     logs, model = train_model(
         model=wrapped_model,
+        loss_function=loss_function,
         optimizer=optimizer,
         material_name=args.material,
         data_tuple=data_tuple,
@@ -108,7 +121,6 @@ def main():
     train_set, val_set, test_set = data_tuple
     log.info("Training done. Proceeding with evaluation..")
 
-    exp_id = str(uuid4())[:16]
     eval_metrics = evaluate_model_on_test_set(model, test_set)
 
     log.info("Evaluation done. Proceeding with storing experiment data..")

@@ -111,6 +111,7 @@ class FrequencySet(eqx.Module):
         H (jax.Array): Magnetic field strength data in shape (n_sequences, sequence_length).
         B (jax.Array): Magnetic flux density data in space (n_sequences, sequence_length).
         T (jax.Array): Temperature data in shape (n_sequences).
+        H_RMS (jax.Array): RMS value of each sequence (n_sequences).
     """
 
     material_name: str
@@ -745,7 +746,13 @@ def book_keeping(logs_d: Dict, exp_id: str = None):
     if exp_id is None:
         exp_id = str(uuid4())[:8]
     mat = logs_d.get("material", "unknown_material")
-    logs_root = EXPERIMENT_LOGS_ROOT / f"{mat}_{exp_id}"
+
+    if exp_id.split("_")[0] == mat:
+        # if the first part of the experiment ID is already the material name, skip adding it.
+        logs_root = EXPERIMENT_LOGS_ROOT / exp_id
+    else:
+        logs_root = EXPERIMENT_LOGS_ROOT / f"{mat}_{exp_id}"
+
     logs_root.mkdir(parents=True, exist_ok=True)
     # store predictions and ground truth
     for l_key, l_v in logs_d.items():
