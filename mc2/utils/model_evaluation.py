@@ -224,5 +224,8 @@ def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, f
         axs[0, freq_idx].set_xlabel("k")
         axs[1, freq_idx].set_xlabel("B")
 
+        axs[0, freq_idx].grid(True, alpha=0.3)
+        axs[1, freq_idx].grid(True, alpha=0.3)
+
     fig.tight_layout(pad=-0.2)
     return fig, axs
