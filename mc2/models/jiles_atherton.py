@@ -251,6 +251,125 @@ class JAStatic2(eqx.Module):
         return H_seq
 
 
+class JAStatic3(eqx.Module):
+    """
+    Jiles-Atherton hysteresis model with dynamic extensions from
+    "Hybrid magnetic field formulation based on the losses separation method for modified dynamic inverse Jiles-Atherton model".
+
+    Parameters:
+        Ms_param, a_param, alpha_param, k_param, c_param : Trainable model parameters
+        mu_0 : Vacuum permeability
+        tau : Time constant for numerical integration
+    """
+
+    Ms_param: jax.Array
+    a_param: jax.Array
+    alpha_param: jax.Array
+    k_param: jax.Array
+    c_param: jax.Array
+    C_edd_param: jax.Array
+    C_exc_param: jax.Array
+    mu_0: float = 4e-7 * jnp.pi
+    tau: float = 1 / 16e6
+
+    @property
+    def a(self):
+        return 2000 * jax.nn.sigmoid(self.a_param)
+
+    @property
+    def alpha(self):
+        return 1e-2 * jax.nn.sigmoid(self.alpha_param)
+
+    @property
+    def k(self):
+        return 1000.0 * jax.nn.sigmoid(self.k_param)
+
+    @property
+    def c(self):
+        return jax.nn.sigmoid(self.c_param)
+
+    @property
+    def Ms(self):
+        return 6e6 * jax.nn.sigmoid(self.Ms_param)
+
+    @property
+    def C_edd(self):
+        return jax.nn.sigmoid(self.C_edd_param)
+
+    @property
+    def C_exc(self):
+        return jax.nn.sigmoid(self.C_exc_param)
+
+    def __init__(self, key, **kwargs):
+        super().__init__(**kwargs)
+        k_key, alpha_key, c_key, Ms_key, a_key, C_edd_key, C_exc_key = jax.random.split(key, 7)
+        self.k_param = jax.random.uniform(k_key, ()) * 0.05 + 0.5
+        self.c_param = jax.random.uniform(c_key, ()) * 0.05 + 0.5
+        self.a_param = jax.random.uniform(a_key, ()) * 0.05 + 0.5
+        self.Ms_param = jax.random.uniform(Ms_key, ()) * 0.05 + 0.5
+        self.alpha_param = jax.random.uniform(alpha_key, ()) * 0.001 + 0.0002
+        self.C_edd_param = jax.random.uniform(C_edd_key, ()) * 0.001 + 0.001
+        self.C_exc_param = jax.random.uniform(C_exc_key, ()) * 0.001 + 0.001
+
+    def coth(self, x):
+        return 1 / jnp.tanh(x)
+
+    def coth_stable(self, x):
+        eps = 1e-7
+        x = jnp.where(jnp.abs(x) < eps, eps * jnp.sign(x), x)
+        return 1 / jnp.tanh(x)
+
+    # Updated dM_dH function
+    def dM_dH(self, H, M, dB_dt):
+        H_edd = self.C_edd * dB_dt
+        H_exc = self.C_exc * dB_dt * 1 / (jnp.sqrt(jnp.abs(dB_dt)))
+
+        H_e = H + self.alpha * M - H_edd - H_exc
+        M_an = self.Ms * (self.coth_stable(H_e / self.a) - self.a / H_e)
+        delta_m = 0.5 * (1 + jnp.sign((M_an - M) * dB_dt))
+
+        dM_an_dH_e = self.Ms / self.a * (1 - (self.coth_stable(H_e / self.a)) ** 2 + (self.a / H_e) ** 2)
+        delta = jnp.sign(dB_dt)
+
+        numerator = delta_m * (M_an - M) + self.c * self.k * delta * dM_an_dH_e
+        denominator = self.k * delta - self.alpha * numerator
+
+        dM_dH = numerator / denominator
+
+        return dM_dH
+
+    def ode(self, B, B_next, H):
+        dB_dt_est = (B_next - B) / self.tau
+        M = B / self.mu_0 - H
+        dM_dH = self.dM_dH(H, M, dB_dt_est)
+        dM_dB = dM_dH / (self.mu_0 * (1 + dM_dH))
+        dM_dt = dM_dB * dB_dt_est
+        dH_dt = 1 / self.mu_0 * dB_dt_est - dM_dt
+
+        dH_dt = softclip(dH_dt, limit=1e8)
+
+        return dH_dt, dB_dt_est
+
+    def step(self, H, B, B_next):
+        dH_dt, _ = self.ode(B, B_next, H)
+        H_next = H + self.tau * dH_dt
+        B_next = B_next
+        return H_next, B_next
+
+    def __call__(self, H0, B_seq):
+
+        def body_fun(carry, B_pair):
+            H_prev = carry
+            B_prev, B_next = B_pair
+            H_next, _ = self.step(H_prev, B_prev, B_next)
+            return H_next, H_next
+
+        B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
+        _, H_seq = jax.lax.scan(body_fun, H0, B_pairs)
+        # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        return H_seq
+
+
 import jax
 import jax.numpy as jnp
 import equinox as eqx
