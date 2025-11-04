@@ -3,9 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import jax
+import jax.numpy as jnp
 import equinox as eqx
 
 from mc2.data_management import EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT
+from mc2.training.data_sampling import draw_data_uniformly
 from mc2.runners.model_setup_jax import setup_model
 from mc2.models.model_interface import load_model
 
@@ -177,3 +179,50 @@ def plot_first_predictions(gt, pred):
         ax.set_xlabel("Sequence step")
     fig.tight_layout()
     return fig, axes
+
+
+def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, figsize=(30, 8)):
+    # gather data
+
+    H_list, B_list, T_list = [], [], []
+
+    for freq_idx, frequency in enumerate(test_set.frequencies):
+        test_set_at_frequency = test_set.at_frequency(frequency)
+        H, B, T, _, loader_key = draw_data_uniformly(test_set_at_frequency, 1000, 1, loader_key)
+
+        H_list.append(H[None, ...])
+        B_list.append(B[None, ...])
+        T_list.append(T[None, ...])
+
+    H = jnp.concatenate(H_list, axis=0)
+    B = jnp.concatenate(B_list, axis=0)
+    T = jnp.concatenate(T_list, axis=0)
+
+    H_past = H[:, :past_size]
+    B_past = B[:, :past_size]
+
+    B_future = B[:, past_size:]
+    H_future = H[:, past_size:]
+
+    H_pred = wrapped_model.call_with_warmup(B_past, H_past, B_future, T)
+
+    # plot
+    fig, axs = plt.subplots(3, 7, figsize=figsize)
+    for freq_idx in range(len(test_set.frequencies)):
+        axs[2, freq_idx].plot(B_future[freq_idx])
+        axs[0, freq_idx].plot(H_future[freq_idx])
+        axs[0, freq_idx].plot(H_pred[freq_idx])
+
+        axs[1, freq_idx].plot(B_future[freq_idx], H_future[freq_idx])
+        axs[1, freq_idx].plot(B_future[freq_idx], H_pred[freq_idx])
+
+        axs[0, freq_idx].grid(True, alpha=0.3)
+        axs[1, freq_idx].grid(True, alpha=0.3)
+
+        axs[0, freq_idx].set_ylabel("H")
+        axs[1, freq_idx].set_ylabel("H")
+        axs[0, freq_idx].set_xlabel("k")
+        axs[1, freq_idx].set_xlabel("B")
+
+    fig.tight_layout(pad=-0.2)
+    return fig, axs
