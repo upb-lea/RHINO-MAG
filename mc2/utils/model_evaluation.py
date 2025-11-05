@@ -204,7 +204,7 @@ def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, f
     B_future = B[:, past_size:]
     H_future = H[:, past_size:]
 
-    H_pred = wrapped_model.call_with_warmup(B_past, H_past, B_future, T)
+    H_pred = wrapped_model(B_past, H_past, B_future, T)
 
     # plot
     fig, axs = plt.subplots(3, 7, figsize=figsize)

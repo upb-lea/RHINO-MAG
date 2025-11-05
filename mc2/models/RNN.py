@@ -12,7 +12,6 @@ class GRU(eqx.Module):
 
     hidden_size: int = eqx.field(static=True)
     cell: eqx.Module
-    obs_func: Callable
 
     def __init__(self, in_size, hidden_size, *, key):
         self.hidden_size = hidden_size
