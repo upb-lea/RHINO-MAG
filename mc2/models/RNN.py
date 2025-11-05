@@ -1,3 +1,5 @@
+from typing import Callable
+
 import jax
 import jax.numpy as jnp
 import equinox as eqx
@@ -10,10 +12,18 @@ class GRU(eqx.Module):
 
     hidden_size: int = eqx.field(static=True)
     cell: eqx.Module
+    obs_func: Callable
 
-    def __init__(self, in_size, hidden_size, *, key):
+    def __init__(self, in_size, hidden_size, obs_func_type="first_element", *, key):
         self.hidden_size = hidden_size
         self.cell = eqx.nn.GRUCell(in_size, hidden_size, key=key)
+
+        if obs_func_type == "first_element":
+            self.obs_func = lambda x: x[..., 0]
+        else:
+            raise NotImplementedError(
+                (f"The specified obs_func_type: {obs_func_type} is not available." + "Choose one of ['first_element',]")
+            )
 
     def __call__(self, input, init_hidden):
         hidden = init_hidden
@@ -21,7 +31,7 @@ class GRU(eqx.Module):
         def f(carry, inp):
             rnn_out = self.cell(inp, carry)
             rnn_out_o = jnp.atleast_2d(rnn_out)
-            out = rnn_out_o[:, 0]
+            out = self.obs_func(rnn_out_o)
             return rnn_out, out
 
         _, out = jax.lax.scan(f, hidden, input)
@@ -35,7 +45,7 @@ class GRU(eqx.Module):
             rnn_out = self.cell(inp_t, carry)
             rnn_out = rnn_out.at[0].set(h_true_t)
             rnn_out_o = jnp.atleast_2d(rnn_out)
-            out = rnn_out_o[:, 0]
+            out = self.obs_func(rnn_out_o)
             return rnn_out, out
 
         final_hidden, out = jax.lax.scan(f, hidden, (input, H_true))
