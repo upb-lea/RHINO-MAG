@@ -5,7 +5,7 @@ import optax
 
 from mc2.data_management import MODEL_DUMP_ROOT
 from mc2.models.RNN import GRU, GRUwLinear
-from mc2.models.model_interfaces.model_interface import load_model
+from mc2.model_interfaces.model_interface import load_model
 
 # Adjoint method for estimating Jiles-Atherton hysteresis
 # model parameters

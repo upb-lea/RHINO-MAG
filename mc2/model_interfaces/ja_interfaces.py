@@ -6,7 +6,7 @@ import jax.numpy as jnp
 import equinox as eqx
 
 
-from mc2.models.model_interfaces.model_interface import ModelInterface
+from mc2.model_interfaces.model_interface import ModelInterface
 
 
 class JAwInterface(ModelInterface):

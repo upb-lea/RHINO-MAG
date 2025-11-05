@@ -9,7 +9,7 @@ import equinox as eqx
 from mc2.data_management import EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT
 from mc2.training.data_sampling import draw_data_uniformly
 from mc2.runners.model_setup_jax import setup_model
-from mc2.models.model_interfaces.model_interface import load_model
+from mc2.model_interfaces.model_interface import load_model
 
 
 def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | list[str] | None = None):
