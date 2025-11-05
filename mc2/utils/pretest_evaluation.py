@@ -115,7 +115,7 @@ def evaluate_pretest_scenarios_custom(
         #     B_future=B_future,
         #     T=T_batch,
         # )
-        preds = model_all.call_with_warmup(
+        preds = model_all(
             B_past=B_past,
             H_past=H_past,
             B_future=B_future,
