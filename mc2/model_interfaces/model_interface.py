@@ -20,6 +20,7 @@ import equinox as eqx
 
 
 class ModelInterface(eqx.Module):
+
     @abstractmethod
     def __call__(
         self,
@@ -46,6 +47,7 @@ class ModelInterface(eqx.Module):
         """
         pass
 
+    @abstractmethod
     def normalized_call(
         self,
         B_past_norm: jax.Array,
@@ -53,6 +55,23 @@ class ModelInterface(eqx.Module):
         B_future_norm: jax.Array,
         T_norm: jax.Array,
     ) -> jax.Array:
+        """
+        Model prediction interface for normalized, batched inputs, i.e. for inputs with
+        an extra leading dimension.
+
+        Args:
+            B_past_norm (np.array): The normalized flux density values from time step t0
+                to t1 with shape (n_batches, past_sequence_length)
+            H_past_norm (np.array): The normalized field values from time step t0 to t1
+                with shape (n_batches, past_sequence_length)
+            B_future_norm (np.array): The physical normalized flux density values from
+                time step t1 to t2 with shape (n_batches, future_sequence_length)
+            T_norm (float): The normalized temperature of the material with shape (n_batches,)
+
+        Returns:
+            H_future_norm (np.array): The normalized field values from time step t1 to t2
+                with shape (n_batches, future_sequence_length)
+        """
         pass
 
 
