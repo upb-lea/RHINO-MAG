@@ -26,18 +26,19 @@ from mc2.models.jiles_atherton import (
 from mc2.models.linear import LinearStatic
 
 # Interfaces
-from mc2.model_interfaces.model_interface import (
+from mc2.model_interfaces.rnn_Interfaces import (
     NODEwInterface,
     RNNwInterface,
+    GRUwLinearModelInterface,
+    MagnetizationRNNwInterface,
+)
+from mc2.model_interfaces.ja_interfaces import (
     JAwInterface,
     JAParamMLPwInterface,
     JAWithGRUwInterface,
     JAWithExternGRUwInterface,
-    LinearInterface,
-    GRUwLinearModelInterface,
-    MagnetizationRNNwInterface,
 )
-
+from mc2.model_interfaces.linear_interfaces import LinearInterface
 
 SUPPORTED_MODELS = ["GRU", "HNODE", "JA"]
 

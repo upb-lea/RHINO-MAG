@@ -1,5 +1,14 @@
+"""Model interface definition for models that are specifically tailored to predict
+future H (magnetic field strength) based on future B (magnetic flux density) and
+past values of H. (+ some utility functions)
+
+Model implementations with this interface utilize the models from mc2.models to
+predict/simulate trajectories for the MagNet Challenge 2, in adherence to the model
+form specified in the challenge.
+"""
+
 from abc import abstractmethod
-from typing import Callable, Type
+from typing import Type
 import pathlib
 import json
 
