@@ -148,7 +148,8 @@ def setup_model(
             model = LinearStatic(**model_params_d)
             mdl_interface_cls = LinearInterface
         case "GRUwLinearModel":
-            model_params_d = dict(in_size=7, hidden_size=8, linear_in_size=7, key=model_key)
+            # model_params_d = dict(in_size=7, hidden_size=8, linear_in_size=7, key=model_key)
+            model_params_d = dict(in_size=7, hidden_size=8, linear_in_size=1, key=model_key)
             model = GRUwLinearModel(**model_params_d)
             mdl_interface_cls = GRUwLinearModelInterface
         case _:

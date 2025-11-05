@@ -628,9 +628,10 @@ class GRUwLinearModelInterface(ModelInterface):
         batch_x = jnp.concatenate(
             [B_future_norm[..., None], T_norm_broad[..., None], features_norm], axis=-1
         )  # , f_norm_broad[...,None]
-        init_hidden = jnp.hstack(
-            [jnp.zeros((H_past_norm.shape[0], self.model.hidden_size - 1)), H_past_norm[:, -1, None]]
-        )
+
+        hidden_state_init = jnp.arctanh(H_past_norm[:, -1, None]) / B_past_norm[:, -1, None]
+
+        init_hidden = jnp.hstack([hidden_state_init, jnp.zeros((H_past_norm.shape[0], self.model.hidden_size - 1))])
 
         return batch_x, init_hidden
 
@@ -641,19 +642,23 @@ class GRUwLinearModelInterface(ModelInterface):
         past_size = B_past_norm.shape[1]
         M_per_side = int((self.model.linear_in_size - 1) / 2)
 
-        B_all_padded = jnp.pad(B_all, ((0, 0), (M_per_side, M_per_side)), mode="reflect", reflect_type="odd")
+        if M_per_side > 0:
 
-        B_in = jnp.concatenate(
-            [
-                jnp.roll(B_all_padded, idx)[..., None]
-                for idx in jnp.arange(
-                    -M_per_side,
-                    M_per_side + 1,
-                    1,
-                )
-            ],
-            axis=-1,
-        )[:, M_per_side + past_size : -M_per_side, :]
+            B_all_padded = jnp.pad(B_all, ((0, 0), (M_per_side, M_per_side)), mode="reflect", reflect_type="odd")
+
+            B_in = jnp.concatenate(
+                [
+                    jnp.roll(B_all_padded, idx)[..., None]
+                    for idx in jnp.arange(
+                        -M_per_side,
+                        M_per_side + 1,
+                        1,
+                    )
+                ],
+                axis=-1,
+            )[:, M_per_side + past_size : -M_per_side, :]
+        else:
+            B_in = B_future_norm[..., None]
         return B_in
 
     def normalized_call(self, B_past_norm, H_past_norm, B_future_norm, T_norm):
