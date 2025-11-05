@@ -53,7 +53,7 @@ def parse_args() -> argparse.Namespace:
         default=-1,
         type=int,
         required=False,
-        help="id of the gpu to use for the experiments. '-1' for not setting a GPU.",
+        help="id of the gpu to use for the experiments. '-1' for using the CPU.",
     )
     # TODO: Enable epochs over sampling
     parser.add_argument("-e", "--epochs", default=100, required=False, type=int, help="Number of epochs to train")
@@ -80,7 +80,8 @@ def main():
     if args.gpu_id != -1:
         gpus = jax.devices()
         jax.config.update("jax_default_device", gpus[args.gpu_id])
-    # jax.config.update("jax_platform_name", "cpu")
+    elif args.gpu_id == -1:
+        jax.config.update("jax_platform_name", "cpu")
 
     # setup
     seed = 0
