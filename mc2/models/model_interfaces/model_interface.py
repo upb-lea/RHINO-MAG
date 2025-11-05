@@ -241,7 +241,7 @@ class RNNwInterface(ModelInterface):
 
 class MagnetizationRNNwInterface(RNNwInterface):
 
-    def normalized_warmup_call(self, B_past, H_past, B_future, T):
+    def normalized_warmup_call(self, B_past_norm, H_past_norm, B_future_norm, T_norm):
         raise NotImplementedError()
 
     def normalized_call(self, B_past_norm, H_past_norm, B_future_norm, T_norm):

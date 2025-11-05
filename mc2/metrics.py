@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 
 from mc2.data_management import MaterialSet
-from mc2.models.model_interface import ModelInterface
+from mc2.models.model_interfaces.model_interface import ModelInterface
 
 
 def get_energy_loss(b: jax.Array, h: jax.Array) -> jax.Array:

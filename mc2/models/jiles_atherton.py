@@ -2,8 +2,10 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 import optax
-from mc2.models.RNN import GRU, GRUwLinear
 
+from mc2.data_management import MODEL_DUMP_ROOT
+from mc2.models.RNN import GRU, GRUwLinear
+from mc2.models.model_interfaces.model_interface import load_model
 
 # Adjoint method for estimating Jiles-Atherton hysteresis
 # model parameters
@@ -368,13 +370,6 @@ class JAStatic3(eqx.Module):
         _, H_seq = jax.lax.scan(body_fun, H0, B_pairs)
         # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
         return H_seq
-
-
-import jax
-import jax.numpy as jnp
-import equinox as eqx
-from mc2.data_management import EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT
-from mc2.models.model_interface import load_model
 
 
 class JAWithExternGRU(eqx.Module):
