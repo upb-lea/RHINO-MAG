@@ -151,8 +151,9 @@ class RNNwInterface(ModelInterface):
         batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_past_norm, T_norm)
         batch_x = batch_x[:, 1:]
 
-        init_hidden = jnp.hstack(
-            [H_past_norm[:, 0, None], jnp.zeros((H_past_norm.shape[0], self.model.hidden_size - 1))]
+        init_hidden = self.model.construct_init_hidden(
+            out_true=H_past_norm[:, 0, None],
+            batch_size=H_past_norm.shape[0],
         )
         _, final_hidden_warmup = jax.vmap(self.model.warmup_call)(batch_x, init_hidden, H_past_norm[:, 1:])
         return final_hidden_warmup
@@ -188,8 +189,9 @@ class RNNwInterface(ModelInterface):
         if warmup and H_past_norm.shape[1] > 1:
             init_hidden = self._warmup(B_past_norm, H_past_norm, B_future_norm, T_norm)
         else:
-            init_hidden = jnp.hstack(
-                [H_past_norm[:, -1, None], jnp.zeros((H_past_norm.shape[0], self.model.hidden_size - 1))]
+            init_hidden = self.model.construct_init_hidden(
+                out_true=H_past_norm[:, -1, None],
+                batch_size=H_past_norm.shape[0],
             )
 
         batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
@@ -199,24 +201,17 @@ class RNNwInterface(ModelInterface):
 
 class MagnetizationRNNwInterface(RNNwInterface):
 
-    def _warmup(self, B_past_norm, H_past_norm, B_future_norm, T_norm):
-        pass
+    def normalized_call(self, B_past_norm, H_past_norm, B_future_norm, T_norm, warmup: bool = True):
 
-    def normalized_call(self, B_past_norm, H_past_norm, B_future_norm, T_norm):
+        if warmup and H_past_norm.shape[1] > 1:
+            init_hidden = self._warmup(B_past_norm, H_past_norm, B_future_norm, T_norm)
+        else:
+            init_hidden = self.model.construct_init_hidden(
+                out_true=B_past_norm[:, -1, None] - jnp.arctanh(H_past_norm[:, -1, None]),
+                batch_size=H_past_norm.shape[0],
+            )
 
-        features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(B_past_norm, H_past_norm, B_future_norm, T_norm)
-        features_norm = jax.vmap(jax.vmap(self.normalizer.normalize_fe))(features)
-
-        T_norm_broad = jnp.broadcast_to(T_norm[:, None], B_future_norm.shape)
-
-        batch_x = jnp.concatenate([B_future_norm[..., None], T_norm_broad[..., None], features_norm], axis=-1)
-        init_hidden = jnp.hstack(
-            [
-                B_past_norm[:, -1, None] - jnp.arctanh(H_past_norm[:, -1, None]),
-                jnp.zeros((H_past_norm.shape[0], self.model.hidden_size - 1)),
-            ],
-        )
-
+        batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
         prediction_norm = jax.vmap(self.model)(batch_x, init_hidden)
 
         # v1:
@@ -228,6 +223,29 @@ class MagnetizationRNNwInterface(RNNwInterface):
         # H_pred_norm = jax.vmap(jax.vmap(self.normalizer.normalize_H))(H_pred)
 
         return jnp.squeeze(H_pred_norm)
+
+    def _warmup(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+    ) -> jax.Array:
+        """Warm-up the hidden state of the RNN based on the previous trajectory data."""
+
+        batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_past_norm, T_norm)
+        batch_x = batch_x[:, 1:]
+
+        init_hidden = self.model.construct_init_hidden(
+            out_true=B_past_norm[:, 0, None] - jnp.arctanh(H_past_norm[:, 0, None]),
+            batch_size=H_past_norm.shape[0],
+        )
+        _, final_hidden_warmup = jax.vmap(self.model.warmup_call)(
+            batch_x,
+            init_hidden,
+            B_past_norm[:, 1:] - jnp.arctanh(H_past_norm[:, 1:]),
+        )
+        return final_hidden_warmup
 
 
 class GRUwLinearModelInterface(ModelInterface):

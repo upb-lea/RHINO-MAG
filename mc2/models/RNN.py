@@ -29,19 +29,23 @@ class GRU(eqx.Module):
         _, out = jax.lax.scan(f, hidden, input)
         return out
 
-    def warmup_call(self, input, init_hidden, H_true):
+    def warmup_call(self, input, init_hidden, out_true):
         hidden = init_hidden
+        # TODO: move construct hidden here?
 
         def f(carry, inp):
-            inp_t, h_true_t = inp
+            inp_t, out_true_t = inp
             rnn_out = self.cell(inp_t, carry)
-            rnn_out = rnn_out.at[0].set(h_true_t)
+            rnn_out = rnn_out.at[0].set(out_true_t)
             rnn_out_o = jnp.atleast_2d(rnn_out)
             out = rnn_out_o[..., 0]
             return rnn_out, out
 
-        final_hidden, out = jax.lax.scan(f, hidden, (input, H_true))
+        final_hidden, out = jax.lax.scan(f, hidden, (input, out_true))
         return out, final_hidden
+
+    def construct_init_hidden(self, out_true, batch_size):
+        return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])
 
 
 class GRUwLinear(eqx.Module):
