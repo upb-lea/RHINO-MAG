@@ -16,9 +16,10 @@ from mc2.models.model_interface import (
     JAWithGRUwInterface,
     JAWithExternGRUwInterface,
     LinearInterface,
+    GRUwLinearModelInterface,
 )
 from mc2.models.NODE import HiddenStateNeuralEulerODE
-from mc2.models.RNN import GRU
+from mc2.models.RNN import GRU, GRUwLinearModel
 from mc2.models.jiles_atherton import (
     JAStatic,
     JAStatic2,
@@ -143,9 +144,13 @@ def setup_model(
             model = JAStatic3(key=model_key)
             mdl_interface_cls = JAwInterface
         case "Linear":
-            model_params_d = dict(in_size=51, out_size=1, key=model_key)
+            model_params_d = dict(in_size=9, out_size=1, key=model_key)
             model = LinearStatic(**model_params_d)
             mdl_interface_cls = LinearInterface
+        case "GRUwLinearModel":
+            model_params_d = dict(in_size=7, hidden_size=8, linear_in_size=7, key=model_key)
+            model = GRUwLinearModel(**model_params_d)
+            mdl_interface_cls = GRUwLinearModelInterface
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
 
