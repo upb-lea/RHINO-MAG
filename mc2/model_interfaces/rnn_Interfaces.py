@@ -124,6 +124,21 @@ class RNNwInterface(ModelInterface):
     normalizer: Normalizer
     featurize: Callable = eqx.field(static=True)
 
+    def _prepare_model_input(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+    ) -> jax.Array:
+        features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(B_past_norm, H_past_norm, B_future_norm, T_norm)
+        features_norm = jax.vmap(jax.vmap(self.normalizer.normalize_fe))(features)
+
+        T_norm_broad = jnp.broadcast_to(T_norm[:, None], B_future_norm.shape)
+
+        batch_x = jnp.concatenate([B_future_norm[..., None], T_norm_broad[..., None], features_norm], axis=-1)
+        return batch_x
+
     def _warmup(
         self,
         B_past_norm: jax.Array,
@@ -133,13 +148,11 @@ class RNNwInterface(ModelInterface):
     ) -> jax.Array:
         """Warm-up the hidden state of the RNN based on the previous trajectory data."""
 
-        features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(B_past_norm, H_past_norm, B_past_norm, T_norm)
-        features_norm = jax.vmap(jax.vmap(self.normalizer.normalize_fe))(features)
-        T_norm_broad = jnp.broadcast_to(T_norm[:, None], B_past_norm.shape)
+        batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_past_norm, T_norm)
+        batch_x = batch_x[:, 1:]
 
-        batch_x = jnp.concatenate([B_past_norm[:, 1:, None], T_norm_broad[:, 1:, None], features_norm[:, 1:]], axis=-1)
         init_hidden = jnp.hstack(
-            [jnp.zeros((H_past_norm.shape[0], self.model.hidden_size - 1)), H_past_norm[:, 0, None]]
+            [H_past_norm[:, 0, None], jnp.zeros((H_past_norm.shape[0], self.model.hidden_size - 1))]
         )
         _, final_hidden_warmup = jax.vmap(self.model.warmup_call)(batch_x, init_hidden, H_past_norm[:, 1:])
         return final_hidden_warmup
@@ -179,34 +192,24 @@ class RNNwInterface(ModelInterface):
                 [H_past_norm[:, -1, None], jnp.zeros((H_past_norm.shape[0], self.model.hidden_size - 1))]
             )
 
-        features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(B_past_norm, H_past_norm, B_future_norm, T_norm)
-        features_norm = jax.vmap(jax.vmap(self.normalizer.normalize_fe))(features)
-
-        T_norm_broad = jnp.broadcast_to(T_norm[:, None], B_future_norm.shape)
-
-        batch_x = jnp.concatenate([B_future_norm[..., None], T_norm_broad[..., None], features_norm], axis=-1)
+        batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
         batch_H_pred = jax.vmap(self.model)(batch_x, init_hidden)
         return batch_H_pred[:, :, 0]
 
 
 class MagnetizationRNNwInterface(RNNwInterface):
 
-    def normalized_warmup_call(self, B_past_norm, H_past_norm, B_future_norm, T_norm):
-        raise NotImplementedError()
+    def _warmup(self, B_past_norm, H_past_norm, B_future_norm, T_norm):
+        pass
 
     def normalized_call(self, B_past_norm, H_past_norm, B_future_norm, T_norm):
 
-        features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(
-            B_past_norm, H_past_norm, B_future_norm, T_norm
-        )  # ,None , f_norm
+        features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(B_past_norm, H_past_norm, B_future_norm, T_norm)
         features_norm = jax.vmap(jax.vmap(self.normalizer.normalize_fe))(features)
 
         T_norm_broad = jnp.broadcast_to(T_norm[:, None], B_future_norm.shape)
-        # f_norm_broad= jnp.broadcast_to(jnp.array([f_norm]), B_future_norm.shape)
 
-        batch_x = jnp.concatenate(
-            [B_future_norm[..., None], T_norm_broad[..., None], features_norm], axis=-1
-        )  # , f_norm_broad[...,None]
+        batch_x = jnp.concatenate([B_future_norm[..., None], T_norm_broad[..., None], features_norm], axis=-1)
         init_hidden = jnp.hstack(
             [
                 B_past_norm[:, -1, None] - jnp.arctanh(H_past_norm[:, -1, None]),
