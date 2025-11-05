@@ -8,7 +8,7 @@ from mc2.models.linear import LinearDynamicParameters
 
 
 class GRU(eqx.Module):
-    """Very basic RNN model."""
+    """Basic gated recurrent unit (GRU) model."""
 
     hidden_size: int = eqx.field(static=True)
     cell: eqx.Module

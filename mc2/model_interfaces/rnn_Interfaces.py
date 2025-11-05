@@ -1,3 +1,5 @@
+"""Interfaces between data-driven models in 'mc2.models.RNN' (and 'mc2.models.NODE') and the data format for MC2."""
+
 from typing import Callable, Type
 from mc2.data_management import Normalizer
 
@@ -9,11 +11,12 @@ import jax.numpy as jnp
 import equinox as eqx
 
 from mc2.model_interfaces.model_interface import ModelInterface
-from mc2.models.RNN import GRUwLinearModel
+from mc2.models.NODE import HiddenStateNeuralEulerODE
+from mc2.models.RNN import GRU, GRUwLinear, GRUwLinearModel
 
 
 class NODEwInterface(ModelInterface):
-    model: eqx.Module
+    model: HiddenStateNeuralEulerODE
     normalizer: Normalizer
     featurize: Callable = eqx.field(static=True)
 
@@ -117,8 +120,8 @@ class NODEwInterface(ModelInterface):
 
 
 class RNNwInterface(ModelInterface):
-    model: eqx.Module
-    normalizer: eqx.Module
+    model: GRU | GRUwLinear
+    normalizer: Normalizer
     featurize: Callable = eqx.field(static=True)
 
     def __call__(self, B_past, H_past, B_future, T):
