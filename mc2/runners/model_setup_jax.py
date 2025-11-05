@@ -7,17 +7,9 @@ import optax
 
 from mc2.losses import MSE_loss, adapted_RMS_loss
 from mc2.features.features_jax import compute_fe_single
-from mc2.data_management import MaterialSet, load_data_into_pandas_df
-from mc2.models.model_interface import (
-    NODEwInterface,
-    RNNwInterface,
-    JAwInterface,
-    JAParamMLPwInterface,
-    JAWithGRUwInterface,
-    JAWithExternGRUwInterface,
-    LinearInterface,
-    GRUwLinearModelInterface,
-)
+from mc2.data_management import MaterialSet, load_data_into_pandas_df, Normalizer
+
+# Models
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU, GRUwLinearModel
 from mc2.models.jiles_atherton import (
@@ -32,7 +24,19 @@ from mc2.models.jiles_atherton import (
     JAWithGRUlinFinal,
 )
 from mc2.models.linear import LinearStatic
-from mc2.data_management import Normalizer
+
+# Interfaces
+from mc2.models.model_interface import (
+    NODEwInterface,
+    RNNwInterface,
+    JAwInterface,
+    JAParamMLPwInterface,
+    JAWithGRUwInterface,
+    JAWithExternGRUwInterface,
+    LinearInterface,
+    GRUwLinearModelInterface,
+    MagnetizationRNNwInterface,
+)
 
 
 SUPPORTED_MODELS = ["GRU", "HNODE", "JA"]
@@ -107,6 +111,10 @@ def setup_model(
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
+        case "MagnetizationGRU":
+            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
+            model = GRU(**model_params_d)
+            mdl_interface_cls = MagnetizationRNNwInterface
         case "JAWithExternGRU":
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = JAWithExternGRU(**model_params_d)

@@ -14,6 +14,9 @@ from mc2.data_management import Normalizer
 from mc2.models.RNN import GRUwLinearModel
 
 
+MU_0 = 1.256637 * 1e-6
+
+
 class ModelInterface(eqx.Module):
     @abstractmethod
     def __call__(
@@ -234,6 +237,44 @@ class RNNwInterface(ModelInterface):
         init_hidden = final_hidden_warmup
         batch_H_pred = jax.vmap(self.model)(batch_x, init_hidden)
         return batch_H_pred[:, :, 0]
+
+
+class MagnetizationRNNwInterface(RNNwInterface):
+
+    def normalized_warmup_call(self, B_past, H_past, B_future, T):
+        raise NotImplementedError()
+
+    def normalized_call(self, B_past_norm, H_past_norm, B_future_norm, T_norm):
+
+        features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(
+            B_past_norm, H_past_norm, B_future_norm, T_norm
+        )  # ,None , f_norm
+        features_norm = jax.vmap(jax.vmap(self.normalizer.normalize_fe))(features)
+
+        T_norm_broad = jnp.broadcast_to(T_norm[:, None], B_future_norm.shape)
+        # f_norm_broad= jnp.broadcast_to(jnp.array([f_norm]), B_future_norm.shape)
+
+        batch_x = jnp.concatenate(
+            [B_future_norm[..., None], T_norm_broad[..., None], features_norm], axis=-1
+        )  # , f_norm_broad[...,None]
+        init_hidden = jnp.hstack(
+            [
+                B_past_norm[:, -1, None] - jnp.arctanh(H_past_norm[:, -1, None]),
+                jnp.zeros((H_past_norm.shape[0], self.model.hidden_size - 1)),
+            ],
+        )
+
+        prediction_norm = jax.vmap(self.model)(batch_x, init_hidden)
+
+        # v1:
+        H_pred_norm = jnp.tanh(B_future_norm[..., None] - prediction_norm)
+
+        # v2:
+        # (B_future, prediction, _) = self.normalizer.denormalize(B_future_norm, prediction_norm, T_norm)
+        # H_pred = B_future[..., None] - prediction
+        # H_pred_norm = jax.vmap(jax.vmap(self.normalizer.normalize_H))(H_pred)
+
+        return jnp.squeeze(H_pred_norm)
 
 
 def save_model(filename: str | pathlib.Path, hyperparams: dict, model: ModelInterface):
@@ -614,7 +655,7 @@ class GRUwLinearModelInterface(ModelInterface):
         return batch_H_pred_denorm
 
     def call_with_warmup(self, B_past, H_past, B_future, T):
-        return self.__call__(B_past, H_past, B_future, T)
+        raise NotImplementedError()
 
     def _prepare_GRU_in(self, B_past_norm, H_past_norm, B_future_norm, T_norm):
         features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(
