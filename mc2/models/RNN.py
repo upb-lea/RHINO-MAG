@@ -94,13 +94,13 @@ class GRUwLinearModel(eqx.Module):
         self.cell = eqx.nn.GRUCell(in_size, hidden_size, key=gru_key)
         self.linear = LinearDynamicParameters(in_size, out_size=1, key=l_key)
 
-    def __call__(self, input_GRU, input_linear, init_hidden):
+    def __call__(self, input_gru, input_linear, init_hidden):
         hidden = init_hidden
 
         def f(carry, inp):
-            inp_GRU, inp_linear = inp[..., : -self.linear_in_size], inp[..., -self.linear_in_size :]
+            inp_gru, inp_linear = inp[..., : -self.linear_in_size], inp[..., -self.linear_in_size :]
 
-            rnn_out = self.cell(inp_GRU, carry)
+            rnn_out = self.cell(inp_gru, carry)
             rnn_out_o = jnp.atleast_2d(rnn_out)
 
             # take the first self.linear_in_size hidden states as the parameters for the linear model
@@ -108,5 +108,24 @@ class GRUwLinearModel(eqx.Module):
             out = self.linear.predict(inp_linear, linear_params)
             return rnn_out, out
 
-        _, out = jax.lax.scan(f, hidden, jnp.concatenate([input_GRU, input_linear], axis=-1))
+        _, out = jax.lax.scan(f, hidden, jnp.concatenate([input_gru, input_linear], axis=-1))
         return out
+
+    def warmup_call(self, gru_in, linear_in, init_hidden, out_true):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_gru_t, inp_lin_t, out_true_t = inp
+            rnn_out = self.cell(inp_gru_t, carry)
+            rnn_out = rnn_out.at[0].set(out_true_t)
+
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+            linear_params = rnn_out_o[..., : self.linear_in_size]
+            out = self.linear.predict(inp_lin_t, linear_params)
+            return rnn_out, out
+
+        final_hidden, out = jax.lax.scan(f, hidden, (gru_in, linear_in, out_true))
+        return out, final_hidden
+
+    def construct_init_hidden(self, out_true, batch_size):
+        return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])
