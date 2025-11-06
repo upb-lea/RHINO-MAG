@@ -209,23 +209,23 @@ def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, f
     # plot
     fig, axs = plt.subplots(3, 7, figsize=figsize)
     for freq_idx in range(len(test_set.frequencies)):
-        axs[2, freq_idx].plot(B_future[freq_idx])
-        axs[0, freq_idx].plot(H_future[freq_idx])
-        axs[0, freq_idx].plot(H_pred[freq_idx])
+        axs[0, freq_idx].plot(B_future[freq_idx])
+        axs[1, freq_idx].plot(H_future[freq_idx])
+        axs[1, freq_idx].plot(H_pred[freq_idx])
 
-        axs[1, freq_idx].plot(B_future[freq_idx], H_future[freq_idx])
-        axs[1, freq_idx].plot(B_future[freq_idx], H_pred[freq_idx])
+        axs[2, freq_idx].plot(B_future[freq_idx], H_future[freq_idx])
+        axs[2, freq_idx].plot(B_future[freq_idx], H_pred[freq_idx])
 
         axs[0, freq_idx].grid(True, alpha=0.3)
         axs[1, freq_idx].grid(True, alpha=0.3)
+        axs[2, freq_idx].grid(True, alpha=0.3)
 
-        axs[0, freq_idx].set_ylabel("H")
-        axs[1, freq_idx].set_ylabel("H")
+        axs[0, freq_idx].set_ylabel("B")
         axs[0, freq_idx].set_xlabel("k")
-        axs[1, freq_idx].set_xlabel("B")
-
-        axs[0, freq_idx].grid(True, alpha=0.3)
-        axs[1, freq_idx].grid(True, alpha=0.3)
+        axs[1, freq_idx].set_ylabel("H")
+        axs[1, freq_idx].set_xlabel("k")
+        axs[2, freq_idx].set_ylabel("H")
+        axs[2, freq_idx].set_xlabel("B")
 
     fig.tight_layout(pad=-0.2)
     return fig, axs
