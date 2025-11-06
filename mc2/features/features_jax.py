@@ -31,7 +31,7 @@ def dyn_avg(x: jax.Array, n_s: int, mirrored_padding: bool = True) -> jax.Array:
 
 
 def shift_signal(x, k_0):
-    x_padded = jnp.pad(x, ((k_0, k_0)), mode="reflect", reflect_type="odd")
+    x_padded = jnp.pad(x, ((jnp.abs(k_0), jnp.abs(k_0))), mode="reflect", reflect_type="odd")
     x_shifted = jnp.roll(x_padded, -k_0)
     return x_shifted[k_0:-k_0]
 

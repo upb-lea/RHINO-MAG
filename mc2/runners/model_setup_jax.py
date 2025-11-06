@@ -1,4 +1,5 @@
 from typing import Callable
+from functools import partial
 
 import jax
 import jax.numpy as jnp
@@ -6,7 +7,7 @@ import equinox as eqx
 import optax
 
 from mc2.losses import MSE_loss, adapted_RMS_loss
-from mc2.features.features_jax import compute_fe_single
+from mc2.features.features_jax import compute_fe_single, shift_signal
 from mc2.data_management import MaterialSet, load_data_into_pandas_df, Normalizer
 
 # Models
@@ -79,15 +80,23 @@ def setup_model(
     tbptt_size=1024,
     batch_size=256,
     past_size: int = 10,
+    time_shift: int = 0,
     tbptt_size_start=None,  # (size, n_epochs_steps)
+    **kwargs,
 ):
-    def featurize(norm_B_past, norm_H_past, norm_B_future, temperature):
+    def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
         past_length = norm_B_past.shape[0]
-        future_length = norm_B_future.shape[0]
+        # future_length = norm_B_future.shape[0]
 
-        featurized_B = compute_fe_single(jnp.hstack([norm_B_past, norm_B_future]), n_s=10)
+        B_all = jnp.hstack([norm_B_past, norm_B_future])
+        if time_shift != 0:
+            B_all = shift_signal(B_all, k_0=time_shift)
+
+        featurized_B = compute_fe_single(B_all, n_s=11)
 
         return featurized_B[past_length:]
+
+    featurize = partial(featurize, time_shift=time_shift)
 
     normalizer, data_tuple = get_normalizer(
         material_name,

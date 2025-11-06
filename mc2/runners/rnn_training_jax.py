@@ -70,6 +70,13 @@ def parse_args() -> argparse.Namespace:
         help="Number of steps to use in the past trajectory (warmup steps).",
     )
     parser.add_argument(
+        "--time_shift",
+        default=0,
+        required=False,
+        type=int,
+        help="Time shift for the B trajectory in featurize",
+    )
+    parser.add_argument(
         "-ts",
         "--tbptt_size_start",
         default=None,
@@ -109,6 +116,7 @@ def main():
         tbptt_size=args.tbptt_size,
         batch_size=args.batch_size,
         past_size=args.past_size,
+        time_shift=args.time_shift,
         tbptt_size_start=args.tbptt_size_start,
     )
 

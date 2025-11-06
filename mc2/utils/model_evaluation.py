@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -49,15 +51,34 @@ def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | 
     return relevant_exp_ids
 
 
-def reconstruct_model_from_exp_id(exp_id):
+def reconstruct_model_from_exp_id(exp_id, **kwargs):
+
     material_name = exp_id.split("_")[0]
     model_type = exp_id.split("_")[1]
 
-    fresh_wrapped_model, _, params, (train_set, val_set, test_set) = setup_model(
-        model_label=model_type,
-        material_name=material_name,
-        model_key=jax.random.PRNGKey(0),
-    )
+    # check if params are available:
+    experiment_path = EXPERIMENT_LOGS_ROOT / "jax_experiments"
+    try:
+        with open(experiment_path / f"{exp_id}.json", "r") as f:
+            params = json.load(f)["params"]
+        print(f"Parameters for the model setup were found at '{EXPERIMENT_LOGS_ROOT / exp_id}' and are utilized.")
+        fresh_wrapped_model, _, _, _ = setup_model(
+            model_label=model_type,
+            material_name=material_name,
+            model_key=jax.random.PRNGKey(0),
+            **params["training_params"],
+        )
+    except FileNotFoundError:
+        print(
+            f"No parameters could be found under '{EXPERIMENT_LOGS_ROOT}' for exp_id: '{exp_id}', "
+            + "continues with default setup for the given model type specified in 'setup_model'."
+        )
+        fresh_wrapped_model, _, _, _ = setup_model(
+            model_label=model_type,
+            material_name=material_name,
+            model_key=jax.random.PRNGKey(0),
+            **kwargs,
+        )
 
     model_path = MODEL_DUMP_ROOT / f"{exp_id}.eqx"
     model = load_model(model_path, type(fresh_wrapped_model.model))
@@ -104,6 +125,8 @@ def plot_loss_trends(exp_id, seed):
     # Layout und Anzeige
     fig.suptitle("Training vs Validation Loss", fontsize=14)
     fig.tight_layout()
+    for ax in axes.flatten():
+        ax.grid(alpha=0.3)
     return fig, axes
 
 
