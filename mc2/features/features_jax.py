@@ -15,9 +15,25 @@ def d2b_dt2(b: jax.Array) -> jax.Array:
     return jnp.gradient(jnp.gradient(b))
 
 
-def dyn_avg(x: jax.Array, n_s: int) -> jax.Array:
+def dyn_avg(x: jax.Array, n_s: int, mirrored_padding: bool = True) -> jax.Array:
     """Calculate the dynamic average of sequence x containing n_s samples."""
-    return jnp.convolve(x, jnp.ones(n_s) / n_s, mode="same")
+
+    if mirrored_padding:
+        convolution_mode = "valid"
+        assert (n_s - 1) % 2 == 0, "n_s must be an odd number"
+        p_len = (n_s - 1) // 2
+        x = jnp.pad(x, ((p_len, p_len)), mode="reflect", reflect_type="odd")
+    else:
+        convolution_mode = "same"
+        x = x
+
+    return jnp.convolve(x, jnp.ones(n_s) / n_s, mode=convolution_mode)
+
+
+def shift_signal(x, k_0):
+    x_padded = jnp.pad(x, ((k_0, k_0)), mode="reflect", reflect_type="odd")
+    x_shifted = jnp.roll(x_padded, -k_0)
+    return x_shifted[k_0:-k_0]
 
 
 def pwm_of_b(b: jax.Array) -> jax.Array:
