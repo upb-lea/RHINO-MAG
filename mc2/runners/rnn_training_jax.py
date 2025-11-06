@@ -62,6 +62,14 @@ def parse_args() -> argparse.Namespace:
         "-t", "--tbptt_size", default=1024, required=False, type=int, help="Truncated backpropagation through time size"
     )
     parser.add_argument(
+        "-p",
+        "--past_size",
+        default=10,
+        required=False,
+        type=int,
+        help="Number of steps to use in the past trajectory (warmup steps).",
+    )
+    parser.add_argument(
         "-ts",
         "--tbptt_size_start",
         default=None,
@@ -100,6 +108,7 @@ def main():
         n_epochs=args.epochs,
         tbptt_size=args.tbptt_size,
         batch_size=args.batch_size,
+        past_size=args.past_size,
         tbptt_size_start=args.tbptt_size_start,
     )
 

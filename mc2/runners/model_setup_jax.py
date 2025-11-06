@@ -78,6 +78,7 @@ def setup_model(
     n_epochs=100,
     tbptt_size=1024,
     batch_size=256,
+    past_size: int = 10,
     tbptt_size_start=None,  # (size, n_epochs_steps)
 ):
     def featurize(norm_B_past, norm_H_past, norm_B_future, temperature):
@@ -163,6 +164,15 @@ def setup_model(
             mdl_interface_cls = GRUwLinearModelInterface
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
+
+    assert (
+        past_size < tbptt_size
+    ), f"The trajectory is too short for the specified warm-up time. {past_size} < {tbptt_size}."
+    if tbptt_size_start is not None:
+        assert past_size < tbptt_size_start[0], (
+            f"The initial trajectories are too short for "
+            + f"the specified warm-up time. {past_size} < {tbptt_size_start[0]}."
+        )
 
     params = dict(
         training_params=dict(
