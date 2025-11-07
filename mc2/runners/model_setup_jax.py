@@ -189,7 +189,8 @@ def setup_model(
             n_steps=0,  # 10_000
             val_every=1,
             tbptt_size=tbptt_size,
-            past_size=1,
+            past_size=past_size,
+            time_shift=time_shift,
             batch_size=batch_size,
             tbptt_size_start=tbptt_size_start,
         ),

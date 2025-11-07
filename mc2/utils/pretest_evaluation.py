@@ -297,9 +297,9 @@ def produce_pretest_histograms(
             weights=1 / n_sequences * np.ones(sre_per_sequence.shape),
         )
         ax.vlines(nere_avg, *(0, (rel_pos_line_avg - 0.02) * ax.get_ylim()[-1]), color="red", linestyle="dashed")
-        ax.text(nere_avg, rel_pos_line_avg * ax.get_ylim()[-1], f"Avg = {nere_avg:.3f}%", color="red")
+        ax.text(nere_avg, rel_pos_line_avg * ax.get_ylim()[-1], f"Avg = {nere_avg:.3f}\%", color="red")
         ax.vlines(nere_95th, *(0, (rel_pos_line_95th - 0.02) * ax.get_ylim()[-1]), color="red", linestyle="dashed")
-        ax.text(nere_95th, rel_pos_line_95th * ax.get_ylim()[-1], f".95 Prct = {nere_95th:.3f}%", color="red")
+        ax.text(nere_95th, rel_pos_line_95th * ax.get_ylim()[-1], f".95 Prct = {nere_95th:.3f}\%", color="red")
 
         ax.set_xlabel("Normalized Energy Relative Error [\%]")
         ax.set_ylabel("Ratio of Data Points")
