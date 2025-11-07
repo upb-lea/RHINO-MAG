@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import equinox as eqx
+
+from mc2.metrics import sre, nere
+
 SCENARIO_LABELS = ["10% unknown", "50% unknown", "90% unknown"]
 
 HOSTS_VALUES_DICT = {
@@ -109,12 +113,6 @@ def evaluate_pretest_scenarios_custom(
         B_future = B_scenario[:, warm_up_len:]
         T_batch = T_scenario.reshape(-1)
 
-        # preds = model_all(
-        #     B_past=B_past,
-        #     H_past=H_past,
-        #     B_future=B_future,
-        #     T=T_batch,
-        # )
         preds = model_all(
             B_past=B_past,
             H_past=H_past,
@@ -130,15 +128,15 @@ def evaluate_pretest_scenarios_custom(
 
         mse = np.mean(mse_per_sequence)
         wce = np.max(np.abs(preds - H_gt))
-        sre_per_sequence = np.sqrt(mse_per_sequence) / np.sqrt(np.mean(H_gt**2, axis=1))
+
+        sre_per_sequence = eqx.filter_vmap(sre)(preds, H_gt)
         sre_avg = np.mean(sre_per_sequence)
         sre_95th = np.percentile(sre_per_sequence, 95)
 
         dbdt_full = np.gradient(B_scenario, axis=1)
         dbdt = dbdt_full[:, warm_up_len:]
-        nere_per_sequence = np.abs(
-            (((dbdt * preds) - (dbdt * H_gt)).sum(axis=1)) / np.abs(loss[msk_N][:, 0])
-        )  # added abs
+        nere_per_sequence = eqx.filter_vmap(nere)(preds, H_gt, dbdt, np.abs(loss[msk_N][:, 0]))
+
         nere_avg = np.mean(nere_per_sequence)
         nere_95th = np.percentile(nere_per_sequence, 95)
 
