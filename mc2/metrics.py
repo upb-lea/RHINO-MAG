@@ -17,7 +17,7 @@ def sre(h_est: jax.Array, h_true: jax.Array) -> jax.Array:
         h_true (jax.Array): H gt values with shape (sequence_length,)
 
     Returns:
-        The resulting SRE value as a jax.Array with shape (1,)
+        The resulting SRE value as a jax.Array with shape (,)
     """
     mse = mean_squared_error(h_est, h_true)
     return jnp.sqrt(mse) / jnp.sqrt(jnp.mean(h_true**2))
@@ -31,10 +31,10 @@ def nere(h_est: jax.Array, h_true: jax.Array, db_dt: jax.Array, true_core_loss: 
         h_est (jax.Array): H estimations with shape (sequence_length,)
         h_true (jax.Array): H gt values with shape (sequence_length,)
         db_dt (jax.Array): dB/dt values for B with shape (sequence_length,)
-        true_core_loss (jax.Array): The true core losses for the given sequence with shape (1,)
+        true_core_loss (jax.Array): The true core losses for the given sequence with shape (,)
 
     Returns:
-        The resulting NERE value as a jax.Array with shape (1,)
+        The resulting NERE value as a jax.Array with shape (,)
     """
     est_cl_difference = jnp.sum((db_dt * h_est) - (db_dt * h_true))
     return jnp.abs(est_cl_difference / jnp.abs(true_core_loss))
