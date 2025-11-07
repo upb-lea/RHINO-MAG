@@ -272,9 +272,9 @@ def produce_pretest_histograms(
         )
 
         ax.vlines(sre_avg, *(0, (rel_pos_line_avg - 0.02) * ax.get_ylim()[-1]), color="red", linestyle="dashed")
-        ax.text(sre_avg, rel_pos_line_avg * ax.get_ylim()[-1], f"Avg = {sre_avg:.3f}%", color="red")
+        ax.text(sre_avg, rel_pos_line_avg * ax.get_ylim()[-1], f"Avg = {sre_avg:.3f}\%", color="red")
         ax.vlines(sre_95th, *(0, (rel_pos_line_95th - 0.02) * ax.get_ylim()[-1]), color="red", linestyle="dashed")
-        ax.text(sre_95th, rel_pos_line_95th * ax.get_ylim()[-1], f".95 Prct = {sre_95th:.3f}%", color="red")
+        ax.text(sre_95th, rel_pos_line_95th * ax.get_ylim()[-1], f".95 Prct = {sre_95th:.3f}\%", color="red")
 
         ax.set_xlabel("Sequence Relative Error [\%]")
         ax.set_ylabel("Ratio of Data Points")
