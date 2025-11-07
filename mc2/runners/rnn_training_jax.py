@@ -10,7 +10,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
 
-jax.config.update("jax_enable_x64", True)
+
 # jax.config.update("jax_debug_nans", True)
 # jax.config.update("jax_log_compiles", True)
 
@@ -84,6 +84,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help="Starting tbptt size and number of epochs/steps to use it for, before switching to tbptt_size. Format: size n_epochs",
     )
+    parser.add_argument("--disable_f64", action="store_true", default=False)
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
     return args
@@ -91,6 +92,8 @@ def parse_args() -> argparse.Namespace:
 
 def main():
     args = parse_args()
+
+    jax.config.update("jax_enable_x64", not args.disable_f64)
 
     if args.gpu_id != -1:
         gpus = jax.devices()

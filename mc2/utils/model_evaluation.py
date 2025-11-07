@@ -67,6 +67,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
             material_name=material_name,
             model_key=jax.random.PRNGKey(0),
             **params["training_params"],
+            **kwargs,
         )
     except FileNotFoundError:
         print(
