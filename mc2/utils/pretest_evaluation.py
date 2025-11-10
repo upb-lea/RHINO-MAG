@@ -320,3 +320,50 @@ def produce_pretest_histograms(
     )
     fig.tight_layout()
     return fig, axs
+
+
+def store_predictions_to_csv(
+    exp_id,
+    model_all,
+    B,
+    T,
+    H_init,
+    H_true,
+    loss,
+    msks_scenarios_N_tup,
+    scenario_labels,
+) -> dict[str, jax.Array]:
+
+    for scenario_i, msk_N in enumerate(msks_scenarios_N_tup):
+        print(f"  Scenario {scenario_i} - {scenario_labels[scenario_i]}: ")
+
+        B_scenario = B[msk_N]
+        T_scenario = T[msk_N]
+        H_init_scenario = H_init[msk_N]
+        H_true_scenario = H_true[msk_N]
+
+        warm_up_len = np.sum(~np.isnan(H_init_scenario[0]))
+        print(warm_up_len / B_scenario.shape[1])
+        print(f"    -> warm_up_len = {warm_up_len}")
+
+        B_past = B_scenario[:, :warm_up_len]
+        H_past = H_init_scenario[:, :warm_up_len]
+        B_future = B_scenario[:, warm_up_len:]
+        T_batch = T_scenario.reshape(-1)
+
+        preds = model_all(
+            B_past=B_past,
+            H_past=H_past,
+            B_future=B_future,
+            T=T_batch,
+        )
+
+        H_gt = H_true_scenario[:, warm_up_len:]
+
+        for seq_pred, seq_gt in zip(preds, H_gt):
+            with open(f"{exp_id}_pred.csv", "a") as f:
+                np.savetxt(f, seq_pred[None, :], delimiter=",")
+                f.close()
+            with open(f"{exp_id}_meas.csv", "a") as f:
+                np.savetxt(f, seq_gt[None, :], delimiter=",")
+                f.close()
