@@ -49,3 +49,75 @@ def adapted_RMS_loss(
     loss = jnp.mean(H_rms_norm)
     loss = jnp.nan_to_num(loss, nan=0.0, posinf=1e7, neginf=-1e7)
     return loss
+
+
+def pinn_gru_loss(
+    model: eqx.Module,
+    B_past: jax.Array,
+    H_past: jax.Array,
+    B_future: jax.Array,
+    H_future: jax.Array,
+    T: jax.Array,
+    batch_H_rms: jax.Array,
+    *args,
+    **kwargs,
+) -> jax.Array:
+
+    mse_loss = MSE_loss(model, B_past, H_past, B_future, H_future, T)
+
+    ##
+    mu_0 = 4 * jnp.pi * 10 ** (-7)
+    TAU = 1 / 16e6
+
+    # H_e, after (4)
+    def He_fn(model, H, M):
+        return H + model.alpha * M
+
+    # Man (6)
+    def Man_fn(model, H, M):
+        return model.Ms * (jnp.tanh(He_fn(model, H, M) / model.a) - (model.a / He_fn(model, H, M)))
+
+    # delta
+    def delta_fn(H):
+        H_new = jnp.squeeze(H)
+        diff_H = jnp.diff(H_new, append=1)
+        delta = jnp.sign(diff_H)
+
+        return delta
+
+    #  eq (19)
+    def fn_dM_dH(model, H, M):
+        numerator = Man_fn(model, H, M) - M
+        numerator = jnp.squeeze(numerator)
+
+        part1 = delta_fn(H) * model.k / mu_0
+        part2 = model.alpha * (Man_fn(model, H, M) - M)
+        part2_sqee = jnp.squeeze(part2)
+
+        # denominator = delta_fn(H)*model.k/mu_0 - model.alpha*(Man_fn(model,H,M)-M)
+        denominator = (delta_fn(H) * model.k) / mu_0 - part2_sqee
+
+        M_rev = model.c * (Man_fn(model, H, M) - M)
+        M_rev = jnp.squeeze(M_rev)
+
+        # (19) + (31)
+        dM_dH = numerator / denominator + M_rev
+        return dM_dH
+
+    def physics(model, H, B, B_next):
+        dB_dt_est = (B_next - B) / TAU
+        dB_dt_est = jnp.squeeze(dB_dt_est)
+        M = B / mu_0 - H
+        dM_dH = fn_dM_dH(model, H, M)
+        dM_dB = dM_dH / (mu_0 * (1 + dM_dH))
+
+        dM_dt = dM_dB * dB_dt_est
+        dH_dt = 1 / mu_0 * dB_dt_est - dM_dt
+
+        return dH_dt
+
+    physics_at_collocation_points = physics(model, H_past, B_past, B_future)
+
+    physics_loss = 0.5 * jnp.mean(jnp.square(physics_at_collocation_points))
+
+    return mse_loss + 1e-20 * physics_loss

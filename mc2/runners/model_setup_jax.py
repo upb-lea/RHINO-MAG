@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import equinox as eqx
 import optax
 
-from mc2.losses import MSE_loss, adapted_RMS_loss
+from mc2.losses import MSE_loss, adapted_RMS_loss, pinn_gru_loss
 from mc2.features.features_jax import compute_fe_single
 from mc2.data_management import MaterialSet, load_data_into_pandas_df
 from mc2.models.model_interface import (
@@ -29,11 +29,12 @@ from mc2.models.jiles_atherton import (
     JAWithGRUlinFinal,
 )
 from mc2.data_management import Normalizer
+from mc2.models.pinn import PinnWithGRU
 
 
-SUPPORTED_MODELS = ["GRU", "HNODE", "JA"]
+SUPPORTED_MODELS = ["GRU", "HNODE", "JA", "PinnWithGRU"]
 
-SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
+SUPPORTED_LOSSES = ["MSE", "adapted_RMS", "PINN_GRU"]
 
 
 def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: int, do_normalization: bool):
@@ -179,6 +180,8 @@ def setup_loss(loss_label: str) -> Callable:
             loss_function = MSE_loss
         case "adapted_RMS":
             loss_function = adapted_RMS_loss
+        case "PINN_GRU":
+            loss_function = pinn_gru_loss
         case _:
             raise ValueError(f"Unknown loss type: {loss_label}. Choose on of {SUPPORTED_LOSSES}")
 
