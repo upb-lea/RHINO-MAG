@@ -96,14 +96,17 @@ def get_frequency(signal, fs):
     return frequency
 
 
-def compute_fe_single(data_single: jax.Array, n_s: int) -> jax.Array:
+def compute_fe_single(data_single: jax.Array, n_s: int, time_shift: int = 3) -> jax.Array:
     dyn = dyn_avg(data_single, n_s)
     db = db_dt(data_single)
     d2b = d2b_dt2(data_single)
     pwm = pwm_of_b(data_single)
-    # f = get_frequency(d2b, F_SAMPLE)
-    # f_repeated = jnp.full(pwm.shape, f)
-    return jnp.stack((data_single, dyn, db, d2b, pwm), axis=-1)  # , f_repeated), axis=-1)
+
+    if time_shift != 0:
+        shifted_data_single = shift_signal(data_single, k_0=time_shift)
+        return jnp.stack((shifted_data_single, dyn, db, d2b, pwm), axis=-1)
+    else:
+        return jnp.stack((dyn, db, d2b, pwm), axis=-1)
 
 
 @eqx.filter_jit

@@ -209,12 +209,12 @@ def evaluate_pretest_scenarios(
         print(f"\tWCE : {wce:>7.2f} A/m")
 
         metrics_reduced[scenario_labels[scenario_i]] = {
-            "mse": np.round(mse, 3).item(),
-            "wce": np.round(wce, 3).item(),
-            "sre_avg": np.round(sre_avg, 3).item(),
-            "sre_95th": np.round(sre_95th, 3).item(),
-            "nere_avg": np.round(nere_avg, 3).item(),
-            "nere_95th": np.round(nere_95th, 3).item(),
+            "mse": np.round(mse, 4).item(),
+            "wce": np.round(wce, 4).item(),
+            "sre_avg": np.round(sre_avg, 4).item(),
+            "sre_95th": np.round(sre_95th, 4).item(),
+            "nere_avg": np.round(nere_avg, 4).item(),
+            "nere_95th": np.round(nere_95th, 4).item(),
         }
 
     return metrics_reduced
