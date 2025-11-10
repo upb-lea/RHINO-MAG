@@ -15,6 +15,7 @@ from mc2.models.model_interface import (
     JAParamMLPwInterface,
     JAWithGRUwInterface,
     JAWithExternGRUwInterface,
+    GRUWithPINNInterface,
 )
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU
@@ -136,6 +137,10 @@ def setup_model(
             model_params_d = dict(key=model_key)
             model = JAStatic2(key=model_key)
             mdl_interface_cls = JAwInterface
+        case "PinnWithGRU":
+            model_params_d = dict(hidden_size=8, input_size=7, key=model_key)
+            model = PinnWithGRU(**model_params_d)
+            mdl_interface_cls = GRUWithPINNInterface
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
 

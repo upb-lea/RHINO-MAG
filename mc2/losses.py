@@ -71,11 +71,11 @@ def pinn_gru_loss(
 
     # H_e, after (4)
     def He_fn(model, H, M):
-        return H + model.alpha * M
+        return H + model.model.alpha * M
 
     # Man (6)
     def Man_fn(model, H, M):
-        return model.Ms * (jnp.tanh(He_fn(model, H, M) / model.a) - (model.a / He_fn(model, H, M)))
+        return model.model.Ms * (jnp.tanh(He_fn(model, H, M) / model.model.a) - (model.model.a / He_fn(model, H, M)))
 
     # delta
     def delta_fn(H):
@@ -90,14 +90,14 @@ def pinn_gru_loss(
         numerator = Man_fn(model, H, M) - M
         numerator = jnp.squeeze(numerator)
 
-        part1 = delta_fn(H) * model.k / mu_0
-        part2 = model.alpha * (Man_fn(model, H, M) - M)
+        part1 = delta_fn(H) * model.model.k / mu_0
+        part2 = model.model.alpha * (Man_fn(model, H, M) - M)
         part2_sqee = jnp.squeeze(part2)
 
-        # denominator = delta_fn(H)*model.k/mu_0 - model.alpha*(Man_fn(model,H,M)-M)
-        denominator = (delta_fn(H) * model.k) / mu_0 - part2_sqee
+        # denominator = delta_fn(H)*model.model.k/mu_0 - model.model.alpha*(Man_fn(model,H,M)-M)
+        denominator = (delta_fn(H) * model.model.k) / mu_0 - part2_sqee
 
-        M_rev = model.c * (Man_fn(model, H, M) - M)
+        M_rev = model.model.c * (Man_fn(model, H, M) - M)
         M_rev = jnp.squeeze(M_rev)
 
         # (19) + (31)
