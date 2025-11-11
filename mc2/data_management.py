@@ -722,8 +722,14 @@ def load_data_into_pandas_df(
                 expected_cache_file = CACHE_ROOT / csv_file.with_suffix(".parquet").name
                 if expected_cache_file.exists():
                     df = pd.read_parquet(expected_cache_file)
+                    if df.empty:
+                        print(f"Loaded DataFrame at {expected_cache_file} is empty.")
                 else:
-                    df = pd.read_csv(csv_file, header=None)
+                    try:
+                        df = pd.read_csv(csv_file, header=None)
+                    except pd.errors.EmptyDataError:
+                        print(f"No Data found at {csv_file}. Returning empty DataFrame.")
+                        df = pd.DataFrame()
                     df.to_parquet(expected_cache_file, index=False)  # store cache
                 data_ret_d[csv_file.stem] = df
 
@@ -734,9 +740,15 @@ def load_data_into_pandas_df(
                 cached_filepath = CACHE_ROOT / filepath.with_suffix(".parquet").name
                 if cached_filepath.exists():
                     df = pd.read_parquet(cached_filepath)
+                    if df.empty:
+                        print(f"Loaded DataFrame at {cached_filepath} empty.")
                 else:
                     assert filepath.exists(), f"File does not exist: {filepath}"
-                    df = pd.read_csv(filepath, header=None)
+                    try:
+                        df = pd.read_csv(csv_file, header=None)
+                    except pd.errors.EmptyDataError:
+                        print(f"No Data found at {csv_file}. Returning empty DataFrame.")
+                        df = pd.DataFrame()
                     df.to_parquet(cached_filepath, index=False)  # store cache
                 data_ret_d[filepath.stem] = df
     return data_ret_d
