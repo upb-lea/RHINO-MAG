@@ -100,9 +100,9 @@ def filter_spec(f, leaf, f64_enabled):
     if isinstance(leaf, jax.Array):
         if leaf.dtype == problematic_dtype:
             print(f"Changing array from {problematic_dtype} to {target_dtype}")
-            return leaf.astype(target_dtype)
+            return jnp.load(f).astype(target_dtype)
         else:
-            return leaf
+            return jnp.load(f)
     else:
         return eqx.default_deserialise_filter_spec(f, leaf)
 
