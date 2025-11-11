@@ -7,6 +7,7 @@ predict/simulate trajectories for the MagNet Challenge 2, in adherence to the mo
 form specified in the challenge.
 """
 
+from functools import partial
 from abc import abstractmethod
 from typing import Type
 import pathlib
@@ -16,6 +17,7 @@ import numpy as np
 import numpy.typing as npt
 
 import jax
+import jax.numpy as jnp
 import equinox as eqx
 
 
@@ -82,11 +84,34 @@ def save_model(filename: str | pathlib.Path, hyperparams: dict, model: ModelInte
         eqx.tree_serialise_leaves(f, model)
 
 
+def filter_spec(f, leaf, f64_enabled):
+    """Helper function for proper model loading under varying array precision.
+
+    When a model is saved with float32 arrays and one attempts to load it in a float64
+    context (and vice-versa), the loading crashes. This helper transfers the arrays to
+    the proper dtypes.
+
+    - float64 is enabled -> convert float32 arrays to float64
+    - float64 is disabled -> convert float64 arrays to float32
+    """
+    problematic_dtype = jnp.float32 if f64_enabled else jnp.float64
+    target_dtype = jnp.float64 if f64_enabled else jnp.float32
+
+    if isinstance(leaf, jax.Array):
+        if leaf.dtype == problematic_dtype:
+            print(f"Changing array from {problematic_dtype} to {target_dtype}")
+            return leaf.astype(target_dtype)
+        else:
+            return leaf
+    else:
+        return eqx.default_deserialise_filter_spec(f, leaf)
+
+
 def load_model(filename: str | pathlib.Path, model_class: Type[ModelInterface]):
     with open(filename, "rb") as f:
         hyperparams = json.loads(f.readline().decode())
         model = model_class(key=jax.random.PRNGKey(0), **hyperparams)
-        return eqx.tree_deserialise_leaves(f, model)
+        return eqx.tree_deserialise_leaves(f, model, partial(filter_spec, f64_enabled=jax.config.x64_enabled))
 
 
 def count_model_parameters(model: ModelInterface) -> int:
