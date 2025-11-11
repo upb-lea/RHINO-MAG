@@ -382,6 +382,17 @@ class MaterialSet(eqx.Module):
 
             assert B_key in data_d and H_key in data_d and T_key in data_d, f"Missing data for frequency {freq} Hz"
 
+            if data_d[B_key].empty:
+                assert data_d[H_key].empty, "B DataFrame is empty, but corresponding DataFrame for H is not empty."
+                assert data_d[
+                    T_key
+                ].empty, "B and H DataFrames are empty, but corresponding DataFrame for T is not empty."
+
+                print(
+                    f"Given DataFrames for B, H, and T at frequency {freq} are empty. Skipping this frequency for the given material."
+                )
+                continue
+
             B = jnp.array(data_d[B_key].values)
             H = jnp.array(data_d[H_key].values)
             T = jnp.array(data_d[T_key].values)[:, 0]
@@ -399,7 +410,7 @@ class MaterialSet(eqx.Module):
 
         return cls(
             material_name=material_name,
-            frequencies=jnp.array(frequencies),
+            frequencies=jnp.array([freq_set.frequency for freq_set in frequency_sets]),
             frequency_sets=frequency_sets,
         )
 
@@ -710,6 +721,7 @@ def load_data_into_pandas_df(
 
     if material is None:
         # load all materials
+        # Note: this is likely not necessary anymore.
         raise NotImplementedError()
     else:
         mat_folder = DATA_ROOT / "raw" / material
