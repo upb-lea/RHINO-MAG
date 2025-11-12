@@ -86,11 +86,7 @@ def setup_model(
 ):
     def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
         past_length = norm_B_past.shape[0]
-        # future_length = norm_B_future.shape[0]
-
         B_all = jnp.hstack([norm_B_past, norm_B_future])
-        # if time_shift != 0:
-        #     B_all = shift_signal(B_all, k_0=time_shift)
 
         featurized_B = compute_fe_single(B_all, n_s=11, time_shift=time_shift)
 
@@ -121,9 +117,9 @@ def setup_model(
         case "HNODE":
             model_params_d = dict(
                 obs_dim=1,
-                state_dim=5,
-                action_dim=5,
-                width_size=64,
+                state_dim=8,
+                action_dim=model_in_size,
+                width_size=8,
                 depth=2,
                 obs_func_type="identity",
                 key=model_key,

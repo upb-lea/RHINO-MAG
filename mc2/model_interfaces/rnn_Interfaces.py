@@ -39,7 +39,11 @@ class NODEwInterface(ModelInterface):
 
         featurized_input = self.featurize(norm_B_past, norm_H_past, norm_B_future, norm_temperature)
 
-        _, norm_H_future = self.model(norm_H_past[-1], featurized_input, tau=1)
+        norm_temperature_broad = jnp.broadcast_to(norm_temperature[None], norm_B_future.shape[0])
+        featurized_input = jnp.concatenate(
+            [norm_B_future[..., None], norm_temperature_broad[..., None], featurized_input], axis=-1
+        )
+        _, norm_H_future = self.model(norm_H_past[-1], featurized_input, tau=1 / 16 * 1e-6)
         H_future = self.normalizer.denormalize_H(norm_H_future)
         return H_future
 
@@ -55,7 +59,13 @@ class NODEwInterface(ModelInterface):
             B_past_norm: jax.Array, H_past_norm: jax.Array, B_future_norm: jax.Array, T_norm: jax.Array
         ) -> jax.Array:
             featurized_input = self.featurize(B_past_norm, H_past_norm, B_future_norm, T_norm)
-            _, H_future_norm = self.model(H_past_norm[-1], featurized_input, tau=1)
+
+            T_norm_broad = jnp.broadcast_to(T_norm[None], B_future_norm.shape)
+            featurized_input = jnp.concatenate(
+                [B_future_norm[..., None], T_norm_broad[..., None], featurized_input], axis=-1
+            )
+
+            _, H_future_norm = self.model(H_past_norm[-1], featurized_input, tau=1 / 16 * 1e-6)
             return H_future_norm
 
         H_future = eqx.filter_vmap(norm_apply_model)(
@@ -69,11 +79,11 @@ class NODEwInterface(ModelInterface):
 
     def __call__(
         self,
-        B_past: npt.NDArray[np.float64],
-        H_past: npt.NDArray[np.float64],
-        B_future: npt.NDArray[np.float64],
-        T: npt.NDArray[np.float64],
-    ) -> npt.NDArray[np.float64]:
+        B_past: jax.Array,
+        H_past: jax.Array,
+        B_future: jax.Array,
+        T: jax.Array,
+    ) -> jax.Array:
         assert B_past.ndim == 2, (
             "The expected dimensions for B_past are (n_batches, past_sequence_length). "
             + f"The given array has dimension {B_past.ndim} instead."
@@ -105,7 +115,7 @@ class NODEwInterface(ModelInterface):
             jnp.asarray(B_future),
             jnp.asarray(T),
         )
-        H_future = np.array(H_future[:, :-1, 0], dtype=np.float64)
+        H_future = jnp.array(H_future[:, :-1, 0])
 
         assert B_future.shape[0] == H_future.shape[0], (
             "The future flux (B) and field (H) sequences must have the same batch_size."
