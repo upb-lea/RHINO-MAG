@@ -9,7 +9,7 @@ form specified in the challenge.
 
 from functools import partial
 from abc import abstractmethod
-from typing import Type
+from typing import Type, Callable
 import pathlib
 import json
 
@@ -76,6 +76,12 @@ class ModelInterface(eqx.Module):
         """
         pass
 
+    @property
+    def n_params(self):
+        if hasattr(self, "normalizer"):
+            n_params_fe = len(self.normalizer.norm_fe_max)
+        return n_params_fe + count_model_parameters(self)
+
 
 def save_model(filename: str | pathlib.Path, hyperparams: dict, model: ModelInterface):
     with open(filename, "wb") as f:
@@ -114,8 +120,8 @@ def load_model(filename: str | pathlib.Path, model_class: Type[ModelInterface]):
         return eqx.tree_deserialise_leaves(f, model, partial(filter_spec, f64_enabled=jax.config.x64_enabled))
 
 
-def count_model_parameters(model: ModelInterface) -> int:
+def count_model_parameters(model: ModelInterface, filter: Callable = eqx.is_array_like) -> int:
     """Returns the number of Parameters in the model by summing the sizes of the jax.Arrays.
     That is, all parameters of the model must be jax.Arrays for this function to work!
     """
-    return sum([p.size for p in jax.tree_leaves(eqx.filter(model, eqx.is_inexact_array, None))])
+    return sum([p.size if hasattr(p, "size") else 1 for p in jax.tree_leaves(eqx.filter(model, filter, None))])
