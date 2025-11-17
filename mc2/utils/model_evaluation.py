@@ -1,13 +1,17 @@
+import json
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
 import jax
+import jax.numpy as jnp
 import equinox as eqx
 
 from mc2.data_management import EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT
+from mc2.training.data_sampling import draw_data_uniformly
 from mc2.runners.model_setup_jax import setup_model
-from mc2.models.model_interface import load_model
+from mc2.model_interfaces.model_interface import load_model
 
 from functools import partial
 
@@ -48,16 +52,36 @@ def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | 
     return relevant_exp_ids
 
 
-def reconstruct_model_from_exp_id(exp_id, model_type=None):
+def reconstruct_model_from_exp_id(exp_id, **kwargs):
+
     material_name = exp_id.split("_")[0]
     if model_type is None:
         model_type = exp_id.split("_")[1]
 
-    fresh_wrapped_model, _, params, (train_set, val_set, test_set) = setup_model(
-        model_label=model_type,
-        material_name=material_name,
-        model_key=jax.random.PRNGKey(0),
-    )
+    # check if params are available:
+    experiment_path = EXPERIMENT_LOGS_ROOT / "jax_experiments"
+    try:
+        with open(experiment_path / f"{exp_id}.json", "r") as f:
+            params = json.load(f)["params"]
+        print(f"Parameters for the model setup were found at '{EXPERIMENT_LOGS_ROOT / exp_id}' and are utilized.")
+        fresh_wrapped_model, _, _, _ = setup_model(
+            model_label=model_type,
+            material_name=material_name,
+            model_key=jax.random.PRNGKey(0),
+            **params["training_params"],
+            **kwargs,
+        )
+    except FileNotFoundError:
+        print(
+            f"No parameters could be found under '{EXPERIMENT_LOGS_ROOT}' for exp_id: '{exp_id}', "
+            + "continues with default setup for the given model type specified in 'setup_model'."
+        )
+        fresh_wrapped_model, _, _, _ = setup_model(
+            model_label=model_type,
+            material_name=material_name,
+            model_key=jax.random.PRNGKey(0),
+            **kwargs,
+        )
 
     model_path = MODEL_DUMP_ROOT / f"{exp_id}.eqx"
     model = load_model(model_path, type(fresh_wrapped_model.model))
@@ -111,6 +135,8 @@ def plot_loss_trends(exp_id, seed):
     # Layout und Anzeige
     fig.suptitle("Training vs Validation Loss", fontsize=14)
     fig.tight_layout()
+    for ax in axes.flatten():
+        ax.grid(alpha=0.3)
     return fig, axes
 
 
@@ -186,3 +212,53 @@ def plot_first_predictions(gt, pred):
         ax.set_xlabel("Sequence step")
     fig.tight_layout()
     return fig, axes
+
+
+def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, figsize=(30, 8)):
+    # gather data
+
+    H_list, B_list, T_list = [], [], []
+
+    for freq_idx, frequency in enumerate(test_set.frequencies):
+        test_set_at_frequency = test_set.at_frequency(frequency)
+        H, B, T, _, loader_key = draw_data_uniformly(test_set_at_frequency, 1000, 1, loader_key)
+
+        H_list.append(H[None, ...])
+        B_list.append(B[None, ...])
+        T_list.append(T[None, ...])
+
+    H = jnp.concatenate(H_list, axis=0)
+    B = jnp.concatenate(B_list, axis=0)
+    T = jnp.concatenate(T_list, axis=0)
+
+    H_past = H[:, :past_size]
+    B_past = B[:, :past_size]
+
+    B_future = B[:, past_size:]
+    H_future = H[:, past_size:]
+
+    H_pred = wrapped_model(B_past, H_past, B_future, T)
+
+    # plot
+    fig, axs = plt.subplots(3, 7, figsize=figsize)
+    for freq_idx in range(len(test_set.frequencies)):
+        axs[0, freq_idx].plot(B_future[freq_idx])
+        axs[1, freq_idx].plot(H_future[freq_idx])
+        axs[1, freq_idx].plot(H_pred[freq_idx])
+
+        axs[2, freq_idx].plot(B_future[freq_idx], H_future[freq_idx])
+        axs[2, freq_idx].plot(B_future[freq_idx], H_pred[freq_idx])
+
+        axs[0, freq_idx].grid(True, alpha=0.3)
+        axs[1, freq_idx].grid(True, alpha=0.3)
+        axs[2, freq_idx].grid(True, alpha=0.3)
+
+        axs[0, freq_idx].set_ylabel("B")
+        axs[0, freq_idx].set_xlabel("k")
+        axs[1, freq_idx].set_ylabel("H")
+        axs[1, freq_idx].set_xlabel("k")
+        axs[2, freq_idx].set_ylabel("H")
+        axs[2, freq_idx].set_xlabel("B")
+
+    fig.tight_layout(pad=-0.2)
+    return fig, axs

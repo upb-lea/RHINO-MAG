@@ -5,7 +5,39 @@ import jax
 import jax.numpy as jnp
 
 from mc2.data_management import MaterialSet
-from mc2.models.model_interface import ModelInterface
+from mc2.model_interfaces.model_interface import ModelInterface
+
+
+def sre(h_est: jax.Array, h_true: jax.Array) -> jax.Array:
+    """Compute the sequence relative error (SRE) for a single sequence of H estimations
+    and ground-truth values.
+
+    Args:
+        h_est (jax.Array): H estimations with shape (sequence_length,)
+        h_true (jax.Array): H gt values with shape (sequence_length,)
+
+    Returns:
+        The resulting SRE value as a jax.Array with shape (,)
+    """
+    mse = mean_squared_error(h_est, h_true)
+    return jnp.sqrt(mse) / jnp.sqrt(jnp.mean(h_true**2))
+
+
+def nere(h_est: jax.Array, h_true: jax.Array, db_dt: jax.Array, true_core_loss: jax.Array) -> jax.Array:
+    """Compute the normalized energy relative error (NERE) for a single sequence of H
+    estimations and ground-truth values.
+
+    Args:
+        h_est (jax.Array): H estimations with shape (sequence_length,)
+        h_true (jax.Array): H gt values with shape (sequence_length,)
+        db_dt (jax.Array): dB/dt values for B with shape (sequence_length,)
+        true_core_loss (jax.Array): The true core losses for the given sequence with shape (,)
+
+    Returns:
+        The resulting NERE value as a jax.Array with shape (,)
+    """
+    est_cl_difference = jnp.sum((db_dt * h_est) - (db_dt * h_true))
+    return jnp.abs(est_cl_difference / jnp.abs(true_core_loss))
 
 
 def get_energy_loss(b: jax.Array, h: jax.Array) -> jax.Array:

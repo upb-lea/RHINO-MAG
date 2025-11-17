@@ -15,9 +15,28 @@ def d2b_dt2(b: jax.Array) -> jax.Array:
     return jnp.gradient(jnp.gradient(b))
 
 
-def dyn_avg(x: jax.Array, n_s: int) -> jax.Array:
+def dyn_avg(x: jax.Array, n_s: int, mirrored_padding: bool = True) -> jax.Array:
     """Calculate the dynamic average of sequence x containing n_s samples."""
-    return jnp.convolve(x, jnp.ones(n_s) / n_s, mode="same")
+
+    if mirrored_padding:
+        convolution_mode = "valid"
+        assert (n_s - 1) % 2 == 0, "n_s must be an odd number"
+        p_len = (n_s - 1) // 2
+        x = jnp.pad(x, ((p_len, p_len)), mode="reflect", reflect_type="odd")
+    else:
+        convolution_mode = "same"
+        x = x
+
+    return jnp.convolve(x, jnp.ones(n_s) / n_s, mode=convolution_mode)
+
+
+def shift_signal(x: jax.Array, k_0: int) -> jax.Array:
+    if k_0 == 0:
+        return x
+    else:
+        x_padded = jnp.pad(x, ((abs(k_0), abs(k_0))), mode="reflect", reflect_type="odd")
+        x_shifted = jnp.roll(x_padded, -k_0)
+        return x_shifted[abs(k_0) : -abs(k_0)]
 
 
 def pwm_of_b(b: jax.Array) -> jax.Array:
@@ -77,14 +96,17 @@ def get_frequency(signal, fs):
     return frequency
 
 
-def compute_fe_single(data_single: jax.Array, n_s: int) -> jax.Array:
+def compute_fe_single(data_single: jax.Array, n_s: int, time_shift: int = 3) -> jax.Array:
     dyn = dyn_avg(data_single, n_s)
     db = db_dt(data_single)
     d2b = d2b_dt2(data_single)
     pwm = pwm_of_b(data_single)
-    # f = get_frequency(d2b, F_SAMPLE)
-    # f_repeated = jnp.full(pwm.shape, f)
-    return jnp.stack((data_single, dyn, db, d2b, pwm), axis=-1)  # , f_repeated), axis=-1)
+
+    if time_shift != 0:
+        shifted_data_single = shift_signal(data_single, k_0=time_shift)
+        return jnp.stack((shifted_data_single, dyn, db, d2b, pwm), axis=-1)
+    else:
+        return jnp.stack((dyn, db, d2b, pwm), axis=-1)
 
 
 @eqx.filter_jit
