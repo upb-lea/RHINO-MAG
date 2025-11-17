@@ -10,7 +10,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
 
-jax.config.update("jax_enable_x64", True)
+#jax.config.update("jax_enable_x64", True)
 # jax.config.update("jax_debug_nans", True)
 # jax.config.update("jax_log_compiles", True)
 
@@ -69,12 +69,20 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help="Starting tbptt size and number of epochs/steps to use it for, before switching to tbptt_size. Format: size n_epochs",
     )
+    parser.add_argument(
+        "--seeds",
+        default=[0],
+        nargs="+",
+        type=int,
+        required=False,
+        help="One or more seeds to run the experiments with. Default is [0].",
+    )
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
     return args
 
 
-def main():
+def run_experiment_for_seed(args: argparse.Namespace, seed: int, base_id: str):
     args = parse_args()
 
     if args.gpu_id != -1:
@@ -83,7 +91,7 @@ def main():
     # jax.config.update("jax_platform_name", "cpu")
 
     # setup
-    seed = 0
+    #seed = 0
     key = jax.random.PRNGKey(seed)
     key, training_key, model_key = jax.random.split(key, 3)
 
@@ -104,7 +112,8 @@ def main():
 
     loss_function = setup_loss(args.loss_type)
 
-    exp_id = f"{args.material}_{args.model_type}_{str(uuid4())[:16]}"
+    exp_id = f"{base_id}_seed{seed}"
+    #exp_id = f"{args.material}_{args.model_type}_{str(uuid4())[:16]}"
     log.info(f"Training starting. Experiment ID is {exp_id}.")
 
     # run training
@@ -150,6 +159,24 @@ def main():
         + "have been stored successfully."
     )
 
+def main():
+    args = parse_args()
+
+    if not args.seeds:
+        log.warning("No seeds provided. Using default seed 0.")
+        seeds_to_run = [0]
+    else:
+        seeds_to_run = args.seeds
+
+    log.info(f"Starting experiments for {len(seeds_to_run)} seeds: {seeds_to_run}")
+    base_id = f"{args.material}_{args.model_type}_{str(uuid4())[:8]}"
+    for seed in seeds_to_run:
+        try:
+            run_experiment_for_seed(args, seed,base_id)
+        except Exception as e:
+            log.error(f"Experiment for seed {seed} failed with error: {e}")
+    
+    log.info("All scheduled experiments completed.")
 
 if __name__ == "__main__":
     main()

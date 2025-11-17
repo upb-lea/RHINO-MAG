@@ -15,6 +15,8 @@ from mc2.models.model_interface import (
     JAParamMLPwInterface,
     JAWithGRUwInterface,
     JAWithExternGRUwInterface,
+    GRUWithJAwInterface,
+    LFRWithGRUJAwInterface,
 )
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU
@@ -27,6 +29,8 @@ from mc2.models.jiles_atherton import (
     JAWithGRU,
     JAWithGRUlin,
     JAWithGRUlinFinal,
+    GRUWithJA,
+    LFRWithGRUJA,
 )
 from mc2.data_management import Normalizer
 
@@ -46,7 +50,7 @@ def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: in
         train_set, val_set, test_set = mat_set.split_into_train_val_test(
             train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=0
         )
-        train_set_norm = train_set.normalize(transform_H=True, featurize=featurize)
+        train_set_norm = train_set.normalize(transform_H=True, featurize=featurize) #True
         normalizer = train_set_norm.normalizer
     else:
         normalizer = Normalizer(
@@ -103,6 +107,14 @@ def setup_model(
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
+        case "GRU_4":
+            model_params_d = dict(hidden_size=4, in_size=7, key=model_key)
+            model = GRU(**model_params_d)
+            mdl_interface_cls = RNNwInterface
+        case "GRU_16":
+            model_params_d = dict(hidden_size=16, in_size=7, key=model_key)
+            model = GRU(**model_params_d)
+            mdl_interface_cls = RNNwInterface
         case "JAWithExternGRU":
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = JAWithExternGRU(**model_params_d)
@@ -123,6 +135,10 @@ def setup_model(
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = GRUWithJA(normalizer=normalizer,**model_params_d)
             mdl_interface_cls = GRUWithJAwInterface
+        case "LFRWithGRUJA":
+            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
+            model = LFRWithGRUJA(normalizer=normalizer,**model_params_d)
+            mdl_interface_cls = LFRWithGRUJAwInterface
         case "JAParamGRUlin":
             model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
             model = JAParamGRUlin(normalizer=normalizer, **model_params_d)

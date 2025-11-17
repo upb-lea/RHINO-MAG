@@ -9,6 +9,7 @@ from mc2.data_management import EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT
 from mc2.runners.model_setup_jax import setup_model
 from mc2.models.model_interface import load_model
 
+from functools import partial
 
 def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | list[str] | None = None):
     model_paths = list(MODEL_DUMP_ROOT.glob("*.eqx"))
@@ -47,9 +48,10 @@ def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | 
     return relevant_exp_ids
 
 
-def reconstruct_model_from_exp_id(exp_id):
+def reconstruct_model_from_exp_id(exp_id, model_type=None):
     material_name = exp_id.split("_")[0]
-    model_type = exp_id.split("_")[1]
+    if model_type is None:
+        model_type = exp_id.split("_")[1]
 
     fresh_wrapped_model, _, params, (train_set, val_set, test_set) = setup_model(
         model_label=model_type,
@@ -59,6 +61,13 @@ def reconstruct_model_from_exp_id(exp_id):
 
     model_path = MODEL_DUMP_ROOT / f"{exp_id}.eqx"
     model = load_model(model_path, type(fresh_wrapped_model.model))
+    # try:
+    #     model = load_model(model_path, type(fresh_wrapped_model.model))
+    # except:
+    #     print(f"Loading without normalizer failed. Loading with normalizer initialized...")
+    #     model_type = type(fresh_wrapped_model.model)
+    #     model_type = partial(model_type, normalizer=fresh_wrapped_model.normalizer)
+    #     model = load_model(model_path, model_type)
 
     wrapped_model = eqx.tree_at(lambda t: t.model, fresh_wrapped_model, model)
     return wrapped_model
