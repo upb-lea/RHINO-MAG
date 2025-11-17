@@ -330,41 +330,6 @@ class NormalizedFrequencySet(FrequencySet):
         )
 
 
-class TestSet(eqx.Module):
-    """Class for holding the final test data.
-
-    These are sequences without frequency information and the missing values (which are
-        to be predicted) are padded with NaNs.
-    """
-
-    material_name: str
-    H: jax.Array
-    B: jax.Array
-    T: jax.Array
-
-    @classmethod
-    def from_dict(cls, data_dict: dict) -> "TestSet":
-        """Create a TestSet from a dictionary."""
-        return cls(
-            material_name=data_dict["material_name"],
-            H=jnp.array(data_dict["H"]),
-            B=jnp.array(data_dict["B"]),
-            T=jnp.array(data_dict["T"]),
-        )
-
-    @classmethod
-    def from_material_name(cls, material_name: str):
-        data_dict = load_test_data_into_pandas_df(material_name)
-        return cls.from_dict(
-            data_dict={
-                "material_name": material_name,
-                "H": data_dict[f"{material_name}_Padded_H_seq"],
-                "B": data_dict[f"{material_name}_True_B_seq"],
-                "T": data_dict[f"{material_name}_True_T"],
-            }
-        )
-
-
 class MaterialSet(eqx.Module):
     """Class to store measurement data for a single material but with variable
     frequencies and temperatures.
@@ -389,6 +354,14 @@ class MaterialSet(eqx.Module):
         """Save the MaterialSet to a file."""
         with open(file_path, "wb") as f:
             pickle.dump(self, f)
+
+    @classmethod
+    def from_material_name(
+        cls,
+        material_name: str,
+    ) -> "MaterialSet":
+        data_dict = load_data_into_pandas_df(material=material_name)
+        return cls.from_pandas_dict(data_dict)
 
     @classmethod
     def load_from_raw_data(
@@ -761,6 +734,41 @@ class DataSet(eqx.Module):
         return DataSet(filtered_material_sets)
 
 
+class TestSet(eqx.Module):
+    """Class for holding the final test data.
+
+    These are sequences without frequency information and the missing values (which are
+        to be predicted) are padded with NaNs.
+    """
+
+    material_name: str
+    H: jax.Array
+    B: jax.Array
+    T: jax.Array
+
+    @classmethod
+    def from_dict(cls, data_dict: dict) -> "TestSet":
+        """Create a TestSet from a dictionary."""
+        return cls(
+            material_name=data_dict["material_name"],
+            H=jnp.array(data_dict["H"]),
+            B=jnp.array(data_dict["B"]),
+            T=jnp.array(data_dict["T"]),
+        )
+
+    @classmethod
+    def from_material_name(cls, material_name: str):
+        data_dict = load_test_data_into_pandas_df(material_name)
+        return cls.from_dict(
+            data_dict={
+                "material_name": material_name,
+                "H": data_dict[f"{material_name}_Padded_H_seq"],
+                "B": data_dict[f"{material_name}_True_B_seq"],
+                "T": data_dict[f"{material_name}_True_T"],
+            }
+        )
+
+
 def load_data_into_pandas_df(
     material: str,
     number: int = None,
@@ -792,7 +800,7 @@ def load_data_into_pandas_based_on_path(
     cache_path: Path | str,
     material: str,
     number: int = None,
-):
+) -> dict:
     mat_folder = raw_path / material
     assert mat_folder.is_dir(), f"Folder does not exist: {mat_folder}"
     assert mat_folder.is_dir(), f"Folder does not exist: {mat_folder}"

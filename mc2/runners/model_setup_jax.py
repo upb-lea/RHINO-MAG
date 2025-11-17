@@ -48,8 +48,7 @@ SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
 
 def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: int, do_normalization: bool):
     if do_normalization:
-        data_dict = load_data_into_pandas_df(material=material_name)
-        mat_set = MaterialSet.from_pandas_dict(data_dict)
+        mat_set = MaterialSet.from_material_name(material_name)
 
         mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
 
