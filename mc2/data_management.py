@@ -9,7 +9,7 @@ import sys
 from uuid import uuid4
 from sklearn.model_selection import train_test_split
 
-import h5py
+
 import jax
 import jax.numpy as jnp
 import torch
@@ -49,6 +49,19 @@ AVAILABLE_MATERIALS = [
     "N30",
     "N49",
     "N87",
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+]
+
+FINAL_MATERIALS = [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
 ]
 
 DESIRED_DT_FMT = "%Y-%m-%d %H:%M:%S"  # desired datetime format
@@ -382,6 +395,17 @@ class MaterialSet(eqx.Module):
 
             assert B_key in data_d and H_key in data_d and T_key in data_d, f"Missing data for frequency {freq} Hz"
 
+            if data_d[B_key].empty:
+                assert data_d[H_key].empty, "B DataFrame is empty, but corresponding DataFrame for H is not empty."
+                assert data_d[
+                    T_key
+                ].empty, "B and H DataFrames are empty, but corresponding DataFrame for T is not empty."
+
+                print(
+                    f"Given DataFrames for B, H, and T at frequency {freq} are empty. Skipping this frequency for the given material."
+                )
+                continue
+
             B = jnp.array(data_d[B_key].values)
             H = jnp.array(data_d[H_key].values)
             T = jnp.array(data_d[T_key].values)[:, 0]
@@ -399,7 +423,7 @@ class MaterialSet(eqx.Module):
 
         return cls(
             material_name=material_name,
-            frequencies=jnp.array(frequencies),
+            frequencies=jnp.array([freq_set.frequency for freq_set in frequency_sets]),
             frequency_sets=frequency_sets,
         )
 
@@ -710,6 +734,7 @@ def load_data_into_pandas_df(
 
     if material is None:
         # load all materials
+        # Note: this is likely not necessary anymore.
         raise NotImplementedError()
     else:
         mat_folder = DATA_ROOT / "raw" / material
@@ -722,8 +747,14 @@ def load_data_into_pandas_df(
                 expected_cache_file = CACHE_ROOT / csv_file.with_suffix(".parquet").name
                 if expected_cache_file.exists():
                     df = pd.read_parquet(expected_cache_file)
+                    if df.empty:
+                        print(f"Loaded DataFrame at {expected_cache_file} is empty.")
                 else:
-                    df = pd.read_csv(csv_file, header=None)
+                    try:
+                        df = pd.read_csv(csv_file, header=None)
+                    except pd.errors.EmptyDataError:
+                        print(f"No Data found at {csv_file}. Returning empty DataFrame.")
+                        df = pd.DataFrame()
                     df.to_parquet(expected_cache_file, index=False)  # store cache
                 data_ret_d[csv_file.stem] = df
 
@@ -734,9 +765,15 @@ def load_data_into_pandas_df(
                 cached_filepath = CACHE_ROOT / filepath.with_suffix(".parquet").name
                 if cached_filepath.exists():
                     df = pd.read_parquet(cached_filepath)
+                    if df.empty:
+                        print(f"Loaded DataFrame at {cached_filepath} empty.")
                 else:
                     assert filepath.exists(), f"File does not exist: {filepath}"
-                    df = pd.read_csv(filepath, header=None)
+                    try:
+                        df = pd.read_csv(csv_file, header=None)
+                    except pd.errors.EmptyDataError:
+                        print(f"No Data found at {csv_file}. Returning empty DataFrame.")
+                        df = pd.DataFrame()
                     df.to_parquet(cached_filepath, index=False)  # store cache
                 data_ret_d[filepath.stem] = df
     return data_ret_d
@@ -809,29 +846,3 @@ def get_train_val_test_pandas_dicts(
     data_test = test_set.to_pandas_dict()
 
     return data_train, data_val, data_test
-
-
-def load_hdf5_pretest_data(
-    mat: str,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]:
-    """Returns B, T, H_init, H_true, msks_scenarios_N_tup where
-    H_init has NaNs for unknown samples, and msks_scenarios_N_tup is a tuple of boolean masks for each
-    scenario of unknown samples count.
-    B, T, H_init, H_true are all of shape (num_time_series, num_time_steps)."""
-    pretest_root = PRETEST_DATA_ROOT / f"{mat}"
-    with h5py.File(pretest_root / f"{mat}_Testing_Padded.h5", "r") as f:
-        B = f["B_seq"][:]
-        H_init = f["H_seq"][:]
-        T = f["T"][:]
-        loss_short = f["Loss"][:]
-    with h5py.File(pretest_root / f"{mat}_Testing_True.h5", "r") as f:
-        H_true = f["H_seq"][:]
-        Loss = f["Loss"][:]
-    unknowns_N = np.isnan(H_init).sum(axis=1)
-    unknown_samples_variants, counts = np.unique(unknowns_N, return_counts=True)
-    assert len(unknown_samples_variants) == 3, "Expecting 3 variants of unknown samples"
-    msk_scenario_0 = unknowns_N == unknown_samples_variants[0]
-    msk_scenario_1 = unknowns_N == unknown_samples_variants[1]
-    msk_scenario_2 = unknowns_N == unknown_samples_variants[2]
-    print(f"Scenario counts: {counts}")
-    return B, T, H_init, H_true, Loss, loss_short, (msk_scenario_0, msk_scenario_1, msk_scenario_2)

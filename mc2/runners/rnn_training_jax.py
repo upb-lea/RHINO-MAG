@@ -10,7 +10,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
 
-jax.config.update("jax_enable_x64", True)
+
 # jax.config.update("jax_debug_nans", True)
 # jax.config.update("jax_log_compiles", True)
 
@@ -24,7 +24,7 @@ from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT
 from mc2.training.jax_routine import train_model
 from mc2.runners.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
 from mc2.metrics import evaluate_model_on_test_set
-from mc2.models.model_interface import save_model
+from mc2.model_interfaces.model_interface import save_model
 
 
 def parse_args() -> argparse.Namespace:
@@ -53,13 +53,28 @@ def parse_args() -> argparse.Namespace:
         default=-1,
         type=int,
         required=False,
-        help="id of the gpu to use for the experiments. '-1' for not setting a GPU.",
+        help="id of the gpu to use for the experiments. '-1' for using the CPU.",
     )
     # TODO: Enable epochs over sampling
     parser.add_argument("-e", "--epochs", default=100, required=False, type=int, help="Number of epochs to train")
     parser.add_argument("-b", "--batch_size", default=256, required=False, type=int, help="Batch size for training")
     parser.add_argument(
         "-t", "--tbptt_size", default=1024, required=False, type=int, help="Truncated backpropagation through time size"
+    )
+    parser.add_argument(
+        "-p",
+        "--past_size",
+        default=10,
+        required=False,
+        type=int,
+        help="Number of steps to use in the past trajectory (warmup steps).",
+    )
+    parser.add_argument(
+        "--time_shift",
+        default=0,
+        required=False,
+        type=int,
+        help="Time shift for the B trajectory in featurize",
     )
     parser.add_argument(
         "-ts",
@@ -69,6 +84,7 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help="Starting tbptt size and number of epochs/steps to use it for, before switching to tbptt_size. Format: size n_epochs",
     )
+    parser.add_argument("--disable_f64", action="store_true", default=False)
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
     return args
@@ -77,10 +93,13 @@ def parse_args() -> argparse.Namespace:
 def main():
     args = parse_args()
 
+    jax.config.update("jax_enable_x64", not args.disable_f64)
+
     if args.gpu_id != -1:
         gpus = jax.devices()
         jax.config.update("jax_default_device", gpus[args.gpu_id])
-    # jax.config.update("jax_platform_name", "cpu")
+    elif args.gpu_id == -1:
+        jax.config.update("jax_platform_name", "cpu")
 
     # setup
     seed = 0
@@ -99,6 +118,8 @@ def main():
         n_epochs=args.epochs,
         tbptt_size=args.tbptt_size,
         batch_size=args.batch_size,
+        past_size=args.past_size,
+        time_shift=args.time_shift,
         tbptt_size_start=args.tbptt_size_start,
     )
 

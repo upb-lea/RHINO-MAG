@@ -15,7 +15,7 @@ from mc2.data_management import (
     FrequencySet,
 )
 from mc2.training.data_sampling import draw_data_uniformly, load_batches, load_batches_material_set
-from mc2.models.model_interface import ModelInterface
+from mc2.model_interfaces.model_interface import ModelInterface
 
 # import orbax.checkpoint as ocp
 
@@ -296,6 +296,7 @@ def train_model(
     tbptt_size: int,
     past_size: int,
     batch_size: int,
+    time_shift: int,
     tbptt_size_start: list[int] | None = None,  # (size, n_epochs_steps)
 ):
     train_set, val_set, test_set = data_tuple
