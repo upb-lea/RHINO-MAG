@@ -741,6 +741,19 @@ class TestSet(eqx.Module):
         to be predicted) are padded with NaNs.
     """
 
+    class TestScenario(eqx.Module):
+        material_name: str
+        mask: jax.Array
+        H_past: jax.Array
+        B_past: jax.Array
+        B_future: jax.Array
+        T: jax.Array
+        N_unknown: int
+
+        @property
+        def N_known(self):
+            return self.H_past.shape[-1]
+
     material_name: str
     H: jax.Array
     B: jax.Array
@@ -767,6 +780,30 @@ class TestSet(eqx.Module):
                 "T": data_dict[f"{material_name}_True_T"],
             }
         )
+
+    @property
+    def scenarios(self):
+        unknowns_N = jnp.isnan(self.H).sum(axis=1)
+        unknown_samples_variants = jnp.array(pd.unique(np.array(unknowns_N)))
+
+        scenarios = []
+
+        for N_unknown in unknown_samples_variants:
+
+            mask = unknowns_N == N_unknown
+
+            scenarios.append(
+                self.TestScenario(
+                    material_name=self.material_name,
+                    mask=mask,
+                    H_past=self.H[mask, :-N_unknown],
+                    B_past=self.B[mask, :-N_unknown],
+                    B_future=self.B[mask, -N_unknown:],
+                    T=self.T[mask],
+                    N_unknown=N_unknown,
+                )
+            )
+        return scenarios
 
 
 def load_data_into_pandas_df(
