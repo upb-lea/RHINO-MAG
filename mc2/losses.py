@@ -69,55 +69,40 @@ def pinn_gru_loss(
     mu_0 = 4 * jnp.pi * 10 ** (-7)
     TAU = 1 / 16e6
 
-    # H_e, after (4)
-    def He_fn(model, H, M):
-        return H + model.model.alpha * M
+    def coth_stable(x):
+        eps = 1e-7
+        x = jnp.where(jnp.abs(x) < eps, eps * jnp.sign(x), x)
+        return 1 / jnp.tanh(x)
 
-    # Man (6)
-    def Man_fn(model, H, M):
-        return model.model.Ms * (jnp.tanh(He_fn(model, H, M) / model.model.a) - (model.model.a / He_fn(model, H, M)))
+    def fn_dM_dH(model, H, M, dB_dt):
+        H_e = H + model.model.alpha * M
+        M_an = model.model.Ms * (coth_stable(H_e / model.model.a) - model.model.a / H_e)
+        delta_m = 0.5 * (1 + jnp.sign((M_an - M) * dB_dt))
 
-    # delta
-    def delta_fn(H):
-        H_new = jnp.squeeze(H)
-        diff_H = jnp.diff(H_new, append=1)
-        delta = jnp.sign(diff_H)
+        dM_an_dH_e = (
+            model.model.Ms / model.model.a * (1 - (coth_stable(H_e / model.model.a)) ** 2 + (model.model.a / H_e) ** 2)
+        )
+        delta = jnp.sign(dB_dt)
 
-        return delta
+        numerator = delta_m * (M_an - M) + model.model.c * model.model.k * delta * dM_an_dH_e
+        denominator = model.model.k * delta - model.model.alpha * numerator
 
-    #  eq (19)
-    def fn_dM_dH(model, H, M):
-        numerator = Man_fn(model, H, M) - M
-        numerator = jnp.squeeze(numerator)
+        dM_dH = numerator / denominator
 
-        part1 = delta_fn(H) * model.model.k / mu_0
-        part2 = model.model.alpha * (Man_fn(model, H, M) - M)
-        part2_sqee = jnp.squeeze(part2)
-
-        # denominator = delta_fn(H)*model.model.k/mu_0 - model.model.alpha*(Man_fn(model,H,M)-M)
-        denominator = (delta_fn(H) * model.model.k) / mu_0 - part2_sqee
-
-        M_rev = model.model.c * (Man_fn(model, H, M) - M)
-        M_rev = jnp.squeeze(M_rev)
-
-        # (19) + (31)
-        dM_dH = numerator / denominator + M_rev
         return dM_dH
 
     def physics(model, H, B, B_next):
         dB_dt_est = (B_next - B) / TAU
-        dB_dt_est = jnp.squeeze(dB_dt_est)
         M = B / mu_0 - H
-        dM_dH = fn_dM_dH(model, H, M)
+        dM_dH = fn_dM_dH(model, H, M, dB_dt_est)
         dM_dB = dM_dH / (mu_0 * (1 + dM_dH))
-
         dM_dt = dM_dB * dB_dt_est
         dH_dt = 1 / mu_0 * dB_dt_est - dM_dt
 
         return dH_dt
 
-    physics_at_collocation_points = physics(model, H_past, B_past, B_future)
+    physics_at_collocation_points = eqx.filter_vmap(physics, in_axes=(None, 0, 0, 0))(model, H_past, B_past, B_future)
 
     physics_loss = 0.5 * jnp.mean(jnp.square(physics_at_collocation_points))
 
-    return mse_loss + 1e-20 * physics_loss
+    return mse_loss + 1e-4 * physics_loss

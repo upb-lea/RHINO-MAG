@@ -12,19 +12,12 @@ class PinnWithGRU(eqx.Module):
     alpha: jnp.ndarray
     c: jnp.ndarray
     k: jnp.ndarray
-    # out_layer: eqx.Module
+    hidden_size: int = eqx.static_field()
 
     def __init__(self, input_size, hidden_size, *, key):
         init_key, key = jr.split(key)
+        self.hidden_size = hidden_size
         self.net = eqx.nn.GRUCell(input_size=input_size, hidden_size=hidden_size, key=init_key)
-
-        # key1, key2, key3, key4, key5, key6 = jr.split(key, 6)
-        # Ms_key = jr.uniform(key1)
-        # a_key = jr.uniform(key2)
-        # a_key = jr.uniform(key3)
-        # alpha_key = jr.uniform(key4)
-        # c_key = jr.uniform(key5)
-        # k_key = jr.uniform(key6)
 
         self.Ms = jnp.array([1.6e6], dtype=jnp.float32)
         self.a = jnp.array([110], dtype=jnp.float32)
