@@ -49,6 +49,19 @@ AVAILABLE_MATERIALS = [
     "N30",
     "N49",
     "N87",
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+]
+
+FINAL_MATERIALS = [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
 ]
 
 DESIRED_DT_FMT = "%Y-%m-%d %H:%M:%S"  # desired datetime format
