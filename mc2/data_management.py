@@ -734,78 +734,6 @@ class DataSet(eqx.Module):
         return DataSet(filtered_material_sets)
 
 
-class TestSet(eqx.Module):
-    """Class for holding the final test data.
-
-    These are sequences without frequency information and the missing values (which are
-        to be predicted) are padded with NaNs.
-    """
-
-    class TestScenario(eqx.Module):
-        material_name: str
-        mask: jax.Array
-        H_past: jax.Array
-        B_past: jax.Array
-        B_future: jax.Array
-        T: jax.Array
-        N_unknown: int
-
-        @property
-        def N_known(self):
-            return self.H_past.shape[-1]
-
-    material_name: str
-    H: jax.Array
-    B: jax.Array
-    T: jax.Array
-
-    @classmethod
-    def from_dict(cls, data_dict: dict) -> "TestSet":
-        """Create a TestSet from a dictionary."""
-        return cls(
-            material_name=data_dict["material_name"],
-            H=jnp.array(data_dict["H"]),
-            B=jnp.array(data_dict["B"]),
-            T=jnp.array(data_dict["T"]),
-        )
-
-    @classmethod
-    def from_material_name(cls, material_name: str):
-        data_dict = load_test_data_into_pandas_df(material_name)
-        return cls.from_dict(
-            data_dict={
-                "material_name": material_name,
-                "H": data_dict[f"{material_name}_Padded_H_seq"],
-                "B": data_dict[f"{material_name}_True_B_seq"],
-                "T": data_dict[f"{material_name}_True_T"],
-            }
-        )
-
-    @property
-    def scenarios(self):
-        unknowns_N = jnp.isnan(self.H).sum(axis=1)
-        unknown_samples_variants = jnp.array(pd.unique(np.array(unknowns_N)))
-
-        scenarios = []
-
-        for N_unknown in unknown_samples_variants:
-
-            mask = unknowns_N == N_unknown
-
-            scenarios.append(
-                self.TestScenario(
-                    material_name=self.material_name,
-                    mask=mask,
-                    H_past=self.H[mask, :-N_unknown],
-                    B_past=self.B[mask, :-N_unknown],
-                    B_future=self.B[mask, -N_unknown:],
-                    T=self.T[mask],
-                    N_unknown=N_unknown,
-                )
-            )
-        return scenarios
-
-
 def load_data_into_pandas_df(
     material: str,
     number: int = None,
@@ -814,19 +742,6 @@ def load_data_into_pandas_df(
     return load_data_into_pandas_based_on_path(
         raw_path=DATA_ROOT / "raw",
         cache_path=CACHE_ROOT,
-        material=material,
-        number=number,
-    )
-
-
-def load_test_data_into_pandas_df(
-    material: str,
-    number: int = None,
-) -> dict:
-    """Load data selectively from raw CSV files if cache does not exist yet. Caches loaded data for next time."""
-    return load_data_into_pandas_based_on_path(
-        raw_path=DATA_ROOT / "final_testing_data" / "raw",
-        cache_path=DATA_ROOT / "final_testing_data" / "cache",
         material=material,
         number=number,
     )
