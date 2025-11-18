@@ -176,3 +176,33 @@ def validate_result_set(
         assert jnp.all(~jnp.isnan(result_set.H[scenario.mask][:, scenario.N_known :]))
 
     print(f"Results for '{material_name}' seem consistent with the test data.")
+
+
+def visualize_result_set(result_set: ResultSet, figsize=(30, 8)):
+    fig, axs = plt.subplots(3, 7, figsize=figsize)
+
+    n_plots_per_row = 7
+
+    n_sequences = result_set.H.shape[0]
+    if n_sequences < n_plots_per_row:
+        n_plots_per_row = n_sequences
+
+    for seq_idx in range(n_plots_per_row):
+        axs[0, seq_idx].plot(result_set.B[seq_idx], color="tab:blue")
+        axs[1, seq_idx].plot(result_set.H[seq_idx], color="tab:orange")
+
+        axs[2, seq_idx].plot(result_set.H[seq_idx], result_set.B[seq_idx], color="tab:orange")
+
+        axs[0, seq_idx].grid(True, alpha=0.3)
+        axs[1, seq_idx].grid(True, alpha=0.3)
+        axs[2, seq_idx].grid(True, alpha=0.3)
+
+        axs[0, seq_idx].set_ylabel("B")
+        axs[0, seq_idx].set_xlabel("k")
+        axs[1, seq_idx].set_ylabel("H")
+        axs[1, seq_idx].set_xlabel("k")
+        axs[2, seq_idx].set_ylabel("B")
+        axs[2, seq_idx].set_xlabel("H")
+
+    fig.tight_layout(pad=-0.2)
+    return fig, axs
