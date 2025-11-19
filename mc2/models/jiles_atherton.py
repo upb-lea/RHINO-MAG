@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import equinox as eqx
 import optax
 
-from mc2.data_management import MODEL_DUMP_ROOT
+from mc2.data_management import MODEL_DUMP_ROOT, Normalizer
 from mc2.models.RNN import GRU, GRUwLinear
 from mc2.model_interfaces.model_interface import load_model
 
@@ -684,6 +684,60 @@ class JAParamMLP(eqx.Module):
         B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
         inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:])
         (_), H_seq = jax.lax.scan(body_fun, (H0), inputs)
+        return H_seq
+
+
+def set_parameters(model, params):
+
+    Ms_param, a_param, alpha_param, k_param, c_param = params
+
+    model = eqx.tree_at(lambda m: m.Ms_param, model, jnp.array((Ms_param).astype(float)))
+    model = eqx.tree_at(lambda m: m.a_param, model, jnp.array((a_param).astype(float)))
+    model = eqx.tree_at(lambda m: m.alpha_param, model, jnp.array((alpha_param).astype(float)))
+    model = eqx.tree_at(lambda m: m.k_param, model, jnp.array((k_param).astype(float)))
+    model = eqx.tree_at(lambda m: m.c_param, model, jnp.array((c_param).astype(float)))
+    return model
+
+
+class JADirectParamGRU(eqx.Module):
+    ja: JAStatic
+    gru: eqx.nn.GRUCell
+    normalizer: Normalizer = eqx.field(static=True)
+    n_ja_params: int
+
+    def __init__(self, normalizer, key, in_size, hidden_size):
+        ja_key, gru_key = jax.random.split(key, 2)
+        self.ja = JAStatic(ja_key)
+        self.n_ja_params = len(self.ja.params)
+        self.normalizer = normalizer
+
+        self.gru = eqx.nn.GRUCell(
+            input_size=in_size,
+            hidden_size=hidden_size,
+            key=gru_key,
+        )
+
+    def __call__(self, H0, B_seq, features_seq, init_hidden):
+        hidden = init_hidden
+
+        def body_fun(carry, inputs):
+            H_prev, hidden = carry
+            B_prev, B_next, feat_next = inputs
+            H_prev_norm = self.normalizer.normalize_H(H_prev)
+            B_next_norm = B_next / self.normalizer.B_max
+
+            inp = jnp.concatenate([H_prev_norm[None], B_next_norm[None], feat_next], axis=-1)
+            new_hidden = self.gru(inp, hidden)
+            ja_params = new_hidden[: self.n_ja_params]
+            ja_model = set_parameters(self.ja, ja_params)
+
+            H_next, _ = ja_model.step(H_prev, B_prev, B_next)
+
+            return (H_next, new_hidden), H_next
+
+        B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
+        inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:])
+        (_), H_seq = jax.lax.scan(body_fun, (H0, hidden), inputs)
         return H_seq
 
 

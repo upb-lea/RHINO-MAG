@@ -23,6 +23,7 @@ from mc2.models.jiles_atherton import (
     JAWithGRU,
     JAWithGRUlin,
     JAWithGRUlinFinal,
+    JADirectParamGRU,
 )
 from mc2.models.linear import LinearStatic
 
@@ -178,6 +179,11 @@ def setup_model(
             model_params_d = dict(in_size=model_in_size, hidden_size=8, linear_in_size=1, key=model_key)
             model = GRUwLinearModel(**model_params_d)
             mdl_interface_cls = GRUwLinearModelInterface
+        case "JADirectParamGRU":
+            model_params_d = dict(in_size=model_in_size + 1, hidden_size=8, key=model_key)
+            model = JADirectParamGRU(normalizer=normalizer, **model_params_d)
+            mdl_interface_cls = JAWithGRUwInterface
+
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
 
