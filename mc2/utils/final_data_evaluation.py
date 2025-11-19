@@ -10,6 +10,17 @@ from mc2.data_management import DATA_ROOT, FINAL_MATERIALS, load_data_into_panda
 from mc2.model_interfaces.model_interface import ModelInterface
 
 
+FINAL_SCENARIOS_PER_MATERIAL = {
+    "A": {"10%known_90%unknown": [100, 900], "50%known_50%unknown": [500, 500], "90%known_10%unknown": [900, 100]},
+    "B": {"10%known_90%unknown": [100, 900], "50%known_50%unknown": [500, 500], "90%known_10%unknown": [900, 100]},
+    "C": {
+        "1%known_99%unknown": [1, 999],
+    },  # how to start at H=0?
+    "D": {"10%known_90%unknown": [100, 900], "50%known_50%unknown": [500, 500], "90%known_10%unknown": [900, 100]},
+    "E": {"10%known_90%unknown": [100, 900], "50%known_50%unknown": [500, 500], "90%known_10%unknown": [900, 100]},
+}
+
+
 def load_test_data_into_pandas_df(
     material: str,
     number: int = None,
