@@ -39,16 +39,36 @@ class JAStatic(eqx.Module):
     tau: float = 1 / 16e6
 
     @property
+    def physical_params(self):
+        return dict(
+            Ms=self.Ms,
+            a=self.a,
+            alpha=self.alpha,
+            k=self.k,
+            c=self.c,
+        )
+
+    @property
+    def params(self):
+        return dict(
+            Ms_param=self.Ms_param,
+            a_param=self.a_param,
+            alpha_param=self.alpha_param,
+            k_param=self.k_param,
+            c_param=self.c_param,
+        )
+
+    @property
     def a(self):
-        return 2000 * jax.nn.sigmoid(self.a_param)
+        return 100 * jax.nn.sigmoid(self.a_param)
 
     @property
     def alpha(self):
-        return 1e-2 * jax.nn.sigmoid(self.alpha_param)
+        return 1e-3 * jax.nn.sigmoid(self.alpha_param)
 
     @property
     def k(self):
-        return 1000.0 * jax.nn.sigmoid(self.k_param)
+        return 100 * jax.nn.sigmoid(self.k_param)
 
     @property
     def c(self):
@@ -56,7 +76,7 @@ class JAStatic(eqx.Module):
 
     @property
     def Ms(self):
-        return 6e6 * jax.nn.sigmoid(self.Ms_param)
+        return 2e6 * jax.nn.sigmoid(self.Ms_param)
 
     def __init__(self, key, **kwargs):
         super().__init__(**kwargs)
