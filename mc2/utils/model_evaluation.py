@@ -62,10 +62,18 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
         with open(experiment_path / f"{exp_id}.json", "r") as f:
             params = json.load(f)["params"]
         print(f"Parameters for the model setup were found at '{EXPERIMENT_LOGS_ROOT / exp_id}' and are utilized.")
+
+        if "model_params" in params.keys():
+            model_params_d = params["model_params"]
+            model_params_d["key"] = jnp.array(model_params_d["key"], dtype=jnp.uint32)
+        else:
+            model_params_d = None
+
         fresh_wrapped_model, _, _, _ = setup_model(
             model_label=model_type,
             material_name=material_name,
             model_key=jax.random.PRNGKey(0),
+            model_params_d=model_params_d,
             **params["training_params"],
             **kwargs,
         )

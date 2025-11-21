@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Any
 from functools import partial
 
 import jax
@@ -13,6 +13,7 @@ from mc2.data_management import MaterialSet, load_data_into_pandas_df, Normalize
 # Models
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU, GRUwLinearModel
+from mc2.models.pinn import PinnWithGRU
 from mc2.models.jiles_atherton import (
     JAStatic,
     JAStatic2,
@@ -32,6 +33,7 @@ from mc2.model_interfaces.rnn_Interfaces import (
     RNNwInterface,
     GRUwLinearModelInterface,
     MagnetizationRNNwInterface,
+    GRUWithPINNInterface,
 )
 from mc2.model_interfaces.ja_interfaces import (
     JAwInterface,
@@ -82,6 +84,7 @@ def setup_model(
     past_size: int = 10,
     time_shift: int = 0,
     tbptt_size_start=None,  # (size, n_epochs_steps)
+    model_params_d: dict[str, Any] = None,
     **kwargs,
 ):
     def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
@@ -115,72 +118,92 @@ def setup_model(
 
     match model_label:
         case "HNODE":
-            model_params_d = dict(
-                obs_dim=1,
-                state_dim=8,
-                action_dim=model_in_size,
-                width_size=8,
-                depth=2,
-                obs_func_type="identity",
-                key=model_key,
-            )
+            if model_params_d is None:
+                model_params_d = dict(
+                    obs_dim=1,
+                    state_dim=8,
+                    action_dim=model_in_size,
+                    width_size=8,
+                    depth=2,
+                    obs_func_type="identity",
+                    key=model_key,
+                )
             model = HiddenStateNeuralEulerODE(**model_params_d)
             mdl_interface_cls = NODEwInterface
         case "GRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
         case "MagnetizationGRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = MagnetizationRNNwInterface
         case "JAWithExternGRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAWithExternGRU(**model_params_d)
             mdl_interface_cls = JAWithExternGRUwInterface
         case "JAWithGRUlin":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAWithGRUlin(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
         case "JAWithGRUlinFinal":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAWithGRUlinFinal(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
         case "JAWithGRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAWithGRU(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
         case "JAParamGRUlin":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAParamGRUlin(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
         case "JAParamMLP":
-            model_params_d = dict(hidden_size=32, depth=2, in_size=model_in_size, key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(hidden_size=32, depth=2, in_size=model_in_size, key=model_key)
             model = JAParamMLP(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAParamMLPwInterface
         case "JA":
-            model_params_d = dict(key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(key=model_key)
             model = JAStatic(key=model_key)
             mdl_interface_cls = JAwInterface
         case "JA2":
-            model_params_d = dict(key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(key=model_key)
             model = JAStatic2(key=model_key)
             mdl_interface_cls = JAwInterface
         case "JA3":
-            model_params_d = dict(key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(key=model_key)
             model = JAStatic3(key=model_key)
             mdl_interface_cls = JAwInterface
         case "Linear":
-            model_params_d = dict(in_size=9, out_size=1, key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(in_size=9, out_size=1, key=model_key)
             model = LinearStatic(**model_params_d)
             mdl_interface_cls = LinearInterface
         case "GRUwLinearModel":
-            # model_params_d = dict(in_size=7, hidden_size=8, linear_in_size=7, key=model_key)
-            model_params_d = dict(in_size=model_in_size, hidden_size=8, linear_in_size=1, key=model_key)
+            if model_params_d is None:
+                # model_params_d = dict(in_size=7, hidden_size=8, linear_in_size=7, key=model_key)
+                model_params_d = dict(in_size=model_in_size, hidden_size=8, linear_in_size=1, key=model_key)
             model = GRUwLinearModel(**model_params_d)
             mdl_interface_cls = GRUwLinearModelInterface
         case "PinnWithGRU":
-            model_params_d = dict(hidden_size=8, input_size=7, key=model_key)
+            if model_params_d is None:
+                model_params_d = dict(
+                    input_size=model_in_size,
+                    hidden_size=8,
+                    physics_weight_lambda=1e-6,
+                    key=model_key,
+                )
             model = PinnWithGRU(**model_params_d)
             mdl_interface_cls = GRUWithPINNInterface
         case _:
@@ -196,6 +219,7 @@ def setup_model(
         )
 
     params = dict(
+        model_params=model_params_d,
         training_params=dict(
             n_epochs=n_epochs,
             n_steps=0,  # 10_000
