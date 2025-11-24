@@ -557,8 +557,14 @@ class MaterialSet(eqx.Module):
                     H_max = norm_values_mat["H_max"]
                     T_max = norm_values_mat["T_max"]
                     # f_max = norm_values_mat["f_max"]
-                    H_transform = lambda h: jnp.tanh(h * 1.2)
-                    H_inverse_transform = lambda h: jnp.atanh(h) / 1.2
+
+                    if transform_H:
+                        H_transform = lambda h: jnp.tanh(h * 1.2)
+                        H_inverse_transform = lambda h: jnp.atanh(h) / 1.2
+                    else:
+                        H_transform = lambda h: h
+                        H_inverse_transform = lambda h: h
+
                     max_norm_fe_max = [norm_values_mat["features"][name] for name in feature_names]
                     normalizer = Normalizer(
                         B_max=B_max,
