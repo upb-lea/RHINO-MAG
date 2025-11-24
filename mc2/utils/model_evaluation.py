@@ -52,6 +52,10 @@ def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | 
     return relevant_exp_ids
 
 
+from functools import partial
+from mc2.model_interfaces.model_interface import filter_spec
+
+
 def reconstruct_model_from_exp_id(exp_id, **kwargs):
 
     material_name = exp_id.split("_")[0]
@@ -83,7 +87,15 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
         )
 
     model_path = MODEL_DUMP_ROOT / f"{exp_id}.eqx"
-    model = load_model(model_path, type(fresh_wrapped_model.model))
+    try:
+        model = load_model(model_path, type(fresh_wrapped_model.model))
+    except TypeError:
+        with open(model_path, "rb") as f:
+            hyperparams = json.loads(f.readline().decode())
+            model = type(fresh_wrapped_model.model)(
+                key=jax.random.PRNGKey(0), normalizer=fresh_wrapped_model.normalizer, **hyperparams
+            )
+            model = eqx.tree_deserialise_leaves(f, model, partial(filter_spec, f64_enabled=jax.config.x64_enabled))
 
     wrapped_model = eqx.tree_at(lambda t: t.model, fresh_wrapped_model, model)
     return wrapped_model

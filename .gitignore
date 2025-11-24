@@ -181,6 +181,7 @@ data/cache
 # ignore png and model files in the dev folders
 dev/**/*.png
 dev/**/*.eqx
+dev/**/*.gif
 
 # ignore model files in the data folders
 data/**/*.eqx
