@@ -64,7 +64,7 @@ class JAStatic(eqx.Module):
 
     @property
     def alpha(self):
-        return 1e-3 * jax.nn.sigmoid(self.alpha_param)
+        return 1e-4 * jax.nn.sigmoid(self.alpha_param)
 
     @property
     def k(self):
@@ -389,6 +389,24 @@ class JAStatic3(eqx.Module):
         B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
         _, H_seq = jax.lax.scan(body_fun, H0, B_pairs)
         # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        return H_seq
+
+
+class JAEnsemble(eqx.Module):
+
+    vector_ja: JAStatic
+
+    def __init__(self, key, n_models):
+        ja_keys = jax.random.split(key, n_models)
+        self.vector_ja = eqx.filter_vmap(JAStatic)(ja_keys)
+
+    def __call__(self, H0, B_seq):
+
+        def call_model(model, H0, B_seq):
+            return model(H0, B_seq)
+
+        batched_H_seq = eqx.filter_vmap(call_model, in_axes=(0, None, None))(self.vector_ja, H0, B_seq)
+        H_seq = jnp.mean(batched_H_seq, axis=0)
         return H_seq
 
 

@@ -14,6 +14,8 @@ from mc2.model_interfaces.model_interface import ModelInterface
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU, VectorfieldGRU, GRUwLinear, GRUwLinearModel
 
+MU_0 = 4 * jnp.pi * 1e-7
+
 
 class NODEwInterface(ModelInterface):
     model: HiddenStateNeuralEulerODE
@@ -204,6 +206,7 @@ class RNNwInterface(ModelInterface):
         B_future_norm: jax.Array,
         T_norm: jax.Array,
         warmup: bool = True,
+        debug: bool = False,
     ) -> jax.Array:
 
         if warmup and H_past_norm.shape[1] > 1:
@@ -298,7 +301,17 @@ class VectorfieldGRUInterface(RNNwInterface):
 
         batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
         mag_pred_norm = jax.vmap(self.model)(batch_x, init_hidden) / self.model.n_locs
-        H_pred_norm = jax.vmap(jax.vmap(jnp.sum))(mag_pred_norm[..., 0])
+
+        mag_norm = jnp.sum(mag_pred_norm[..., 0], axis=-1)  # M * mu_0
+
+        # B_future = self.normalizer.B_max * B_future_norm
+        # M = mag_norm * 1e6
+
+        # H_pred = B_future - M
+        # H_pred_norm = self.normalizer.normalize_H(H_pred)
+
+        H_pred_norm = B_future_norm - mag_norm
+
         if debug:
             return jnp.squeeze(H_pred_norm), mag_pred_norm
         else:

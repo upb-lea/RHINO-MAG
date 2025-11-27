@@ -24,6 +24,7 @@ from mc2.models.jiles_atherton import (
     JAWithGRUlin,
     JAWithGRUlinFinal,
     JADirectParamGRU,
+    JAEnsemble,
 )
 from mc2.models.linear import LinearStatic
 
@@ -57,7 +58,7 @@ def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: in
         train_set, val_set, test_set = mat_set.split_into_train_val_test(
             train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=0
         )
-        train_set_norm = train_set.normalize(transform_H=True, featurize=featurize)
+        train_set_norm = train_set.normalize(transform_H=False, featurize=featurize)
         normalizer = train_set_norm.normalizer
     else:
         normalizer = Normalizer(
@@ -114,6 +115,8 @@ def setup_model(
     assert test_out.shape[0] == test_seq_length
     model_in_size = test_out.shape[-1] + 2  # (+2) due to: flux density B and temperature T
 
+    lr_params = None
+
     match model_label:
         case "HNODE":
             model_params_d = dict(
@@ -136,7 +139,7 @@ def setup_model(
             model = GRU(**model_params_d)
             mdl_interface_cls = MagnetizationRNNwInterface
         case "VectorfieldGRU":
-            model_params_d = dict(n_locs=4, in_size=model_in_size, key=model_key)
+            model_params_d = dict(n_locs=9, in_size=model_in_size, key=model_key)
             model = VectorfieldGRU(**model_params_d)
             mdl_interface_cls = VectorfieldGRUInterface
         case "JAWithExternGRU":
@@ -167,6 +170,13 @@ def setup_model(
             model_params_d = dict(key=model_key)
             model = JAStatic(key=model_key)
             mdl_interface_cls = JAwInterface
+            # lr_params = dict(
+            #     init_value=1e-1,
+            #     transition_steps=1_000_000,
+            #     transition_begin=2_000,
+            #     decay_rate=0.1,
+            #     end_value=1e-4,
+            # )
         case "JA2":
             model_params_d = dict(key=model_key)
             model = JAStatic2(key=model_key)
@@ -174,6 +184,13 @@ def setup_model(
         case "JA3":
             model_params_d = dict(key=model_key)
             model = JAStatic3(key=model_key)
+            mdl_interface_cls = JAwInterface
+        case "JAEnsemble":
+            model_params_d = dict(
+                key=model_key,
+                n_models=100,
+            )
+            model = JAEnsemble(**model_params_d)
             mdl_interface_cls = JAwInterface
         case "Linear":
             model_params_d = dict(in_size=9, out_size=1, key=model_key)
@@ -212,14 +229,18 @@ def setup_model(
             batch_size=batch_size,
             tbptt_size_start=tbptt_size_start,
         ),
-        lr_params=dict(
+    )
+
+    if lr_params == None:
+        params["lr_params"] = dict(
             init_value=1e-3,
             transition_steps=1_000_000,
             transition_begin=2_000,
             decay_rate=0.1,
             end_value=1e-4,
-        ),
-    )
+        )
+    else:
+        params["lr_params"] = lr_params
 
     lr_schedule = optax.schedules.exponential_decay(**params["lr_params"])
     optimizer = optax.adam(lr_schedule)
