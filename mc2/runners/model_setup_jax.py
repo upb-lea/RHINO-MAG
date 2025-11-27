@@ -13,18 +13,12 @@ from mc2.data_management import MaterialSet, load_data_into_pandas_df, Normalize
 # Models
 from mc2.features.features_jax import compute_fe_single
 from mc2.data_management import MaterialSet, load_data_into_pandas_df
-from mc2.models.model_interface import (
+from mc2.model_interfaces.rnn_Interfaces import (
     NODEwInterface,
     RNNwInterface,
-    JAwInterface,
-    JAParamMLPwInterface,
-    JAWithGRUwInterface,
-    JAWithExternGRUwInterface,
-    GRUWithJAwInterface,
-    LFRWithGRUJAwInterface,
 )
 from mc2.models.NODE import HiddenStateNeuralEulerODE
-from mc2.models.RNN import GRU, GRUwLinearModel
+from mc2.models.RNN import GRU, GRUwLinearModel, GRU2
 from mc2.models.jiles_atherton import (
     JAStatic,
     JAStatic2,
@@ -52,6 +46,9 @@ from mc2.model_interfaces.ja_interfaces import (
     JAParamMLPwInterface,
     JAWithGRUwInterface,
     JAWithExternGRUwInterface,
+    GRUWithJAwInterface,
+    LFRWithGRUJAwInterface
+
 )
 from mc2.model_interfaces.linear_interfaces import LinearInterface
 
@@ -108,12 +105,17 @@ def setup_model(
 
     featurize = partial(featurize, time_shift=time_shift)
 
-    normalizer, data_tuple = get_normalizer(
-        material_name,
-        featurize,
-        subsample_freq,
-        True,
-    )
+    if "normalizer" in kwargs and "data_tuple" in kwargs:
+        normalizer = kwargs.pop("normalizer")
+        data_tuple = kwargs.pop("data_tuple")
+    else:
+        # get_normalizer nur aufrufen, wenn sie nicht in kwargs sind
+        normalizer, data_tuple = get_normalizer(
+            material_name,
+            featurize,
+            subsample_freq,
+            True,
+        )
 
     # dynamically choose model input size:
     test_seq_length = 100
@@ -140,22 +142,44 @@ def setup_model(
             )
             model = HiddenStateNeuralEulerODE(**model_params_d)
             mdl_interface_cls = NODEwInterface
-        case "GRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+
+        case label if label.startswith("GRU") and label[3:].isdigit():
+            hidden_size = int(label[3:])
+            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
+        # case "GRU1":
+        #     model_params_d = dict(hidden_size=1, in_size=model_in_size, key=model_key)
+        #     model = GRU(**model_params_d)
+        #     mdl_interface_cls = RNNwInterface
+        # case "GRU2":
+        #     model_params_d = dict(hidden_size=2, in_size=model_in_size, key=model_key)
+        #     model = GRU(**model_params_d)
+        #     mdl_interface_cls = RNNwInterface
+        # case "GRU4":
+        #     model_params_d = dict(hidden_size=4, in_size=model_in_size, key=model_key)
+        #     model = GRU(**model_params_d)
+        #     mdl_interface_cls = RNNwInterface
+        # case "GRU8":
+        #     model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+        #     model = GRU(**model_params_d)
+        #     mdl_interface_cls = RNNwInterface
+        # case "GRU8hidden":
+        #     model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+        #     model = GRU2(**model_params_d)
+        #     mdl_interface_cls = RNNwInterface
+        # case "GRU16":
+        #     model_params_d = dict(hidden_size=16, in_size=model_in_size, key=model_key)
+        #     model = GRU(**model_params_d)
+        #     mdl_interface_cls = RNNwInterface
+        # case "GRU32":
+        #     model_params_d = dict(hidden_size=32, in_size=model_in_size, key=model_key)
+        #     model = GRU(**model_params_d)
+        #     mdl_interface_cls = RNNwInterface
         case "MagnetizationGRU":
             model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = MagnetizationRNNwInterface
-        case "GRU_4":
-            model_params_d = dict(hidden_size=4, in_size=7, key=model_key)
-            model = GRU(**model_params_d)
-            mdl_interface_cls = RNNwInterface
-        case "GRU_16":
-            model_params_d = dict(hidden_size=16, in_size=7, key=model_key)
-            model = GRU(**model_params_d)
-            mdl_interface_cls = RNNwInterface
         case "JAWithExternGRU":
             model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAWithExternGRU(**model_params_d)

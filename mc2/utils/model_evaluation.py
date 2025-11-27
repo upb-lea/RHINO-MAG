@@ -55,8 +55,7 @@ def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | 
 def reconstruct_model_from_exp_id(exp_id, **kwargs):
 
     material_name = exp_id.split("_")[0]
-    if model_type is None:
-        model_type = exp_id.split("_")[1]
+    model_type = exp_id.split("_")[1]
 
     # check if params are available:
     experiment_path = EXPERIMENT_LOGS_ROOT / "jax_experiments"
@@ -64,7 +63,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
         with open(experiment_path / f"{exp_id}.json", "r") as f:
             params = json.load(f)["params"]
         print(f"Parameters for the model setup were found at '{EXPERIMENT_LOGS_ROOT / exp_id}' and are utilized.")
-        fresh_wrapped_model, _, _, _ = setup_model(
+        fresh_wrapped_model, _, _, data_tuple = setup_model(
             model_label=model_type,
             material_name=material_name,
             model_key=jax.random.PRNGKey(0),
@@ -76,7 +75,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
             f"No parameters could be found under '{EXPERIMENT_LOGS_ROOT}' for exp_id: '{exp_id}', "
             + "continues with default setup for the given model type specified in 'setup_model'."
         )
-        fresh_wrapped_model, _, _, _ = setup_model(
+        fresh_wrapped_model, _, _, data_tuple = setup_model(
             model_label=model_type,
             material_name=material_name,
             model_key=jax.random.PRNGKey(0),
@@ -94,7 +93,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
     #     model = load_model(model_path, model_type)
 
     wrapped_model = eqx.tree_at(lambda t: t.model, fresh_wrapped_model, model)
-    return wrapped_model
+    return wrapped_model, data_tuple
 
 
 def load_gt_and_pred(exp_id, seed, freq_idx):
