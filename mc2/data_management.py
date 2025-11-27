@@ -9,7 +9,7 @@ import sys
 from uuid import uuid4
 from sklearn.model_selection import train_test_split
 
-import h5py
+
 import jax
 import jax.numpy as jnp
 import torch
@@ -49,6 +49,19 @@ AVAILABLE_MATERIALS = [
     "N30",
     "N49",
     "N87",
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+]
+
+FINAL_MATERIALS = [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
 ]
 
 DESIRED_DT_FMT = "%Y-%m-%d %H:%M:%S"  # desired datetime format
@@ -833,29 +846,3 @@ def get_train_val_test_pandas_dicts(
     data_test = test_set.to_pandas_dict()
 
     return data_train, data_val, data_test
-
-
-def load_hdf5_pretest_data(
-    mat: str,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]:
-    """Returns B, T, H_init, H_true, msks_scenarios_N_tup where
-    H_init has NaNs for unknown samples, and msks_scenarios_N_tup is a tuple of boolean masks for each
-    scenario of unknown samples count.
-    B, T, H_init, H_true are all of shape (num_time_series, num_time_steps)."""
-    pretest_root = PRETEST_DATA_ROOT / f"{mat}"
-    with h5py.File(pretest_root / f"{mat}_Testing_Padded.h5", "r") as f:
-        B = f["B_seq"][:]
-        H_init = f["H_seq"][:]
-        T = f["T"][:]
-        loss_short = f["Loss"][:]
-    with h5py.File(pretest_root / f"{mat}_Testing_True.h5", "r") as f:
-        H_true = f["H_seq"][:]
-        Loss = f["Loss"][:]
-    unknowns_N = np.isnan(H_init).sum(axis=1)
-    unknown_samples_variants, counts = np.unique(unknowns_N, return_counts=True)
-    assert len(unknown_samples_variants) == 3, "Expecting 3 variants of unknown samples"
-    msk_scenario_0 = unknowns_N == unknown_samples_variants[0]
-    msk_scenario_1 = unknowns_N == unknown_samples_variants[1]
-    msk_scenario_2 = unknowns_N == unknown_samples_variants[2]
-    print(f"Scenario counts: {counts}")
-    return B, T, H_init, H_true, Loss, loss_short, (msk_scenario_0, msk_scenario_1, msk_scenario_2)

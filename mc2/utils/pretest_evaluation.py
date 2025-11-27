@@ -1,27 +1,39 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import h5py
 
 import jax
 import jax.numpy as jnp
 import equinox as eqx
 
+from mc2.data_management import PRETEST_CACHE_ROOT, PRETEST_DATA_ROOT
 from mc2.model_interfaces.model_interface import ModelInterface
 
 from mc2.metrics import sre, nere
 
-SCENARIO_LABELS = ["10% unknown", "50% unknown", "90% unknown"]
+SCENARIO_LABELS = [
+    "90% unknown",
+    "50% unknown",
+    "10% unknown",
+]
+
+DETAILED_SCENARIO_LABELS = [
+    "\\textbf{10\% known, 90\% unknown}",
+    "\\textbf{50\% known, 50\% unknown}",
+    "\\textbf{90\% known, 10\% unknown}",
+]
 
 HOSTS_VALUES_DICT = {
     "3C90": {
         SCENARIO_LABELS[0]: {
             "mse": None,
             "wce": None,
-            "sre_avg": 0.1305,
-            "sre_95th": 0.347,
-            "nere_avg": 0.007623,
-            "nere_95th": 0.01928,
-        },  # 90 % known
+            "sre_avg": 0.1704,
+            "sre_95th": 0.3476,
+            "nere_avg": 0.0618,
+            "nere_95th": 0.07476,
+        },
         SCENARIO_LABELS[1]: {
             "mse": None,
             "wce": None,
@@ -33,21 +45,21 @@ HOSTS_VALUES_DICT = {
         SCENARIO_LABELS[2]: {
             "mse": None,
             "wce": None,
-            "sre_avg": 0.1704,
-            "sre_95th": 0.3476,
-            "nere_avg": 0.0618,
-            "nere_95th": 0.07476,
-        },
+            "sre_avg": 0.1305,
+            "sre_95th": 0.347,
+            "nere_avg": 0.007623,
+            "nere_95th": 0.01928,
+        },  # 90 % known
     },  # 10 % known
     "N87": {
         SCENARIO_LABELS[0]: {
             "mse": None,
             "wce": None,
-            "sre_avg": 0.1962,
-            "sre_95th": 0.521,
-            "nere_avg": 0.007805,
-            "nere_95th": 0.0157,
-        },  # 90 % known
+            "sre_avg": 0.3028,
+            "sre_95th": 0.9999,
+            "nere_avg": 0.04828,
+            "nere_95th": 0.0681,
+        },  # 10 % known
         SCENARIO_LABELS[1]: {
             "mse": None,
             "wce": None,
@@ -59,11 +71,11 @@ HOSTS_VALUES_DICT = {
         SCENARIO_LABELS[2]: {
             "mse": None,
             "wce": None,
-            "sre_avg": 0.3028,
-            "sre_95th": 0.9999,
-            "nere_avg": 0.04828,
-            "nere_95th": 0.0681,
-        },  # 10 % known
+            "sre_avg": 0.1962,
+            "sre_95th": 0.521,
+            "nere_avg": 0.007805,
+            "nere_95th": 0.0157,
+        },  # 90 % known
     },
 }
 
@@ -322,7 +334,8 @@ def produce_pretest_histograms(
     return fig, axs
 
 
-def store_predictions_to_csv(
+def store_pretest_results_to_csv(
+    save_path,
     exp_id,
     model_all,
     B,
@@ -333,6 +346,51 @@ def store_predictions_to_csv(
     msks_scenarios_N_tup,
     scenario_labels,
 ) -> dict[str, jax.Array]:
+    for scenario_i, msk_N in enumerate(msks_scenarios_N_tup):
+        print(f"  Scenario {scenario_i} - {scenario_labels[scenario_i]}: ")
+
+        B_scenario = B[msk_N]
+        T_scenario = T[msk_N]
+        H_init_scenario = H_init[msk_N]
+        H_true_scenario = H_true[msk_N]
+
+        warm_up_len = np.sum(~np.isnan(H_init_scenario[0]))
+        print(warm_up_len / B_scenario.shape[1])
+        print(f"    -> warm_up_len = {warm_up_len}")
+
+        B_past = B_scenario[:, :warm_up_len]
+        H_past = H_init_scenario[:, :warm_up_len]
+        B_future = B_scenario[:, warm_up_len:]
+        T_batch = T_scenario.reshape(-1)
+
+        preds = model_all(
+            B_past=B_past,
+            H_past=H_past,
+            B_future=B_future,
+            T=T_batch,
+        )
+
+        true_plus_pred = jnp.concatenate([H_true_scenario[:, :warm_up_len], preds], axis=-1)
+
+        for seq_pred in true_plus_pred:
+            with open(save_path / f"{exp_id}_pred.csv", "a") as f:
+                np.savetxt(f, seq_pred[None, :], delimiter=",")
+                f.close()
+
+
+def store_raw_predictions_to_csv(
+    exp_id,
+    model_all,
+    B,
+    T,
+    H_init,
+    H_true,
+    loss,
+    msks_scenarios_N_tup,
+    scenario_labels,
+) -> dict[str, jax.Array]:
+
+    print("Creates a ragged csv file!")
 
     for scenario_i, msk_N in enumerate(msks_scenarios_N_tup):
         print(f"  Scenario {scenario_i} - {scenario_labels[scenario_i]}: ")
@@ -367,3 +425,35 @@ def store_predictions_to_csv(
             with open(f"{exp_id}_meas.csv", "a") as f:
                 np.savetxt(f, seq_gt[None, :], delimiter=",")
                 f.close()
+
+
+def load_hdf5_pretest_data(
+    mat: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Returns B, T, H_init, H_true, msks_scenarios_N_tup where
+    H_init has NaNs for unknown samples, and msks_scenarios_N_tup is a tuple of boolean masks for each
+    scenario of unknown samples count.
+    B, T, H_init, H_true are all of shape (num_time_series, num_time_steps)."""
+    pretest_root = PRETEST_DATA_ROOT / f"{mat}"
+    with h5py.File(pretest_root / f"{mat}_Testing_Padded.h5", "r") as f:
+        B = f["B_seq"][:]
+        H_init = f["H_seq"][:]
+        T = f["T"][:]
+        loss_short = f["Loss"][:]
+    with h5py.File(pretest_root / f"{mat}_Testing_True.h5", "r") as f:
+        H_true = f["H_seq"][:]
+        Loss = f["Loss"][:]
+    unknowns_N = np.isnan(H_init).sum(axis=1)
+    unknown_samples_variants, counts = np.unique(unknowns_N, return_counts=True)
+    print(unknown_samples_variants)
+    assert len(unknown_samples_variants) == 3, "Expecting 3 variants of unknown samples"
+
+    assert unknown_samples_variants[0] == 100
+    assert unknown_samples_variants[1] == 500
+    assert unknown_samples_variants[2] == 900
+
+    msk_scenario_0 = unknowns_N == unknown_samples_variants[2]
+    msk_scenario_1 = unknowns_N == unknown_samples_variants[1]
+    msk_scenario_2 = unknowns_N == unknown_samples_variants[0]
+    print(f"Scenario counts: {counts}")
+    return B, T, H_init, H_true, Loss, loss_short, (msk_scenario_0, msk_scenario_1, msk_scenario_2)
