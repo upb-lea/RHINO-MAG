@@ -12,7 +12,9 @@ import equinox as eqx
 
 from mc2.model_interfaces.model_interface import ModelInterface
 from mc2.models.NODE import HiddenStateNeuralEulerODE
-from mc2.models.RNN import GRU, GRUwLinear, GRUwLinearModel
+from mc2.models.RNN import GRU, VectorfieldGRU, GRUwLinear, GRUwLinearModel
+
+MU_0 = 4 * jnp.pi * 1e-7
 
 
 class NODEwInterface(ModelInterface):
@@ -175,6 +177,7 @@ class RNNwInterface(ModelInterface):
         B_future: jax.Array,
         T: jax.Array,
         warmup: bool = True,
+        debug: bool = False,
     ) -> jax.Array:
 
         B_all = jnp.concatenate([B_past, B_future], axis=1)
@@ -183,9 +186,18 @@ class RNNwInterface(ModelInterface):
         B_past_norm = B_all_norm[:, : B_past.shape[1]]
         B_future_norm = B_all_norm[:, B_past.shape[1] :]
 
-        batch_H_pred = self.normalized_call(B_past_norm, H_past_norm, B_future_norm, T_norm, warmup)  # ,f_norm
+        if debug:
+            batch_H_pred, out = self.normalized_call(B_past_norm, H_past_norm, B_future_norm, T_norm, warmup, debug)
+        else:
+            batch_H_pred = self.normalized_call(
+                B_past_norm, H_past_norm, B_future_norm, T_norm, warmup, debug
+            )  # ,f_norm
         batch_H_pred_denorm = jax.vmap(jax.vmap(self.normalizer.denormalize_H))(batch_H_pred)
-        return batch_H_pred_denorm
+
+        if debug:
+            return batch_H_pred_denorm, out
+        else:
+            return batch_H_pred_denorm
 
     def normalized_call(
         self,
@@ -194,6 +206,7 @@ class RNNwInterface(ModelInterface):
         B_future_norm: jax.Array,
         T_norm: jax.Array,
         warmup: bool = True,
+        debug: bool = False,
     ) -> jax.Array:
 
         if warmup and H_past_norm.shape[1] > 1:
@@ -263,6 +276,58 @@ class MagnetizationRNNwInterface(RNNwInterface):
             B_past_norm[:, 1:] - jnp.arctanh(H_past_norm[:, 1:]),
         )
         return final_hidden_warmup
+
+
+class VectorfieldGRUInterface(RNNwInterface):
+    model: VectorfieldGRU
+
+    def normalized_call(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+        warmup: bool = True,
+        debug: bool = False,
+    ) -> jax.Array:
+
+        if warmup and H_past_norm.shape[1] > 1:
+            init_hidden = self._warmup(B_past_norm, H_past_norm, B_future_norm, T_norm)
+        else:
+            init_hidden = self.model.construct_init_hidden(
+                out_true=None,
+                batch_size=H_past_norm.shape[0],
+            )
+
+        batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
+        mag_pred_norm = jax.vmap(self.model)(batch_x, init_hidden) / self.model.n_locs
+
+        mag_norm = jnp.sum(mag_pred_norm[..., 0], axis=-1)  # M * mu_0
+
+        # B_future = self.normalizer.B_max * B_future_norm
+        # M = mag_norm * 1e6
+
+        # H_pred = B_future - M
+        # H_pred_norm = self.normalizer.normalize_H(H_pred)
+
+        H_pred_norm = B_future_norm - mag_norm
+
+        if debug:
+            return jnp.squeeze(H_pred_norm), mag_pred_norm
+        else:
+            return jnp.squeeze(H_pred_norm)
+
+    def _warmup(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+    ) -> jax.Array:
+        return self.model.construct_init_hidden(
+            out_true=None,
+            batch_size=H_past_norm.shape[0],
+        )
 
 
 class GRUwLinearModelInterface(ModelInterface):

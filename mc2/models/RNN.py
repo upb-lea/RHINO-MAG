@@ -91,6 +91,58 @@ class GRU2(eqx.Module):
         return jnp.broadcast_to(out_true[:, None], (batch_size, self.hidden_size))
 
 
+class VectorfieldGRU(eqx.Module):
+    n_locs: int = eqx.field(static=True)
+    cell: eqx.Module
+
+    @property
+    def hidden_size(self):
+        return 2 * self.n_locs
+
+    def __init__(self, in_size, n_locs, *, key):
+        self.n_locs = n_locs
+        self.cell = eqx.nn.GRUCell(in_size, 2 * n_locs, key=key)
+
+    def __call__(self, input, init_hidden):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            rnn_out = self.cell(inp, carry)
+            return rnn_out, rnn_out
+
+        _, out = jax.lax.scan(f, hidden, input)
+
+        if out.ndim == 1:
+            out = out.reshape((self.n_locs, 2))
+        elif out.ndim == 2:
+            out = out.reshape((-1, self.n_locs, 2))
+
+        return out
+
+    def warmup_call(self, input, init_hidden, out_true):
+        raise NotImplementedError()
+
+        hidden = init_hidden
+        # TODO: move construct hidden here?
+
+        def f(carry, inp):
+            inp_t, out_true_t = inp
+            rnn_out = self.cell(inp_t, carry)
+            return rnn_out, rnn_out
+
+        final_hidden, out = jax.lax.scan(f, hidden, (input, out_true))
+
+        if out.ndim == 1:
+            out = out.reshape((self.n_locs, 2))
+        elif out.ndim == 2:
+            out = out.reshape((-1, self.n_locs, 2))
+
+        return out, final_hidden
+
+    def construct_init_hidden(self, out_true, batch_size):
+        return jnp.hstack([jnp.zeros((batch_size, self.hidden_size))])
+
+
 class GRUwLinear(eqx.Module):
 
     hidden_size: int

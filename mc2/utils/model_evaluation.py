@@ -8,10 +8,11 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.data_management import EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT
+from mc2.data_management import EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT, MaterialSet
 from mc2.training.data_sampling import draw_data_uniformly
 from mc2.runners.model_setup_jax import setup_model
-from mc2.model_interfaces.model_interface import load_model
+from mc2.model_interfaces.model_interface import load_model, ModelInterface
+from mc2.metrics import sre, nere
 
 from functools import partial
 
@@ -52,6 +53,10 @@ def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | 
     return relevant_exp_ids
 
 
+from functools import partial
+from mc2.model_interfaces.model_interface import filter_spec
+
+
 def reconstruct_model_from_exp_id(exp_id, **kwargs):
 
     material_name = exp_id.split("_")[0]
@@ -83,14 +88,15 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
         )
 
     model_path = MODEL_DUMP_ROOT / f"{exp_id}.eqx"
-    model = load_model(model_path, type(fresh_wrapped_model.model))
-    # try:
-    #     model = load_model(model_path, type(fresh_wrapped_model.model))
-    # except:
-    #     print(f"Loading without normalizer failed. Loading with normalizer initialized...")
-    #     model_type = type(fresh_wrapped_model.model)
-    #     model_type = partial(model_type, normalizer=fresh_wrapped_model.normalizer)
-    #     model = load_model(model_path, model_type)
+    try:
+        model = load_model(model_path, type(fresh_wrapped_model.model))
+    except TypeError:
+        with open(model_path, "rb") as f:
+            hyperparams = json.loads(f.readline().decode())
+            model = type(fresh_wrapped_model.model)(
+                key=jax.random.PRNGKey(0), normalizer=fresh_wrapped_model.normalizer, **hyperparams
+            )
+            model = eqx.tree_deserialise_leaves(f, model, partial(filter_spec, f64_enabled=jax.config.x64_enabled))
 
     wrapped_model = eqx.tree_at(lambda t: t.model, fresh_wrapped_model, model)
     return wrapped_model, data_tuple
@@ -193,8 +199,11 @@ def plot_first_predictions(gt, pred):
     fig, axes = plt.subplots(5, 1, sharex=True, sharey="col", figsize=(10, 15))
     mae_M = np.mean(np.abs(gt - pred), axis=-1)
     mse_M = np.mean((gt - pred) ** 2, axis=-1)
+
+    n_plots = min(axes.shape[0], gt.shape[0])
+
     print(f"MAE {mae_M.mean():.1f} A/m | MSE {mse_M.mean():.1f} (A/m)²")
-    for tst_idx in range(axes.shape[0]):
+    for tst_idx in range(n_plots):
         ax = axes[tst_idx]
         ax.plot(gt[tst_idx], label="gt")
         ax.plot(pred[tst_idx], label="pred", ls="dashed")
@@ -213,14 +222,11 @@ def plot_first_predictions(gt, pred):
     return fig, axes
 
 
-def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, figsize=(30, 8)):
-    # gather data
-
+def get_mixed_frequency_arrays(test_set: MaterialSet, sequence_length: int, batch_size: int, key: jax.random.PRNGKey):
     H_list, B_list, T_list = [], [], []
 
-    for freq_idx, frequency in enumerate(test_set.frequencies):
-        test_set_at_frequency = test_set.at_frequency(frequency)
-        H, B, T, _, loader_key = draw_data_uniformly(test_set_at_frequency, 1000, 1, loader_key)
+    for freq_set in test_set:
+        H, B, T, _, key = draw_data_uniformly(freq_set, sequence_length, batch_size, key)
 
         H_list.append(H[None, ...])
         B_list.append(B[None, ...])
@@ -229,6 +235,139 @@ def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, f
     H = jnp.concatenate(H_list, axis=0)
     B = jnp.concatenate(B_list, axis=0)
     T = jnp.concatenate(T_list, axis=0)
+
+    return H, B, T
+
+
+def get_metrics_per_sequence(
+    wrapped_model: ModelInterface,
+    test_set: MaterialSet,
+    scenarios: dict[str, tuple[int]],
+    sequence_length: int,
+    batch_size_per_frequency: int,
+    loader_key: jax.random.PRNGKey,
+) -> dict[str, jax.Array]:
+    metrics_per_sequence = {}
+
+    H, B, T = get_mixed_frequency_arrays(
+        test_set,
+        sequence_length=sequence_length,
+        batch_size=batch_size_per_frequency,
+        key=loader_key,
+    )
+    H = H.reshape((-1, H.shape[-1]))
+    B = B.reshape((-1, B.shape[-1]))
+    T = T.flatten()
+
+    for scenario_label, scenario_values in scenarios.items():
+
+        past_size = scenario_values[0]
+        future_size = scenario_values[1]
+
+        batch_size = H.shape[0]
+
+        H_past = H[:, :past_size]
+        B_past = B[:, :past_size]
+
+        B_future = B[:, past_size:]
+        H_future = H[:, past_size:]
+
+        T = T
+
+        H_pred = wrapped_model(B_past, H_past, B_future, T)
+
+        ## check array sizes
+
+        assert H.shape == (batch_size, past_size + future_size)
+        assert B.shape == (batch_size, past_size + future_size)
+        assert T.shape == (batch_size,)
+
+        assert H_past.shape == (batch_size, past_size)
+        assert H_future.shape == (batch_size, future_size)
+        assert H_pred.shape == H_future.shape
+
+        assert B_past.shape == (batch_size, past_size)
+        assert B_future.shape == (batch_size, future_size)
+
+        ## metrics
+
+        wce_per_sequence = np.max(np.abs(H_pred - H_future), axis=1)
+        mse_per_sequence = np.mean((H_pred - H_future) ** 2, axis=1)
+        sre_per_sequence = eqx.filter_vmap(sre)(H_pred, H_future)
+
+        dbdt_full = np.gradient(B, axis=1)
+        dbdt = dbdt_full[:, past_size:]
+        print(
+            "Normalized Energy relative error cannot be properly computed as the core losses are unknown. Setting 'true_core_loss=1'."
+        )
+        nere_per_sequence = eqx.filter_vmap(nere)(H_pred, H_future, dbdt, 1.0)  # np.abs(true_core_loss))
+
+        metrics_per_sequence[scenario_label] = {
+            "mse": jnp.array(mse_per_sequence),
+            "wce": jnp.array(wce_per_sequence),
+            "sre": jnp.array(sre_per_sequence),
+            "nere": jnp.array(nere_per_sequence),
+        }
+
+    return metrics_per_sequence
+
+
+def evaluate_cross_validation(
+    wrapped_model: ModelInterface,
+    test_set: MaterialSet,
+    scenarios: dict[str, tuple[int]],
+    sequence_length: int,
+    batch_size_per_frequency: int,
+    loader_key: jax.random.PRNGKey,
+) -> dict[str, np.ndarray]:
+
+    metrics_per_sequence = get_metrics_per_sequence(
+        wrapped_model,
+        test_set,
+        scenarios,
+        sequence_length,
+        batch_size_per_frequency,
+        loader_key,
+    )
+
+    metrics_reduced = {}
+
+    for scenario_label, metric_values in metrics_per_sequence.items():
+
+        mse_per_sequence = metric_values["mse"]
+        wce_per_sequence = metric_values["wce"]
+        sre_per_sequence = metric_values["sre"]
+        nere_per_sequence = metric_values["nere"]
+
+        # reduce metrics
+        mse = np.mean(mse_per_sequence)
+        wce = np.max(wce_per_sequence)
+
+        sre_avg = np.mean(sre_per_sequence)
+        sre_95th = np.percentile(sre_per_sequence, 95)
+
+        nere_avg = np.mean(nere_per_sequence)
+        nere_95th = np.percentile(nere_per_sequence, 95)
+
+        print(f"\tMSE : {mse:>7.2f} (A/m)²")
+        print(f"\tWCE : {wce:>7.2f} A/m")
+
+        metrics_reduced[scenario_label] = {
+            "mse": np.round(mse, 4).item(),
+            "wce": np.round(wce, 4).item(),
+            "sre_avg": np.round(sre_avg, 4).item(),
+            "sre_95th": np.round(sre_95th, 4).item(),
+            "nere_avg": np.round(nere_avg, 4).item(),
+            "nere_95th": np.round(nere_95th, 4).item(),
+        }
+
+    return metrics_reduced
+
+
+def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, figsize=(30, 8)):
+    # gather data
+
+    H, B, T = get_mixed_frequency_arrays(test_set, sequence_length=1000, batch_size=1, key=loader_key)
 
     H_past = H[:, :past_size]
     B_past = B[:, :past_size]

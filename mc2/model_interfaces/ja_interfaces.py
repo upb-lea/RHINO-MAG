@@ -7,6 +7,7 @@ import equinox as eqx
 
 
 from mc2.model_interfaces.model_interface import ModelInterface
+from mc2.models.jiles_atherton import JAParamMLP
 
 
 class JAwInterface(ModelInterface):
@@ -439,7 +440,7 @@ class LFRWithGRUJAwInterface(ModelInterface):
     #     return batch_H_pred_norm
 
 class JAParamMLPwInterface(ModelInterface):
-    model: eqx.Module
+    model: JAParamMLP
     normalizer: Normalizer
     featurize: Callable = eqx.field(static=True)
 

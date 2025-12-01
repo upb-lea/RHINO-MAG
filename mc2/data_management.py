@@ -356,6 +356,14 @@ class MaterialSet(eqx.Module):
             pickle.dump(self, f)
 
     @classmethod
+    def from_material_name(
+        cls,
+        material_name: str,
+    ) -> "MaterialSet":
+        data_dict = load_data_into_pandas_df(material=material_name)
+        return cls.from_pandas_dict(data_dict)
+
+    @classmethod
     def load_from_raw_data(
         cls,
         file_overview: pd.DataFrame,
@@ -552,8 +560,14 @@ class MaterialSet(eqx.Module):
                     H_max = norm_values_mat["H_max"]
                     T_max = norm_values_mat["T_max"]
                     # f_max = norm_values_mat["f_max"]
-                    H_transform = lambda h: jnp.tanh(h * 1.2)
-                    H_inverse_transform = lambda h: jnp.atanh(h) / 1.2
+
+                    if transform_H:
+                        H_transform = lambda h: jnp.tanh(h * 1.2)
+                        H_inverse_transform = lambda h: jnp.atanh(h) / 1.2
+                    else:
+                        H_transform = lambda h: h
+                        H_inverse_transform = lambda h: h
+
                     max_norm_fe_max = [norm_values_mat["features"][name] for name in feature_names]
                     normalizer = Normalizer(
                         B_max=B_max,
@@ -730,55 +744,64 @@ class DataSet(eqx.Module):
 
 
 def load_data_into_pandas_df(
-    material: str = None, number: int = None, training: bool = True, n_rows: int = None
+    material: str,
+    number: int = None,
 ) -> dict:
     """Load data selectively from raw CSV files if cache does not exist yet. Caches loaded data for next time."""
-    # TODO implement training vs testing data
+    return load_data_into_pandas_based_on_path(
+        raw_path=DATA_ROOT / "raw",
+        cache_path=CACHE_ROOT,
+        material=material,
+        number=number,
+    )
 
-    if material is None:
-        # load all materials
-        # Note: this is likely not necessary anymore.
-        raise NotImplementedError()
+
+def load_data_into_pandas_based_on_path(
+    raw_path: Path | str,
+    cache_path: Path | str,
+    material: str,
+    number: int = None,
+) -> dict:
+    mat_folder = raw_path / material
+    assert mat_folder.is_dir(), f"Folder does not exist: {mat_folder}"
+    assert mat_folder.is_dir(), f"Folder does not exist: {mat_folder}"
+    if number is None:
+        # load all sequences
+        data_ret_d = {}
+        csv_file_paths_l = list(mat_folder.glob(f"{material}*.csv"))
+        for csv_file in tqdm.tqdm(sorted(csv_file_paths_l), desc=f"Loading data for {material}"):
+            expected_cache_file = cache_path / csv_file.with_suffix(".parquet").name
+            if expected_cache_file.exists():
+                df = pd.read_parquet(expected_cache_file)
+                if df.empty:
+                    print(f"Loaded DataFrame at {expected_cache_file} is empty.")
+            else:
+                try:
+                    df = pd.read_csv(csv_file, header=None)
+                except pd.errors.EmptyDataError:
+                    print(f"No Data found at {csv_file}. Returning empty DataFrame.")
+                    df = pd.DataFrame()
+                df.to_parquet(expected_cache_file, index=False)  # store cache
+            data_ret_d[csv_file.stem] = df
+
     else:
-        mat_folder = DATA_ROOT / "raw" / material
-        assert mat_folder.is_dir(), f"Folder does not exist: {mat_folder}"
-        if number is None:
-            # load all sequences
-            data_ret_d = {}
-            csv_file_paths_l = list(mat_folder.glob(f"{material}*.csv"))
-            for csv_file in tqdm.tqdm(sorted(csv_file_paths_l), desc=f"Loading data for {material}"):
-                expected_cache_file = CACHE_ROOT / csv_file.with_suffix(".parquet").name
-                if expected_cache_file.exists():
-                    df = pd.read_parquet(expected_cache_file)
-                    if df.empty:
-                        print(f"Loaded DataFrame at {expected_cache_file} is empty.")
-                else:
-                    try:
-                        df = pd.read_csv(csv_file, header=None)
-                    except pd.errors.EmptyDataError:
-                        print(f"No Data found at {csv_file}. Returning empty DataFrame.")
-                        df = pd.DataFrame()
-                    df.to_parquet(expected_cache_file, index=False)  # store cache
-                data_ret_d[csv_file.stem] = df
-
-        else:
-            data_ret_d = {}
-            for suffix in list("BHT"):
-                filepath = mat_folder / f"{material}_{number}_{suffix}.csv"
-                cached_filepath = CACHE_ROOT / filepath.with_suffix(".parquet").name
-                if cached_filepath.exists():
-                    df = pd.read_parquet(cached_filepath)
-                    if df.empty:
-                        print(f"Loaded DataFrame at {cached_filepath} empty.")
-                else:
-                    assert filepath.exists(), f"File does not exist: {filepath}"
-                    try:
-                        df = pd.read_csv(csv_file, header=None)
-                    except pd.errors.EmptyDataError:
-                        print(f"No Data found at {csv_file}. Returning empty DataFrame.")
-                        df = pd.DataFrame()
-                    df.to_parquet(cached_filepath, index=False)  # store cache
-                data_ret_d[filepath.stem] = df
+        data_ret_d = {}
+        for suffix in list("BHT"):
+            filepath = mat_folder / f"{material}_{number}_{suffix}.csv"
+            cached_filepath = cache_path / filepath.with_suffix(".parquet").name
+            if cached_filepath.exists():
+                df = pd.read_parquet(cached_filepath)
+                if df.empty:
+                    print(f"Loaded DataFrame at {cached_filepath} empty.")
+            else:
+                assert filepath.exists(), f"File does not exist: {filepath}"
+                try:
+                    df = pd.read_csv(csv_file, header=None)
+                except pd.errors.EmptyDataError:
+                    print(f"No Data found at {csv_file}. Returning empty DataFrame.")
+                    df = pd.DataFrame()
+                df.to_parquet(cached_filepath, index=False)  # store cache
+            data_ret_d[filepath.stem] = df
     return data_ret_d
 
 

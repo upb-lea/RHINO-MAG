@@ -18,6 +18,7 @@ from mc2.model_interfaces.rnn_Interfaces import (
     RNNwInterface,
 )
 from mc2.models.NODE import HiddenStateNeuralEulerODE
+from mc2.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU
 from mc2.models.RNN import GRU, GRUwLinearModel, GRU2
 from mc2.models.jiles_atherton import (
     JAStatic,
@@ -29,6 +30,8 @@ from mc2.models.jiles_atherton import (
     JAWithGRU,
     JAWithGRUlin,
     JAWithGRUlinFinal,
+    JADirectParamGRU,
+    JAEnsemble,
     GRUWithJA,
     LFRWithGRUJA,
 )
@@ -40,6 +43,7 @@ from mc2.model_interfaces.rnn_Interfaces import (
     RNNwInterface,
     GRUwLinearModelInterface,
     MagnetizationRNNwInterface,
+    VectorfieldGRUInterface,
 )
 from mc2.model_interfaces.ja_interfaces import (
     JAwInterface,
@@ -59,8 +63,7 @@ SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
 
 def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: int, do_normalization: bool):
     if do_normalization:
-        data_dict = load_data_into_pandas_df(material=material_name)
-        mat_set = MaterialSet.from_pandas_dict(data_dict)
+        mat_set = MaterialSet.from_material_name(material_name)
 
         mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
 
@@ -129,6 +132,8 @@ def setup_model(
     assert test_out.shape[0] == test_seq_length
     model_in_size = test_out.shape[-1] + 2  # (+2) due to: flux density B and temperature T
 
+    lr_params = None
+
     match model_label:
         case "HNODE":
             model_params_d = dict(
@@ -180,6 +185,10 @@ def setup_model(
             model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = MagnetizationRNNwInterface
+        case "VectorfieldGRU":
+            model_params_d = dict(n_locs=9, in_size=model_in_size, key=model_key)
+            model = VectorfieldGRU(**model_params_d)
+            mdl_interface_cls = VectorfieldGRUInterface
         case "JAWithExternGRU":
             model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAWithExternGRU(**model_params_d)
@@ -216,6 +225,13 @@ def setup_model(
             model_params_d = dict(key=model_key)
             model = JAStatic(key=model_key)
             mdl_interface_cls = JAwInterface
+            # lr_params = dict(
+            #     init_value=1e-1,
+            #     transition_steps=1_000_000,
+            #     transition_begin=2_000,
+            #     decay_rate=0.1,
+            #     end_value=1e-4,
+            # )
         case "JA2":
             model_params_d = dict(key=model_key)
             model = JAStatic2(key=model_key)
@@ -223,6 +239,13 @@ def setup_model(
         case "JA3":
             model_params_d = dict(key=model_key)
             model = JAStatic3(key=model_key)
+            mdl_interface_cls = JAwInterface
+        case "JAEnsemble":
+            model_params_d = dict(
+                key=model_key,
+                n_models=100,
+            )
+            model = JAEnsemble(**model_params_d)
             mdl_interface_cls = JAwInterface
         case "Linear":
             model_params_d = dict(in_size=9, out_size=1, key=model_key)
@@ -233,6 +256,11 @@ def setup_model(
             model_params_d = dict(in_size=model_in_size, hidden_size=8, linear_in_size=1, key=model_key)
             model = GRUwLinearModel(**model_params_d)
             mdl_interface_cls = GRUwLinearModelInterface
+        case "JADirectParamGRU":
+            model_params_d = dict(in_size=model_in_size + 1, hidden_size=8, key=model_key)
+            model = JADirectParamGRU(normalizer=normalizer, **model_params_d)
+            mdl_interface_cls = JAWithGRUwInterface
+
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
 
@@ -256,14 +284,18 @@ def setup_model(
             batch_size=batch_size,
             tbptt_size_start=tbptt_size_start,
         ),
-        lr_params=dict(
+    )
+
+    if lr_params == None:
+        params["lr_params"] = dict(
             init_value=1e-3,
             transition_steps=1_000_000,
             transition_begin=2_000,
             decay_rate=0.1,
             end_value=1e-4,
-        ),
-    )
+        )
+    else:
+        params["lr_params"] = lr_params
 
     lr_schedule = optax.schedules.exponential_decay(**params["lr_params"])
     optimizer = optax.adam(lr_schedule)
