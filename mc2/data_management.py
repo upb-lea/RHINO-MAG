@@ -393,7 +393,10 @@ class MaterialSet(eqx.Module):
             H_key = f"{key_base}_H"
             T_key = f"{key_base}_T"
 
-            assert B_key in data_d and H_key in data_d and T_key in data_d, f"Missing data for frequency {freq} Hz"
+            #assert B_key in data_d and H_key in data_d and T_key in data_d, f"Missing data for frequency {freq} Hz"
+            if B_key not in data_d or H_key not in data_d or T_key not in data_d:
+                print(f"No data found for frequency index {idx+1}, skipping frequency.")
+                continue
 
             if data_d[B_key].empty:
                 assert data_d[H_key].empty, "B DataFrame is empty, but corresponding DataFrame for H is not empty."

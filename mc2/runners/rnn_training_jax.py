@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model_type",
-        default=None,
+        nargs="+",
         required=True,
         help=f"Model type to train with. One of {SUPPORTED_MODELS}",
     )
@@ -98,8 +98,8 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def run_experiment_for_seed(args: argparse.Namespace, seed: int, base_id: str):
-    args = parse_args()
+def run_experiment_for_seed(args: argparse.Namespace, seed: int, base_id: str, model_type: str):
+    #args = parse_args()
 
     jax.config.update("jax_enable_x64", not args.disable_f64)
 
@@ -120,7 +120,7 @@ def run_experiment_for_seed(args: argparse.Namespace, seed: int, base_id: str):
 
     # TODO: params as .yaml files?
     wrapped_model, optimizer, params, data_tuple = setup_model(
-        args.model_type,
+        model_type,
         args.material,
         model_key,
         n_epochs=args.epochs,
@@ -189,14 +189,27 @@ def main():
     else:
         seeds_to_run = args.seeds
 
-    log.info(f"Starting experiments for {len(seeds_to_run)} seeds: {seeds_to_run}")
-    base_id = f"{args.material}_{args.model_type}_{str(uuid4())[:8]}"
-    for seed in seeds_to_run:
-        try:
-            run_experiment_for_seed(args, seed,base_id)
-        except Exception as e:
-            log.error(f"Experiment for seed {seed} failed with error: {e}")
+    # log.info(f"Starting experiments for {len(seeds_to_run)} seeds: {seeds_to_run}")
+    # base_id = f"{args.material}_{args.model_type}_{str(uuid4())[:8]}"
+    # for seed in seeds_to_run:
+    #     try:
+    #         run_experiment_for_seed(args, seed,base_id)
+    #     except Exception as e:
+    #         log.error(f"Experiment for seed {seed} failed with error: {e}")
     
+    # log.info("All scheduled experiments completed.")
+    log.info(f"Starting experiments for {len(args.model_type)} model type(s) and {len(seeds_to_run)} seeds: {args.model_type}, {seeds_to_run}")
+    for model_type in args.model_type:
+        log.info(f"--- Starting experiments for Model Type: {model_type} ---")
+        base_id = f"{args.material}_{model_type}_{str(uuid4())[:8]}"
+        
+        for seed in seeds_to_run:
+            try:
+                # model_type wird jetzt an die Funktion übergeben
+                run_experiment_for_seed(args, seed, base_id, model_type)
+            except Exception as e:
+                log.error(f"Experiment for model {model_type} and seed {seed} failed with error: {e}")
+        
     log.info("All scheduled experiments completed.")
 
 if __name__ == "__main__":

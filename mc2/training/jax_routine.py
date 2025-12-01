@@ -322,6 +322,9 @@ def train_model(
     # manager = ocp.CheckpointManager(
     #     checkpoint_dir, ocp.PyTreeCheckpointer(), options
     # )
+    
+    best_val_loss = float("inf") 
+    best_model = jax.tree_util.tree_map(lambda x: x, model)
 
     test_loss, *_ = val_test(test_set, model, past_size)  # test_set_norm
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
@@ -361,13 +364,21 @@ def train_model(
         if step_epoch % val_every == 0:
             val_loss, *_ = val_test(val_set, model, past_size)  # val_set_norm
             logs["loss_trends_val"].append(val_loss.item())
+            if val_loss.item() < best_val_loss:
+                best_val_loss = val_loss.item()
+                best_model = jax.tree_util.tree_map(lambda x: x, model) 
         pbar_str += f"| val loss {val_loss:.2e}"
         logs["loss_trends_train"].append(train_loss.item())
         pbar.set_postfix_str(pbar_str)
 
     pbar.close()
 
-    test_loss, test_pred_l, test_gt_l = val_test(test_set, model, past_size)  # test_set_norm
+    if val_every>0 and val_every < n_epochs:
+        final_model=best_model
+    else:
+        final_model=model
+
+    test_loss, test_pred_l, test_gt_l = val_test(test_set, final_model, past_size)  # test_set_norm
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
 
     logs["end_time"] = str(pd.Timestamp.now().round(freq="s"))
@@ -375,4 +386,4 @@ def train_model(
     for i, (test_pred, test_gt) in enumerate(zip(test_pred_l, test_gt_l)):
         logs[f"predictions_MS_{i}"] = test_pred
         logs[f"ground_truth_MS_{i}"] = test_gt
-    return logs, model
+    return logs, final_model
