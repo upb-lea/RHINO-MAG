@@ -12,7 +12,7 @@ from mc2.data_management import MaterialSet, load_data_into_pandas_df, Normalize
 
 # Models
 from mc2.models.NODE import HiddenStateNeuralEulerODE
-from mc2.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU
+from mc2.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU, GRUaroundLinearModel
 from mc2.models.jiles_atherton import (
     JAStatic,
     JAStatic2,
@@ -35,6 +35,7 @@ from mc2.model_interfaces.rnn_interfaces import (
     GRUwLinearModelInterface,
     MagnetizationRNNwInterface,
     VectorfieldGRUInterface,
+    GRUaroundLinearModelInterface,
 )
 from mc2.model_interfaces.ja_interfaces import (
     JAwInterface,
@@ -206,6 +207,10 @@ def setup_model(
             model_params_d = dict(in_size=model_in_size, hidden_size=8, linear_in_size=1, key=model_key)
             model = GRUwLinearModel(**model_params_d)
             mdl_interface_cls = GRUwLinearModelInterface
+        case "GRUaroundLinearModel":
+            model_params_d = dict(in_size=model_in_size, hidden_size=8, linear_in_size=3, key=model_key)
+            model = GRUaroundLinearModel(**model_params_d)
+            mdl_interface_cls = GRUaroundLinearModelInterface
         case "JADirectParamGRU":
             model_params_d = dict(in_size=model_in_size + 1, hidden_size=8, key=model_key)
             model = JADirectParamGRU(normalizer=normalizer, **model_params_d)

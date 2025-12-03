@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.models.linear import LinearDynamicParameters
+from mc2.models.linear import LinearDynamicParameters, LinearStatic
 
 
 class GRU(eqx.Module):
@@ -181,3 +181,59 @@ class GRUwLinearModel(eqx.Module):
 
     def construct_init_hidden(self, out_true, batch_size):
         return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])
+
+
+class GRUaroundLinearModel(eqx.Module):
+    hidden_size: int = eqx.field(static=True)
+    cell: eqx.Module
+    linear: LinearStatic
+    linear_in_size: int = eqx.field(static=True)
+
+    def __init__(self, in_size, hidden_size, linear_in_size, *, key):
+        self.hidden_size = hidden_size
+        self.linear_in_size = linear_in_size
+
+        gru_key, l_key = jax.random.split(key, 2)
+
+        self.cell = eqx.nn.GRUCell(in_size, hidden_size, key=gru_key)
+        self.linear = LinearStatic(linear_in_size, out_size=1, key=l_key)
+
+    def __call__(self, input_gru, input_linear, init_hidden):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_gru_t, inp_lin_t = inp
+
+            rnn_out = self.cell(inp_gru_t, carry)
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+
+            mu_scale = rnn_out_o[..., 0]
+            mu_bias = rnn_out_o[..., 1]
+
+            out = mu_scale * self.linear.predict(inp_lin_t) + mu_bias
+            return rnn_out, out
+
+        _, out = jax.lax.scan(f, hidden, (input_gru, input_linear))
+        return out
+
+    def warmup_call(self, gru_in, linear_in, init_hidden, out_true):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_gru_t, inp_lin_t, out_true_t = inp
+            rnn_out = self.cell(inp_gru_t, carry)
+            rnn_out = rnn_out.at[0:2].set(out_true_t)
+
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+
+            mu_scale = rnn_out_o[..., 0]
+            mu_bias = rnn_out_o[..., 1]
+
+            out = mu_scale * self.linear.predict(inp_lin_t) + mu_bias
+            return rnn_out, out
+
+        final_hidden, out = jax.lax.scan(f, hidden, (gru_in, linear_in, out_true))
+        return out, final_hidden
+
+    def construct_init_hidden(self, out_true, batch_size):
+        return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 2))])
