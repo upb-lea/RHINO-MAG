@@ -20,6 +20,15 @@ class DipoleGrid(eqx.Module):
     n_x: int
     n_y: int
     distance: float
+    # T0: jax.Array
+
+    @property
+    def dim(self):
+        return self.m.shape[-1]
+
+    @property
+    def shape(self):
+        return self.m.shape
 
     @property
     def xrange(self):
@@ -48,6 +57,7 @@ class DipoleGrid(eqx.Module):
             pos=pos,
             omega=omega,
             distance=distance,
+            # T0=T0,
         )
 
     @classmethod
@@ -67,6 +77,7 @@ class DipoleGrid(eqx.Module):
             pos=pos,
             omega=jnp.zeros(pos.shape[:-1]),
             distance=distance,
+            # T0=jnp.zeros(pos.shape[:-1]),  # random_unit_vectors_2d(n_elements, key).reshape(n_x, n_y, 2)[..., 0],
         )
 
     @staticmethod
@@ -111,6 +122,7 @@ def step_rot_ode(state, ext_field, tau, J, d):
 
     torques = state.get_torque(ext_field)
 
+    # domega = (torques - state.T0) / J - d * omega
     domega = torques / J - d * omega
     dtheta = omega
 
@@ -126,6 +138,7 @@ def step_rot_ode(state, ext_field, tau, J, d):
         m=next_m,
         omega=next_omega,
         pos=state.pos,
+        # T0=state.T0,
     )
     return next_state
 
