@@ -126,7 +126,7 @@ def main():
     loss_function = setup_loss(args.loss_type)
 
     exp_id = f"{args.material}_{args.model_type}_{str(uuid4())[:16]}"
-    log.info(f"Training starting. Experiment ID is {exp_id}.")
+    log.info(f"Training starting. Experiment ID is '{exp_id}'.")
 
     # run training
     logs, model = train_model(
