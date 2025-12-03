@@ -382,6 +382,7 @@ def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, f
         axs[0, freq_idx].plot(B_future[freq_idx])
         axs[1, freq_idx].plot(H_future[freq_idx])
         axs[1, freq_idx].plot(H_pred[freq_idx])
+        axs[1, freq_idx].plot(H_future[freq_idx] - H_pred[freq_idx], color="tab:red", linestyle="--")
 
         axs[2, freq_idx].plot(B_future[freq_idx], H_future[freq_idx])
         axs[2, freq_idx].plot(B_future[freq_idx], H_pred[freq_idx])

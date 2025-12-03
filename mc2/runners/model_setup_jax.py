@@ -130,8 +130,9 @@ def setup_model(
             )
             model = HiddenStateNeuralEulerODE(**model_params_d)
             mdl_interface_cls = NODEwInterface
-        case "GRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+        case label if label.startswith("GRU") and label[3:].isdigit():
+            hidden_size = int(label[3:])
+            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
         case "MagnetizationGRU":
@@ -193,7 +194,11 @@ def setup_model(
             model = JAEnsemble(**model_params_d)
             mdl_interface_cls = JAwInterface
         case "Linear":
-            model_params_d = dict(in_size=9, out_size=1, key=model_key)
+            in_size = 3
+            # feat_in_size = 3 * (test_out.shape[-1] + 1)
+
+            # model_params_d = dict(in_size=in_size, feat_in_size=feat_in_size, out_size=1, key=model_key)
+            model_params_d = dict(in_size=in_size, out_size=1, key=model_key)
             model = LinearStatic(**model_params_d)
             mdl_interface_cls = LinearInterface
         case "GRUwLinearModel":
