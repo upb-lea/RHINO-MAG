@@ -29,7 +29,7 @@ from mc2.models.jiles_atherton import (
 from mc2.models.linear import LinearStatic
 
 # Interfaces
-from mc2.model_interfaces.rnn_Interfaces import (
+from mc2.model_interfaces.rnn_interfaces import (
     NODEwInterface,
     RNNwInterface,
     GRUwLinearModelInterface,
