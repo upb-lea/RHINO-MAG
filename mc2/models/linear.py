@@ -25,7 +25,7 @@ class LinearStatic(eqx.Module):
         self.b = jax.random.normal(b_key, shape=(out_size,))
 
     def predict(self, input):
-        return jax.nn.tanh(self.theta @ input + self.b)
+        return self.theta @ input + self.b
 
     def __call__(self, inputs):
         return eqx.filter_vmap(self.predict)(inputs)
