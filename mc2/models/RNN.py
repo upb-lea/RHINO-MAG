@@ -211,10 +211,9 @@ class GRUaroundLinearModel(eqx.Module):
             rnn_out = self.cell(inp_gru_t, carry)
             rnn_out_o = jnp.atleast_2d(rnn_out)
 
-            mu_scale = rnn_out_o[..., 0]
-            mu_bias = rnn_out_o[..., 1]
+            mu_bias = rnn_out_o[..., 0]
 
-            out = mu_scale * self.linear.predict(inp_lin_t) + mu_bias
+            out = self.linear.predict(inp_lin_t) + mu_bias
             return rnn_out, out
 
         _, out = jax.lax.scan(f, hidden, (input_gru, input_linear))
@@ -229,12 +228,11 @@ class GRUaroundLinearModel(eqx.Module):
             rnn_out = self.cell(inp_gru_t, carry)
             rnn_out_o = jnp.atleast_2d(rnn_out)
 
-            mu_scale = rnn_out_o[..., 0]
-            mu_bias = rnn_out_o[..., 1]
+            mu_bias = rnn_out_o[..., 0]
 
             linear_out = self.linear.predict(inp_lin_t)
 
-            out = mu_scale * linear_out + mu_bias
+            out = linear_out + mu_bias
             return rnn_out, (out, linear_out, rnn_out)
 
         _, (out, linear_out, rnn_out) = jax.lax.scan(f, hidden, (input_gru, input_linear))
@@ -249,15 +247,13 @@ class GRUaroundLinearModel(eqx.Module):
             rnn_out = rnn_out.at[0:2].set(out_true_t)
 
             rnn_out_o = jnp.atleast_2d(rnn_out)
+            mu_bias = rnn_out_o[..., 0]
 
-            mu_scale = rnn_out_o[..., 0]
-            mu_bias = rnn_out_o[..., 1]
-
-            out = mu_scale * self.linear.predict(inp_lin_t) + mu_bias
+            out = self.linear.predict(inp_lin_t) + mu_bias
             return rnn_out, out
 
         final_hidden, out = jax.lax.scan(f, hidden, (gru_in, linear_in, out_true))
         return out, final_hidden
 
     def construct_init_hidden(self, out_true, batch_size):
-        return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 2))])
+        return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])

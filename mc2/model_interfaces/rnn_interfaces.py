@@ -495,13 +495,7 @@ class GRUaroundLinearModelInterface(GRUwLinearModelInterface):
         linear_out = eqx.filter_vmap(self.model.linear.predict)(linear_in[:, 0, :])
 
         init_hidden = self.model.construct_init_hidden(
-            out_true=jnp.concatenate(
-                [
-                    jnp.ones((H_past_norm.shape[0], 1)),
-                    H_past_norm[:, -1][..., None] - linear_out,
-                ],
-                axis=-1,
-            ),  # TODO: we need the linaer out for one step earlier...
+            out_true=H_past_norm[:, -1][..., None] - linear_out,  # TODO: we need the linaer out for one step earlier...
             batch_size=H_past_norm.shape[0],
         )
 

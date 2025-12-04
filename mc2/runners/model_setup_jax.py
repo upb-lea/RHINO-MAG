@@ -208,7 +208,7 @@ def setup_model(
             model = GRUwLinearModel(**model_params_d)
             mdl_interface_cls = GRUwLinearModelInterface
         case "GRUaroundLinearModel":
-            model_params_d = dict(in_size=model_in_size, hidden_size=3, linear_in_size=3, key=model_key)
+            model_params_d = dict(in_size=model_in_size, hidden_size=8, linear_in_size=3, key=model_key)
             model = GRUaroundLinearModel(**model_params_d)
             mdl_interface_cls = GRUaroundLinearModelInterface
         case "JADirectParamGRU":
