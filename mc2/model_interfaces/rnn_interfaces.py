@@ -486,22 +486,24 @@ class GRUaroundLinearModelInterface(GRUwLinearModelInterface):
         warmup: bool = True,
     ) -> jax.Array:
 
+        gru_in = self._prepare_gru_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
+        linear_in = self._prepare_linear_input(B_past_norm, B_future_norm)
+
         # if warmup and H_past_norm.shape[1] > 1:
         #     init_hidden = self._warmup(B_past_norm, H_past_norm, B_future_norm, T_norm)
         # else:
+        linear_out = eqx.filter_vmap(self.model.linear.predict)(linear_in[:, 0, :])
+
         init_hidden = self.model.construct_init_hidden(
             out_true=jnp.concatenate(
                 [
                     jnp.ones((H_past_norm.shape[0], 1)),
-                    jnp.zeros((H_past_norm.shape[0], 1)),
+                    H_past_norm[:, -1][..., None] - linear_out,
                 ],
                 axis=-1,
-            ),  # TODO
+            ),  # TODO: we need the linaer out for one step earlier...
             batch_size=H_past_norm.shape[0],
         )
-
-        gru_in = self._prepare_gru_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
-        linear_in = self._prepare_linear_input(B_past_norm, B_future_norm)
 
         batch_H_pred_norm = eqx.filter_vmap(self.model)(gru_in, linear_in, init_hidden)
 

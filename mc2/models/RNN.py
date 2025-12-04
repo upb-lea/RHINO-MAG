@@ -186,7 +186,7 @@ class GRUwLinearModel(eqx.Module):
 class GRUaroundLinearModel(eqx.Module):
     hidden_size: int = eqx.field(static=True)
     cell: eqx.Module
-    linear: LinearStatic
+    linear: LinearStatic = eqx.field(static=True)
     linear_in_size: int = eqx.field(static=True)
 
     def __init__(self, in_size, hidden_size, linear_in_size, *, key):
@@ -196,7 +196,11 @@ class GRUaroundLinearModel(eqx.Module):
         gru_key, l_key = jax.random.split(key, 2)
 
         self.cell = eqx.nn.GRUCell(in_size, hidden_size, key=gru_key)
-        self.linear = LinearStatic(linear_in_size, out_size=1, key=l_key)
+        # linear_dummy = LinearStatic(linear_in_size, out_size=1, key=l_key)
+        from mc2.utils.model_evaluation import reconstruct_model_from_exp_id
+
+        self.linear = reconstruct_model_from_exp_id("3C90_Linear_a3943263-1c37-48").model
+        assert self.linear.in_size == linear_in_size
 
     def __call__(self, input_gru, input_linear, init_hidden):
         hidden = init_hidden
@@ -215,6 +219,26 @@ class GRUaroundLinearModel(eqx.Module):
 
         _, out = jax.lax.scan(f, hidden, (input_gru, input_linear))
         return out
+
+    def debug_call(self, input_gru, input_linear, init_hidden):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_gru_t, inp_lin_t = inp
+
+            rnn_out = self.cell(inp_gru_t, carry)
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+
+            mu_scale = rnn_out_o[..., 0]
+            mu_bias = rnn_out_o[..., 1]
+
+            linear_out = self.linear.predict(inp_lin_t)
+
+            out = mu_scale * linear_out + mu_bias
+            return rnn_out, (out, linear_out, rnn_out)
+
+        _, (out, linear_out, rnn_out) = jax.lax.scan(f, hidden, (input_gru, input_linear))
+        return out, linear_out, rnn_out
 
     def warmup_call(self, gru_in, linear_in, init_hidden, out_true):
         hidden = init_hidden
