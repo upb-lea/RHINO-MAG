@@ -85,6 +85,7 @@ def parse_args() -> argparse.Namespace:
         help="Starting tbptt size and number of epochs/steps to use it for, before switching to tbptt_size. Format: size n_epochs",
     )
     parser.add_argument("--disable_f64", action="store_true", default=False)
+    parser.add_argument("--disable_features", action="store_true", default=False)
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
     return args
@@ -121,6 +122,7 @@ def main():
         past_size=args.past_size,
         time_shift=args.time_shift,
         tbptt_size_start=args.tbptt_size_start,
+        disable_features=args.disable_features,
     )
 
     loss_function = setup_loss(args.loss_type)

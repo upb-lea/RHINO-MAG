@@ -85,15 +85,24 @@ def setup_model(
     past_size: int = 10,
     time_shift: int = 0,
     tbptt_size_start=None,  # (size, n_epochs_steps)
+    disable_features: bool = False,
+    noise_on_data: float = 0.002,
     **kwargs,
 ):
-    def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
-        past_length = norm_B_past.shape[0]
-        B_all = jnp.hstack([norm_B_past, norm_B_future])
+    if disable_features:
 
-        featurized_B = compute_fe_single(B_all, n_s=11, time_shift=time_shift)
+        def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
+            return norm_B_future[..., None]
 
-        return featurized_B[past_length:]
+    else:
+
+        def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
+            past_length = norm_B_past.shape[0]
+            B_all = jnp.hstack([norm_B_past, norm_B_future])
+
+            featurized_B = compute_fe_single(B_all, n_s=11, time_shift=time_shift)
+
+            return featurized_B[past_length:]
 
     featurize = partial(featurize, time_shift=time_shift)
 
@@ -243,6 +252,7 @@ def setup_model(
             time_shift=time_shift,
             batch_size=batch_size,
             tbptt_size_start=tbptt_size_start,
+            noise_on_data=noise_on_data,
         ),
     )
 

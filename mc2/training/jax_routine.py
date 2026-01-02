@@ -297,6 +297,7 @@ def train_model(
     past_size: int,
     batch_size: int,
     time_shift: int,
+    noise_on_data: float,
     tbptt_size_start: list[int] | None = None,  # (size, n_epochs_steps)
 ):
     train_set, val_set, test_set = data_tuple
