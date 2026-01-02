@@ -66,7 +66,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
     try:
         with open(experiment_path / f"{exp_id}.json", "r") as f:
             params = json.load(f)["params"]
-        print(f"Parameters for the model setup were found at '{EXPERIMENT_LOGS_ROOT / exp_id}' and are utilized.")
+        print(f"Parameters for the model setup were found at '{experiment_path / exp_id}' and are utilized.")
         fresh_wrapped_model, _, _, _ = setup_model(
             model_label=model_type,
             material_name=material_name,
@@ -76,7 +76,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
         )
     except FileNotFoundError:
         print(
-            f"No parameters could be found under '{EXPERIMENT_LOGS_ROOT}' for exp_id: '{exp_id}', "
+            f"No parameters could be found under '{experiment_path}' for exp_id: '{exp_id}', "
             + "continues with default setup for the given model type specified in 'setup_model'."
         )
         fresh_wrapped_model, _, _, _ = setup_model(
