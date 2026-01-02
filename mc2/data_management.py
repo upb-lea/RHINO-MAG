@@ -462,7 +462,7 @@ class MaterialSet(eqx.Module):
 
     def at_frequency(self, frequency: float) -> FrequencySet:
         """Return the frequency set at the given index."""
-        return self.frequency_sets[jnp.where(self.frequencies == frequency)[0][0]]
+        return self.frequency_sets[jnp.where(jnp.array(self.frequencies) == frequency)[0][0]]
 
     def filter_temperatures(self, temperatures: list[float] | jax.Array) -> "MaterialSet":
         """Filter the material set by temperatures."""
