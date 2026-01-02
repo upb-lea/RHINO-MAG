@@ -77,6 +77,13 @@ def parse_args() -> argparse.Namespace:
         help="Time shift for the B trajectory in featurize",
     )
     parser.add_argument(
+        "--noise_on_data",
+        default=0.0,
+        required=False,
+        type=float,
+        help="Standard deviation of gaussian noise applied to the B trajectory.",
+    )
+    parser.add_argument(
         "-ts",
         "--tbptt_size_start",
         default=None,

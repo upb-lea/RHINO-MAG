@@ -86,7 +86,7 @@ def setup_model(
     time_shift: int = 0,
     tbptt_size_start=None,  # (size, n_epochs_steps)
     disable_features: bool = False,
-    noise_on_data: float = 0.002,
+    noise_on_data: float = 0.0,
     **kwargs,
 ):
     if disable_features:

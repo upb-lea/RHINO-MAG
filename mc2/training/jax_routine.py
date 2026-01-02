@@ -134,8 +134,23 @@ def batched_step(model, batch_H, batch_B, batch_T, batch_H_RMS, past_size, loss_
     return loss, model, opt_state
 
 
+def add_gaussian_noise(in_data, noise_key, noise_std: float = 0.002):
+    return in_data + jax.random.normal(noise_key, shape=in_data.shape) * noise_std
+
+
 @eqx.filter_jit
-def single_batch_step(material_set, tbptt_size, past_size, batch_pairs, model, loss_function, optimizer, opt_state):
+def single_batch_step(
+    material_set,
+    tbptt_size,
+    past_size,
+    batch_pairs,
+    model,
+    loss_function,
+    optimizer,
+    opt_state,
+    noise_key,
+    noise_on_data,
+):
     n_frequency_indices = batch_pairs[:, 0]
     n_sequence_indices = batch_pairs[:, 1]
     starting_points = batch_pairs[:, 2]
@@ -146,6 +161,10 @@ def single_batch_step(material_set, tbptt_size, past_size, batch_pairs, model, l
         starting_points,
         training_sequence_length=tbptt_size + past_size,
     )
+
+    if noise_on_data > 0.0:
+        batch_B = add_gaussian_noise(batch_B, noise_key, noise_on_data)
+
     loss, new_model, new_opt_state = batched_step(
         model, batch_H, batch_B, batch_T, batch_H_RMS, past_size, loss_function, optimizer, opt_state
     )
@@ -174,7 +193,9 @@ def scan_step(carry, batch_indices, model, train_set_norm, tbptt_size, past_size
 
 
 @eqx.filter_jit
-def train_epoch(model, opt_state, train_set_norm, loss_function, optimizer, key, past_size, tbptt_size, batch_size):
+def train_epoch(
+    model, opt_state, train_set_norm, loss_function, optimizer, key, past_size, tbptt_size, batch_size, noise_on_data
+):
     all_pairs_list = []
     for freq_idx in range(len(train_set_norm.frequency_sets)):
         freq_set = train_set_norm.frequency_sets[freq_idx]
@@ -195,17 +216,28 @@ def train_epoch(model, opt_state, train_set_norm, loss_function, optimizer, key,
     all_batch_pairs = create_batch_pairs(shuffled_pairs, batch_size)
 
     trainable_model_arrays = eqx.filter(model, eqx.is_inexact_array)
-    carry_init = (trainable_model_arrays, opt_state)
+    carry_init = (trainable_model_arrays, opt_state, key)
 
     def scan_step(carry, batch_indices):
-        model_arrays, opt_state = carry
+        model_arrays, opt_state, key = carry
+
+        key, noise_key = jax.random.split(key)
         full_model = eqx.combine(model_arrays, model)
         full_model, opt_state, loss = single_batch_step(
-            train_set_norm, tbptt_size, past_size, batch_indices, full_model, loss_function, optimizer, opt_state
+            train_set_norm,
+            tbptt_size,
+            past_size,
+            batch_indices,
+            full_model,
+            loss_function,
+            optimizer,
+            opt_state,
+            noise_key,
+            noise_on_data,
         )
-        return (eqx.filter(full_model, eqx.is_inexact_array), opt_state), loss
+        return (eqx.filter(full_model, eqx.is_inexact_array), opt_state, key), loss
 
-    (final_model_arrays, final_opt_state), losses = jax.lax.scan(
+    (final_model_arrays, final_opt_state, final_key), losses = jax.lax.scan(
         scan_step,
         carry_init,
         all_batch_pairs,
@@ -357,6 +389,7 @@ def train_model(
             past_size,
             current_tbptt_size,
             batch_size,
+            noise_on_data,
         )
         pbar_str = f"Loss {train_loss:.2e}"
         if step_epoch % val_every == 0:
