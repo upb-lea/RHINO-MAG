@@ -49,6 +49,8 @@ SUPPORTED_MODELS = ["GRU", "HNODE", "JA"]
 
 SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
 
+SUPPORTED_FEATURES = ["b_signal", "db_dt", "d2b_dt2", "dyn_avg", "pwm"]
+
 
 def get_normalizer(
     material_name: str,

@@ -22,7 +22,7 @@ from uuid import uuid4
 
 from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
-from mc2.runners.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
+from mc2.runners.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES, SUPPORTED_FEATURES
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.model_interfaces.model_interface import save_model
 
@@ -32,13 +32,11 @@ def parse_args() -> argparse.Namespace:
     # parser.add_argument("-t", "--tag", default=None, required=False, help="an identifier/tag/comment for the trials")
     parser.add_argument(
         "--material",
-        default=None,
         required=True,
         help=f"Material label to train on. One of {AVAILABLE_MATERIALS}",
     )
     parser.add_argument(
         "--model_type",
-        default=None,
         required=True,
         help=f"Model type to train with. One of {SUPPORTED_MODELS}",
     )
@@ -48,6 +46,14 @@ def parse_args() -> argparse.Namespace:
         required=False,
         help=f"Loss type to train with. One of {SUPPORTED_LOSSES}",
     )
+    # parser.add_argument(
+    #     "-f",
+    #     "--features",
+    #     nargs="+",
+    #     default=SUPPORTED_FEATURES,
+    #     required=False,
+    #     help=f"The features to use. Multiple (at least one) of {SUPPORTED_FEATURES}",
+    # )
     parser.add_argument(
         "--gpu_id",
         default=-1,
@@ -99,15 +105,28 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def main():
-    args = parse_args()
+def main(
+    material: str,
+    model_type: str,
+    loss_type: str = "adapted_RMS",
+    gpu_id: int = -1,
+    epochs: int = 100,
+    batch_size: int = 256,
+    tbptt_size: int = 1024,
+    past_size: int = 10,
+    time_shift: int = 0,
+    noise_on_data: float = 0.0,
+    tbptt_size_start: tuple[int, int] | None = None,
+    disable_f64: bool = False,
+    disable_features: bool = False,
+    transform_H: bool = False,
+):
+    jax.config.update("jax_enable_x64", not disable_f64)
 
-    jax.config.update("jax_enable_x64", not args.disable_f64)
-
-    if args.gpu_id != -1:
+    if gpu_id != -1:
         gpus = jax.devices()
-        jax.config.update("jax_default_device", gpus[args.gpu_id])
-    elif args.gpu_id == -1:
+        jax.config.update("jax_default_device", gpus[gpu_id])
+    elif gpu_id == -1:
         jax.config.update("jax_platform_name", "cpu")
 
     # setup
@@ -115,27 +134,27 @@ def main():
     key = jax.random.PRNGKey(seed)
     key, training_key, model_key = jax.random.split(key, 3)
 
-    assert (
-        args.material in AVAILABLE_MATERIALS
-    ), f"Material {args.material} is not available. Choose on of {AVAILABLE_MATERIALS}."
+    assert material in AVAILABLE_MATERIALS, f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
 
     # TODO: params as .yaml files?
     wrapped_model, optimizer, params, data_tuple = setup_model(
-        args.model_type,
-        args.material,
+        model_type,
+        material,
         model_key,
-        n_epochs=args.epochs,
-        tbptt_size=args.tbptt_size,
-        batch_size=args.batch_size,
-        past_size=args.past_size,
-        time_shift=args.time_shift,
-        tbptt_size_start=args.tbptt_size_start,
-        disable_features=args.disable_features,
+        n_epochs=epochs,
+        tbptt_size=tbptt_size,
+        batch_size=batch_size,
+        past_size=past_size,
+        time_shift=time_shift,
+        tbptt_size_start=tbptt_size_start,
+        disable_features=disable_features,
+        transform_H=transform_H,
+        noise_on_data=noise_on_data,
     )
 
-    loss_function = setup_loss(args.loss_type)
+    loss_function = setup_loss(loss_type)
 
-    exp_id = f"{args.material}_{args.model_type}_{str(uuid4())[:16]}"
+    exp_id = f"{material}_{model_type}_{str(uuid4())[:16]}"
     log.info(f"Training starting. Experiment ID is '{exp_id}'.")
 
     # run training
@@ -143,7 +162,7 @@ def main():
         model=wrapped_model,
         loss_function=loss_function,
         optimizer=optimizer,
-        material_name=args.material,
+        material_name=material,
         data_tuple=data_tuple,
         key=training_key,
         seed=seed,
@@ -183,4 +202,20 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(
+        material=args.material,
+        model_type=args.model_type,
+        loss_type=args.loss_type,
+        gpu_id=args.gpu_id,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        tbptt_size=args.tbptt_size,
+        past_size=args.past_size,
+        time_shift=args.time_shift,
+        noise_on_data=args.noise_on_data,
+        tbptt_size_start=args.tbptt_size_start,
+        disable_f64=args.disable_f64,
+        disable_features=args.disable_features,
+        transform_H=args.transform_H,
+    )
