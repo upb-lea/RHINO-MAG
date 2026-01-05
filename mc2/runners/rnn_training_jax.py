@@ -282,6 +282,8 @@ if __name__ == "__main__":
     main(
         material=args.material,
         model_type=args.model_type,
+        seeds=args.seeds,
+        exp_name=args.exp_name,
         loss_type=args.loss_type,
         gpu_id=args.gpu_id,
         epochs=args.epochs,
