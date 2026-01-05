@@ -563,6 +563,169 @@ class JAWithGRU(eqx.Module):
         # final_hidden = final_hidden.at[0].set(0) -> maybe ?
         return H_seq, final_hidden
 
+class GRUWithJA(eqx.Module):
+    """
+    Static Jiles-Atherton model with GRU correction.
+
+    Correction:
+        - GRU models the discrepancy between the physical JA model and measured data.
+        - Normalized H-field values are used as input to the GRU.
+    """
+    ja: JAStatic = eqx.field(static=True)
+    gru: GRU
+    normalizer: eqx.Module = eqx.field(static=True)
+
+    def __init__(self, normalizer, key, in_size, hidden_size=8, **kwargs):
+        ja_key, gru_key = jax.random.split(key, 2)
+        self.ja = load_model(
+            MODEL_DUMP_ROOT / "4ec8f810-298b-49.eqx", JAStatic
+        )  # using pretrained ja model # b8d1fe17-2f6f-40,
+        #self.ja = JAStatic(ja_key, **kwargs)
+        self.gru = GRU(in_size=in_size, hidden_size=hidden_size, key=gru_key)
+        self.normalizer = normalizer
+
+    def __call__(self, H0, B_seq, features_seq, init_hidden):
+        def body_fun(carry, inputs):
+            H_prev, h_gru = carry
+            B_prev, B_next, feat_next = inputs
+
+            H_next_phys, _ = self.ja.step(H_prev, B_prev, B_next)
+            H_next_phys_norm = self.normalizer.normalize_H(H_next_phys)
+            gru_in = jnp.concatenate([jnp.array([H_next_phys_norm]), feat_next])
+            h_gru_new = self.gru.cell(gru_in, h_gru)
+            H_next_norm = h_gru_new[0]
+            H_next = self.normalizer.denormalize_H(jnp.squeeze(H_next_norm))
+
+            return (H_next, h_gru_new), H_next
+
+        B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
+        inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:])  # features_seq[:-1] # 1:]
+
+        (_, _), H_seq = jax.lax.scan(body_fun, (H0, init_hidden), inputs)
+        # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        return H_seq
+
+    def warmup_call(self, H0, B_seq, features_seq, init_hidden, H_true):
+        def body_fun(carry, inputs):
+            H_prev, h_gru = carry
+            B_curr, B_next, feat_next, h_true = inputs
+
+            H_next_phys, _ = self.ja.step(H_prev, B_curr, B_next)
+            H_next_phys_norm = self.normalizer.normalize_H(H_next_phys)
+            gru_in = jnp.concatenate([jnp.array([H_next_phys_norm]), feat_next])
+            h_gru_new = self.gru.cell(gru_in, h_gru)
+            h_gru_new = h_gru_new.at[0].set(self.normalizer.normalize_H(h_true))
+            H_next_norm = h_gru_new[0]
+            H_next = self.normalizer.denormalize_H(jnp.squeeze(H_next_norm))
+
+            return (H_next, h_gru_new), H_next
+
+        B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
+        inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:], H_true)  # features_seq[:-1] # 1:]
+
+        (_, final_hidden), H_seq = jax.lax.scan(body_fun, (H0, init_hidden), inputs)
+        # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        #final_hidden = final_hidden.at[0].set(0) -> maybe ?
+        return H_seq, final_hidden
+
+
+
+
+class LFRWithGRUJA(eqx.Module):
+    """
+    https://arxiv.org/pdf/2404.01901
+
+    """
+    ja: JAStatic = eqx.field(static=True)
+    gru: GRU
+    intercon_matrix : jax.Array
+    x_k_size: int
+    normalizer: eqx.Module = eqx.field(static=True)
+
+    def __init__(self, normalizer, key, in_size, hidden_size=8,x_k_size=5, **kwargs):
+        ja_key, gru_key = jax.random.split(key, 2)
+        self.ja = load_model(
+            MODEL_DUMP_ROOT / "4ec8f810-298b-49.eqx", JAStatic
+        )  
+        self.gru = GRU(in_size=in_size, hidden_size=hidden_size, key=gru_key)
+        self.normalizer = normalizer
+        n_features=len(normalizer.norm_fe_max) +1 # +1 for temperature
+        self.x_k_size=x_k_size
+                                                    
+        intercon_matrix_init = jax.random.uniform(key, (x_k_size + 1 + 3 + in_size, x_k_size+ (3+n_features) + 1 + 1)) * 0.1 # (x_k_size + y_size + ja_in_size + gru_in_size, x_k_size + u_k_size + output_ja_size + output_gru_size)
+
+        #H_prev -> z_ja_Hprev 
+        intercon_matrix_init = intercon_matrix_init.at[x_k_size + 1, x_k_size + 0].set(1.0)
+        #B_prev -> z_ja_Bprev 
+        intercon_matrix_init = intercon_matrix_init.at[x_k_size + 2, x_k_size + 1].set(1.0)
+        #B_next -> z_ja_Bnext 
+        intercon_matrix_init = intercon_matrix_init.at[x_k_size + 3, x_k_size + 2].set(1.0)
+
+        #GRU inputs
+        for i in range(n_features):
+            intercon_matrix_init = intercon_matrix_init.at[x_k_size + 4 + i, x_k_size + 3 + i].set(1.0)
+        self.intercon_matrix = intercon_matrix_init
+
+    def __call__(self, H0, B_seq, features_seq, init_hidden):
+        x_k0= jnp.zeros(self.x_k_size)
+        def body_fun(carry, inputs):
+            H_prev, h_gru, x_k = carry
+            B_prev, B_next, feat_next = inputs
+            H_prev_vec = jnp.atleast_1d(H_prev)
+            B_prev_vec = jnp.atleast_1d(B_prev)
+            B_next_vec = jnp.atleast_1d(B_next)
+            u=jnp.concatenate([H_prev_vec, B_prev_vec, B_next_vec, feat_next])
+            in_pre=jnp.concatenate([x_k,u,jnp.zeros(1),jnp.zeros(1)])# loop otherwise
+            out_pre = jnp.matmul(self.intercon_matrix, in_pre)
+            z_ja_Hprev = self.normalizer.denormalize_H(out_pre[self.x_k_size+1])
+            z_ja_Bprev = out_pre[self.x_k_size+2] * (self.normalizer.B_max)
+            z_ja_Bnext = out_pre[self.x_k_size+3] * (self.normalizer.B_max)
+            z_gru = out_pre[self.x_k_size+4:]
+
+            H_next_phys, _ = self.ja.step(z_ja_Hprev, z_ja_Bprev, z_ja_Bnext)
+            w_ja = self.normalizer.normalize_H(H_next_phys)
+            h_gru_new = self.gru.cell(z_gru, h_gru)
+            w_gru = h_gru_new[0]
+
+            w_gru=jnp.atleast_1d(w_gru)
+            w_ja=jnp.atleast_1d(w_ja)
+            in_=jnp.concatenate([x_k,u,w_ja,w_gru])
+            out = jnp.matmul(self.intercon_matrix, in_)
+            x_k1 = out[:self.x_k_size]
+            H_next= out[self.x_k_size]
+
+            return (H_next, h_gru_new, x_k1), H_next
+
+        B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
+        inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:])  # features_seq[:-1] # 1:]
+
+        (_, _,_), H_seq = jax.lax.scan(body_fun, (H0, init_hidden, x_k0), inputs)
+        # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+        return H_seq
+
+    # def warmup_call(self, H0, B_seq, features_seq, init_hidden, H_true):
+    #     def body_fun(carry, inputs):
+    #         H_prev, h_gru = carry
+    #         B_curr, B_next, feat_next, h_true = inputs
+
+    #         H_next_phys, _ = self.ja.step(H_prev, B_curr, B_next)
+    #         H_next_phys_norm = self.normalizer.normalize_H(H_next_phys)
+    #         gru_in = jnp.concatenate([jnp.array([H_next_phys_norm]), feat_next])
+    #         h_gru_new = self.gru.cell(gru_in, h_gru)
+    #         h_gru_new = h_gru_new.at[0].set(self.normalizer.normalize_H(h_true))
+    #         H_next_norm = h_gru_new[0]
+    #         H_next = self.normalizer.denormalize_H(jnp.squeeze(H_next_norm))
+
+    #         return (H_next, h_gru_new), H_next
+
+    #     B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
+    #     inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:], H_true)  # features_seq[:-1] # 1:]
+
+    #     (_, final_hidden), H_seq = jax.lax.scan(body_fun, (H0, init_hidden), inputs)
+    #     # H_seq = jnp.concatenate([jnp.array([H0]), H_seq], axis=0)
+    #     #final_hidden = final_hidden.at[0].set(0) -> maybe ?
+    #     return H_seq, final_hidden
+
 
 class JADynamic(JAStatic):
     param_scale: jax.Array

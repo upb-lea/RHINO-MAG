@@ -10,7 +10,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
 
-
+# jax.config.update("jax_enable_x64", True)
 # jax.config.update("jax_debug_nans", True)
 # jax.config.update("jax_log_compiles", True)
 
@@ -37,6 +37,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model_type",
+        nargs="+",
         required=True,
         help=f"Model type to train with. One of {SUPPORTED_MODELS}",
     )
@@ -54,6 +55,12 @@ def parse_args() -> argparse.Namespace:
     #     required=False,
     #     help=f"The features to use. Multiple (at least one) of {SUPPORTED_FEATURES}",
     # )
+    parser.add_argument(
+        "--exp_name",
+        default=None,
+        required=False,
+        help=f"Experiment name to appear in exp_id.",
+    )
     parser.add_argument(
         "--gpu_id",
         default=-1,
@@ -97,6 +104,14 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help="Starting tbptt size and number of epochs/steps to use it for, before switching to tbptt_size. Format: size n_epochs",
     )
+    parser.add_argument(
+        "--seeds",
+        default=[0],
+        nargs="+",
+        type=int,
+        required=False,
+        help="One or more seeds to run the experiments with. Default is [0].",
+    )
     parser.add_argument("--disable_f64", action="store_true", default=False)
     parser.add_argument("--disable_features", action="store_true", default=False)
     parser.add_argument("--transform_H", action="store_true", default=False)
@@ -105,23 +120,24 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def main(
+def run_experiment_for_seed(
+    seed: int,
+    base_id: str,
     material: str,
     model_type: str,
-    loss_type: str = "adapted_RMS",
-    gpu_id: int = -1,
-    epochs: int = 100,
-    batch_size: int = 256,
-    tbptt_size: int = 1024,
-    past_size: int = 10,
-    time_shift: int = 0,
-    noise_on_data: float = 0.0,
-    tbptt_size_start: tuple[int, int] | None = None,
-    disable_f64: bool = False,
-    disable_features: bool = False,
-    transform_H: bool = False,
+    loss_type: str,
+    gpu_id: int,
+    epochs: int,
+    batch_size: int,
+    tbptt_size: int,
+    past_size: int,
+    time_shift: int,
+    noise_on_data: float,
+    tbptt_size_start: tuple[int, int] | None,
+    disable_features: bool,
+    transform_H: bool,
 ):
-    jax.config.update("jax_enable_x64", not disable_f64)
+    # args = parse_args()
 
     if gpu_id != -1:
         gpus = jax.devices()
@@ -130,7 +146,7 @@ def main(
         jax.config.update("jax_platform_name", "cpu")
 
     # setup
-    seed = 0
+    # seed = 0
     key = jax.random.PRNGKey(seed)
     key, training_key, model_key = jax.random.split(key, 3)
 
@@ -154,8 +170,8 @@ def main(
 
     loss_function = setup_loss(loss_type)
 
-    exp_id = f"{material}_{model_type}_{str(uuid4())[:16]}"
-    log.info(f"Training starting. Experiment ID is '{exp_id}'.")
+    exp_id = f"{base_id}_seed{seed}"
+    log.info(f"Training starting. Experiment ID is {exp_id}.")
 
     # run training
     logs, model = train_model(
@@ -199,6 +215,66 @@ def main(
         + "Parameters, logs, evaluation metrics, and the model "
         + "have been stored successfully."
     )
+
+
+def main(
+    material: str,
+    model_type: str,
+    seeds: list[int],
+    exp_name: str | None = None,
+    loss_type: str = "adapted_RMS",
+    gpu_id: int = -1,
+    epochs: int = 100,
+    batch_size: int = 256,
+    tbptt_size: int = 1024,
+    past_size: int = 10,
+    time_shift: int = 0,
+    noise_on_data: float = 0.0,
+    tbptt_size_start: tuple[int, int] | None = None,
+    disable_f64: bool = False,
+    disable_features: bool = False,
+    transform_H: bool = False,
+):
+    jax.config.update("jax_enable_x64", not disable_f64)
+
+    if not seeds:
+        log.warning("No seeds provided. Using default seed 0.")
+        seeds_to_run = [0]
+    else:
+        seeds_to_run = seeds
+
+    log.info(
+        f"Starting experiments for {len(model_type)} model type(s) and {len(seeds_to_run)} seeds: {model_type}, {seeds_to_run}"
+    )
+    for model_type in model_type:
+        log.info(f"--- Starting experiments for Model Type: {model_type} ---")
+        if exp_name is None:
+            base_id = f"{material}_{model_type}_{str(uuid4())[:8]}"
+        else:
+            base_id = f"{material}_{model_type}_{exp_name}_{str(uuid4())[:8]}"
+        for seed in seeds_to_run:
+            try:
+                run_experiment_for_seed(
+                    seed=seed,
+                    base_id=base_id,
+                    material,
+                    model_type,
+                    loss_type,
+                    gpu_id,
+                    epochs,
+                    batch_size,
+                    tbptt_size,
+                    past_size,
+                    time_shift,
+                    noise_on_data,
+                    tbptt_size_start,
+                    disable_features,
+                    transform_H,
+                )
+            except Exception as e:
+                log.error(f"Experiment for model {model_type} and seed {seed} failed with error: {e}")
+
+    log.info("All scheduled experiments completed.")
 
 
 if __name__ == "__main__":

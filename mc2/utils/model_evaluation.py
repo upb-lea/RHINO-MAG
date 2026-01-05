@@ -14,6 +14,8 @@ from mc2.runners.model_setup_jax import setup_model
 from mc2.model_interfaces.model_interface import load_model, ModelInterface
 from mc2.metrics import sre, nere
 
+from functools import partial
+
 
 def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | list[str] | None = None):
     model_paths = list(MODEL_DUMP_ROOT.glob("*.eqx"))
@@ -67,7 +69,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
         with open(experiment_path / f"{exp_id}.json", "r") as f:
             params = json.load(f)["params"]
         print(f"Parameters for the model setup were found at '{experiment_path / exp_id}' and are utilized.")
-        fresh_wrapped_model, _, _, _ = setup_model(
+        fresh_wrapped_model, _, _, data_tuple = setup_model(
             model_label=model_type,
             material_name=material_name,
             model_key=jax.random.PRNGKey(0),
@@ -79,7 +81,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
             f"No parameters could be found under '{experiment_path}' for exp_id: '{exp_id}', "
             + "continues with default setup for the given model type specified in 'setup_model'."
         )
-        fresh_wrapped_model, _, _, _ = setup_model(
+        fresh_wrapped_model, _, _, data_tuple = setup_model(
             model_label=model_type,
             material_name=material_name,
             model_key=jax.random.PRNGKey(0),
@@ -98,7 +100,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
             model = eqx.tree_deserialise_leaves(f, model, partial(filter_spec, f64_enabled=jax.config.x64_enabled))
 
     wrapped_model = eqx.tree_at(lambda t: t.model, fresh_wrapped_model, model)
-    return wrapped_model
+    return wrapped_model, data_tuple
 
 
 def load_gt_and_pred(exp_id, seed, freq_idx):

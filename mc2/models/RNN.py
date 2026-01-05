@@ -46,6 +46,49 @@ class GRU(eqx.Module):
 
     def construct_init_hidden(self, out_true, batch_size):
         return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])
+    
+
+
+class GRU2(eqx.Module):
+    """Basic gated recurrent unit (GRU) model. All init hidden states set to gt."""
+
+    hidden_size: int = eqx.field(static=True)
+    cell: eqx.Module
+
+    def __init__(self, in_size, hidden_size, *, key):
+        self.hidden_size = hidden_size
+        self.cell = eqx.nn.GRUCell(in_size, hidden_size, key=key)
+
+    def __call__(self, input, init_hidden):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            rnn_out = self.cell(inp, carry)
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+            out = rnn_out_o[..., 0]
+            return rnn_out, out
+
+        _, out = jax.lax.scan(f, hidden, input)
+        return out
+
+    def warmup_call(self, input, init_hidden, out_true):
+        hidden = init_hidden
+        # TODO: move construct hidden here?
+
+        def f(carry, inp):
+            inp_t, out_true_t = inp
+            rnn_out = self.cell(inp_t, carry)
+            rnn_out = rnn_out.at[0].set(out_true_t)
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+            out = rnn_out_o[..., 0]
+            return rnn_out, out
+
+        final_hidden, out = jax.lax.scan(f, hidden, (input, out_true))
+        return out, final_hidden
+
+    def construct_init_hidden(self, out_true, batch_size):
+        out_true = jnp.squeeze(out_true)
+        return jnp.broadcast_to(out_true[:, None], (batch_size, self.hidden_size))
 
 
 class ExpGRU(GRU):

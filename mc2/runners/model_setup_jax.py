@@ -11,6 +11,12 @@ from mc2.features.features_jax import compute_fe_single, shift_signal
 from mc2.data_management import MaterialSet, load_data_into_pandas_df, Normalizer
 
 # Models
+from mc2.features.features_jax import compute_fe_single
+from mc2.data_management import MaterialSet, load_data_into_pandas_df
+from mc2.model_interfaces.rnn_interfaces import (
+    NODEwInterface,
+    RNNwInterface,
+)
 from mc2.models.NODE import HiddenStateNeuralEulerODE
 from mc2.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU, GRUaroundLinearModel, ExpGRU
 from mc2.models.jiles_atherton import (
@@ -25,6 +31,8 @@ from mc2.models.jiles_atherton import (
     JAWithGRUlinFinal,
     JADirectParamGRU,
     JAEnsemble,
+    GRUWithJA,
+    LFRWithGRUJA,
 )
 from mc2.models.linear import LinearStatic
 
@@ -42,6 +50,8 @@ from mc2.model_interfaces.ja_interfaces import (
     JAParamMLPwInterface,
     JAWithGRUwInterface,
     JAWithExternGRUwInterface,
+    GRUWithJAwInterface,
+    LFRWithGRUJAwInterface,
 )
 from mc2.model_interfaces.linear_interfaces import LinearInterface
 
@@ -115,13 +125,18 @@ def setup_model(
 
     featurize = partial(featurize, time_shift=time_shift)
 
-    normalizer, data_tuple = get_normalizer(
-        material_name,
-        featurize,
-        subsample_freq,
-        True,
-        transform_H,
-    )
+    if "normalizer" in kwargs and "data_tuple" in kwargs:
+        normalizer = kwargs.pop("normalizer")
+        data_tuple = kwargs.pop("data_tuple")
+    else:
+        # get_normalizer nur aufrufen, wenn sie nicht in kwargs sind
+        normalizer, data_tuple = get_normalizer(
+            material_name,
+            featurize,
+            subsample_freq,
+            True,
+            transform_H,
+        )
 
     # dynamically choose model input size:
     test_seq_length = 100
@@ -184,6 +199,14 @@ def setup_model(
             model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAWithGRU(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
+        case "GRUWithJA":
+            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
+            model = GRUWithJA(normalizer=normalizer, **model_params_d)
+            mdl_interface_cls = GRUWithJAwInterface
+        case "LFRWithGRUJA":
+            model_params_d = dict(hidden_size=8, in_size=7, key=model_key)
+            model = LFRWithGRUJA(normalizer=normalizer, **model_params_d)
+            mdl_interface_cls = LFRWithGRUJAwInterface
         case "JAParamGRUlin":
             model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAParamGRUlin(normalizer=normalizer, **model_params_d)
