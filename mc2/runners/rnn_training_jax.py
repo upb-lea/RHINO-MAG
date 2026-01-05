@@ -49,6 +49,12 @@ def parse_args() -> argparse.Namespace:
         help=f"Loss type to train with. One of {SUPPORTED_LOSSES}",
     )
     parser.add_argument(
+        "--exp_name",
+        default=None,
+        required=False,
+        help=f"Experiment name to appear in exp_id.",
+    )
+    parser.add_argument(
         "--gpu_id",
         default=-1,
         type=int,
@@ -201,8 +207,10 @@ def main():
     log.info(f"Starting experiments for {len(args.model_type)} model type(s) and {len(seeds_to_run)} seeds: {args.model_type}, {seeds_to_run}")
     for model_type in args.model_type:
         log.info(f"--- Starting experiments for Model Type: {model_type} ---")
-        base_id = f"{args.material}_{model_type}_{str(uuid4())[:8]}"
-        
+        if args.exp_name is None:
+            base_id = f"{args.material}_{model_type}_{str(uuid4())[:8]}"
+        else:
+            base_id = f"{args.material}_{model_type}_{args.exp_name}_{str(uuid4())[:8]}"
         for seed in seeds_to_run:
             try:
                 # model_type wird jetzt an die Funktion übergeben
