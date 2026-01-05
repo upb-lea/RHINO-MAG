@@ -93,6 +93,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--disable_f64", action="store_true", default=False)
     parser.add_argument("--disable_features", action="store_true", default=False)
+    parser.add_argument("--transform_H", action="store_true", default=False)
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
     return args

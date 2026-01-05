@@ -50,7 +50,13 @@ SUPPORTED_MODELS = ["GRU", "HNODE", "JA"]
 SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
 
 
-def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: int, do_normalization: bool):
+def get_normalizer(
+    material_name: str,
+    featurize: Callable,
+    subsampling_freq: int,
+    do_normalization: bool,
+    transform_H: bool,
+):
     if do_normalization:
         mat_set = MaterialSet.from_material_name(material_name)
 
@@ -59,7 +65,7 @@ def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: in
         train_set, val_set, test_set = mat_set.split_into_train_val_test(
             train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=0
         )
-        train_set_norm = train_set.normalize(transform_H=False, featurize=featurize)
+        train_set_norm = train_set.normalize(transform_H=transform_H, featurize=featurize)
         normalizer = train_set_norm.normalizer
     else:
         normalizer = Normalizer(
@@ -86,6 +92,7 @@ def setup_model(
     time_shift: int = 0,
     tbptt_size_start=None,  # (size, n_epochs_steps)
     disable_features: bool = False,
+    transform_H: bool = False,
     noise_on_data: float = 0.0,
     **kwargs,
 ):
@@ -111,6 +118,7 @@ def setup_model(
         featurize,
         subsample_freq,
         True,
+        transform_H,
     )
 
     # dynamically choose model input size:
@@ -253,6 +261,8 @@ def setup_model(
             batch_size=batch_size,
             tbptt_size_start=tbptt_size_start,
             noise_on_data=noise_on_data,
+            transform_H=transform_H,
+            disable_features=disable_features,
         ),
     )
 

@@ -331,6 +331,7 @@ def train_model(
     time_shift: int,
     noise_on_data: float,
     tbptt_size_start: list[int] | None = None,  # (size, n_epochs_steps)
+    **kwargs,
 ):
     train_set, val_set, test_set = data_tuple
 
@@ -339,9 +340,9 @@ def train_model(
         f"val size: {sum(freq_set.H.shape[0] for freq_set in val_set.frequency_sets)}, "
         f"test size: {sum(freq_set.H.shape[0] for freq_set in test_set.frequency_sets)}"
     )
-    train_set_norm = train_set.normalize(normalizer=model.normalizer, transform_H=True)
-    val_set_norm = val_set.normalize(normalizer=model.normalizer, transform_H=True)
-    test_set_norm = test_set.normalize(normalizer=model.normalizer, transform_H=True)
+    train_set_norm = train_set.normalize(normalizer=model.normalizer, transform_H=None)
+    val_set_norm = val_set.normalize(normalizer=model.normalizer, transform_H=None)
+    test_set_norm = test_set.normalize(normalizer=model.normalizer, transform_H=None)
 
     logs = {
         "material": material_name,
