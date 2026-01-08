@@ -58,6 +58,13 @@ from functools import partial
 from mc2.model_interfaces.model_interface import filter_spec
 
 
+def load_parameterization(exp_id):
+    experiment_path = EXPERIMENT_LOGS_ROOT / "jax_experiments"
+    with open(experiment_path / f"{exp_id}.json", "r") as f:
+        params = json.load(f)["params"]
+    return params
+
+
 def reconstruct_model_from_exp_id(exp_id, **kwargs):
 
     material_name = exp_id.split("_")[0]
