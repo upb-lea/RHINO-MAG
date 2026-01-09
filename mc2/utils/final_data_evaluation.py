@@ -244,7 +244,7 @@ def generate_metrics_from_exp_ids_without_seed(
         )
         model_params = count_model_parameters(wrapped_model)
 
-        seed = exp_id[-1]
+        seed = exp_id.split("seed")[-1]
         model_type = exp_id.split("_")[1]
         exp_name = exp_id.split("_")[2]
         num_id = exp_id.split("_")[-2]
@@ -282,8 +282,8 @@ def generate_metrics_from_exp_ids_without_seed(
 
 def visualize_df(df, scenarios, metrics, x_label=None):
 
-    fig, axs = plt.subplots(nrows=len(scenarios), ncols=len(metrics), figsize=(12, 12))
-    axes = np.atleast_2d(axs)
+    fig, axs = plt.subplots(nrows=len(scenarios), ncols=len(metrics), figsize=(12, 12 / 3 * len(scenarios)))
+    axs = np.atleast_2d(axs)
 
     available_exp_ids = list(str(element) for element in np.unique(list(df["exp_id_without_seed"])))
 

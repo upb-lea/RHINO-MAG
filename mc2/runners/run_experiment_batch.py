@@ -35,6 +35,11 @@ if __name__ == "__main__":
     else:
         epochs = 1500
 
+    if args.material == "C":
+        past_size = 1
+    else:
+        past_size = 28
+
     ## Default setup
     train_model_jax(
         material=args.material,
@@ -46,7 +51,7 @@ if __name__ == "__main__":
         epochs=epochs,
         batch_size=512,
         tbptt_size=156,
-        past_size=28,
+        past_size=past_size,
         time_shift=0,
         noise_on_data=0.0,
         tbptt_size_start=None,
@@ -66,7 +71,7 @@ if __name__ == "__main__":
         epochs=epochs,
         batch_size=512,
         tbptt_size=156,
-        past_size=28,
+        past_size=past_size,
         time_shift=0,
         noise_on_data=0.0,
         tbptt_size_start=None,
@@ -86,7 +91,7 @@ if __name__ == "__main__":
         epochs=epochs,
         batch_size=512,
         tbptt_size=156,
-        past_size=28,
+        past_size=past_size,
         time_shift=5,
         noise_on_data=0.0,
         tbptt_size_start=None,
@@ -106,7 +111,7 @@ if __name__ == "__main__":
         epochs=epochs * 2,
         batch_size=512,
         tbptt_size=156,
-        past_size=28,
+        past_size=past_size,
         time_shift=5,
         noise_on_data=0.0,
         tbptt_size_start=None,
