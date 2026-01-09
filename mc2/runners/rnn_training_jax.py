@@ -136,6 +136,7 @@ def run_experiment_for_seed(
     tbptt_size_start: tuple[int, int] | None,
     disable_features: bool,
     transform_H: bool,
+    use_all_data: bool,
 ):
     # args = parse_args()
 
@@ -166,6 +167,7 @@ def run_experiment_for_seed(
         disable_features=disable_features,
         transform_H=transform_H,
         noise_on_data=noise_on_data,
+        use_all_data=use_all_data,
     )
 
     loss_function = setup_loss(loss_type)
@@ -187,7 +189,10 @@ def run_experiment_for_seed(
     train_set, val_set, test_set = data_tuple
     log.info("Training done. Proceeding with evaluation..")
 
-    eval_metrics = evaluate_model_on_test_set(model, test_set)
+    if test_set is None:
+        eval_metrics = {}
+    else:
+        eval_metrics = evaluate_model_on_test_set(model, test_set)
 
     log.info("Evaluation done. Proceeding with storing experiment data..")
 
@@ -234,6 +239,7 @@ def main(
     disable_f64: bool = False,
     disable_features: bool = False,
     transform_H: bool = False,
+    use_all_data: bool = False,
 ):
     jax.config.update("jax_enable_x64", not disable_f64)
 
@@ -253,26 +259,27 @@ def main(
         else:
             base_id = f"{material}_{model_type}_{exp_name}_{str(uuid4())[:8]}"
         for seed in seeds_to_run:
-            try:
-                run_experiment_for_seed(
-                    seed=seed,
-                    base_id=base_id,
-                    material=material,
-                    model_type=model_type,
-                    loss_type=loss_type,
-                    gpu_id=gpu_id,
-                    epochs=epochs,
-                    batch_size=batch_size,
-                    tbptt_size=tbptt_size,
-                    past_size=past_size,
-                    time_shift=time_shift,
-                    noise_on_data=noise_on_data,
-                    tbptt_size_start=tbptt_size_start,
-                    disable_features=disable_features,
-                    transform_H=transform_H,
-                )
-            except Exception as e:
-                log.error(f"Experiment for model {model_type} and seed {seed} failed with error: {e}")
+            # try:
+            run_experiment_for_seed(
+                seed=seed,
+                base_id=base_id,
+                material=material,
+                model_type=model_type,
+                loss_type=loss_type,
+                gpu_id=gpu_id,
+                epochs=epochs,
+                batch_size=batch_size,
+                tbptt_size=tbptt_size,
+                past_size=past_size,
+                time_shift=time_shift,
+                noise_on_data=noise_on_data,
+                tbptt_size_start=tbptt_size_start,
+                disable_features=disable_features,
+                transform_H=transform_H,
+                use_all_data=use_all_data,
+            )
+            # except Exception as e:
+            #     log.error(f"Experiment for model {model_type} and seed {seed} failed with error: {e}")
 
     log.info("All scheduled experiments completed.")
 

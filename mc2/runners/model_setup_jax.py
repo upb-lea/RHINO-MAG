@@ -1,5 +1,6 @@
 from typing import Callable
 from functools import partial
+from copy import deepcopy
 
 import jax
 import jax.numpy as jnp
@@ -68,15 +69,21 @@ def get_normalizer(
     subsampling_freq: int,
     do_normalization: bool,
     transform_H: bool,
+    use_all_data: bool = False,
 ):
     if do_normalization:
         mat_set = MaterialSet.from_material_name(material_name)
 
         mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
 
-        train_set, val_set, test_set = mat_set.split_into_train_val_test(
-            train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=0
-        )
+        if use_all_data:
+            train_set = deepcopy(mat_set)
+            val_set = None
+            test_set = None
+        else:
+            train_set, val_set, test_set = mat_set.split_into_train_val_test(
+                train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=0
+            )
         train_set_norm = train_set.normalize(transform_H=transform_H, featurize=featurize)
         normalizer = train_set_norm.normalizer
     else:
@@ -106,6 +113,8 @@ def setup_model(
     disable_features: bool = False,
     transform_H: bool = False,
     noise_on_data: float = 0.0,
+    use_all_data: bool = False,
+    val_every: int = 1,
     **kwargs,
 ):
     if disable_features:
@@ -136,6 +145,7 @@ def setup_model(
             subsample_freq,
             True,
             transform_H,
+            use_all_data,
         )
 
     # dynamically choose model input size:
@@ -279,7 +289,7 @@ def setup_model(
         training_params=dict(
             n_epochs=n_epochs,
             n_steps=0,  # 10_000
-            val_every=1,
+            val_every=val_every,
             tbptt_size=tbptt_size,
             past_size=past_size,
             time_shift=time_shift,

@@ -302,6 +302,9 @@ def process_freq_set_val(freq_set, model: ModelInterface, past_size):
 
 
 def val_test(set, model, past_size):
+    if set is None:
+        return jnp.array(-1.0), [jnp.array([-1.0])], [jnp.array([-1.0])]
+
     val_loss = 0.0
     val_pred_l = []
     val_gt_l = []
@@ -335,14 +338,22 @@ def train_model(
 ):
     train_set, val_set, test_set = data_tuple
 
-    log.info(
-        f"train size: {sum(freq_set.H.shape[0] for freq_set in train_set.frequency_sets)}, "
-        f"val size: {sum(freq_set.H.shape[0] for freq_set in val_set.frequency_sets)}, "
-        f"test size: {sum(freq_set.H.shape[0] for freq_set in test_set.frequency_sets)}"
-    )
+    if test_set is not None and val_set is not None:
+        log.info(
+            f"train size: {sum(freq_set.H.shape[0] for freq_set in train_set.frequency_sets)}, "
+            f"val size: {sum(freq_set.H.shape[0] for freq_set in val_set.frequency_sets)}, "
+            f"test size: {sum(freq_set.H.shape[0] for freq_set in test_set.frequency_sets)}"
+        )
+    else:
+        log.info(
+            f"train size: {sum(freq_set.H.shape[0] for freq_set in train_set.frequency_sets)}, "
+            f"val size: {val_set}, "
+            f"test size: {test_set}"
+        )
+
     train_set_norm = train_set.normalize(normalizer=model.normalizer, transform_H=None)
-    val_set_norm = val_set.normalize(normalizer=model.normalizer, transform_H=None)
-    test_set_norm = test_set.normalize(normalizer=model.normalizer, transform_H=None)
+    # val_set_norm = val_set.normalize(normalizer=model.normalizer, transform_H=None)
+    # test_set_norm = test_set.normalize(normalizer=model.normalizer, transform_H=None)
 
     logs = {
         "material": material_name,
@@ -356,8 +367,8 @@ def train_model(
     # manager = ocp.CheckpointManager(
     #     checkpoint_dir, ocp.PyTreeCheckpointer(), options
     # )
-    
-    best_val_loss = float("inf") 
+
+    best_val_loss = float("inf")
     best_model = jax.tree_util.tree_map(lambda x: x, model)
 
     test_loss, *_ = val_test(test_set, model, past_size)  # test_set_norm
@@ -401,17 +412,20 @@ def train_model(
             logs["loss_trends_val"].append(val_loss.item())
             if val_loss.item() < best_val_loss:
                 best_val_loss = val_loss.item()
-                best_model = jax.tree_util.tree_map(lambda x: x, model) 
+                best_model = jax.tree_util.tree_map(lambda x: x, model)
         pbar_str += f"| val loss {val_loss:.2e}"
         logs["loss_trends_train"].append(train_loss.item())
         pbar.set_postfix_str(pbar_str)
 
     pbar.close()
 
-    if val_every>0 and val_every < n_epochs:
-        final_model=best_model
+    if val_set is not None:
+        if val_every > 0 and val_every < n_epochs:
+            final_model = best_model
+        else:
+            final_model = model
     else:
-        final_model=model
+        final_model = model
 
     test_loss, test_pred_l, test_gt_l = val_test(test_set, final_model, past_size)  # test_set_norm
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
