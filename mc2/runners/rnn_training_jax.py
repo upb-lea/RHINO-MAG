@@ -280,6 +280,7 @@ def main(
                 )
             except Exception as e:
                 log.error(f"Experiment for model {model_type} and seed {seed} failed with error: {e}")
+            jax.clear_caches()
 
     log.info("All scheduled experiments completed.")
 
