@@ -43,7 +43,7 @@ if __name__ == "__main__":
         material=args.material,
         model_type=["GRU8"],
         seeds=[12, 53, 66, 105, 6],
-        exp_name=f"default{accuracy_tag}",
+        exp_name=f"final{accuracy_tag}",
         loss_type="adapted_RMS",
         gpu_id=args.gpu_id,
         epochs=epochs,
