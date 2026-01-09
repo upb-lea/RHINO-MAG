@@ -132,10 +132,6 @@ def predict_test_scenarios(
 
         print(f"The model has {model.n_params} parameters.")
 
-        if material_name == "C":
-            print("WARNING: REMOVING LAST ELEMENT OF TEMPERATURE ARRAY")
-            test_set = eqx.tree_at(lambda x: x.T, test_set, test_set.T[:-1])
-
         filled_H_trajectories = []
         for scenario in test_set.scenarios:
             print(
@@ -168,10 +164,6 @@ def validate_result_set(
 ) -> None:
     material_name = result_set.material_name
     print("Sanity checking results for material:", material_name)
-
-    if material_name == "C":
-        print("WARNING: REMOVING LAST ELEMENT OF TEMPERATURE ARRAY")
-        test_set = eqx.tree_at(lambda x: x.T, test_set, test_set.T[:-1])
 
     assert material_name == test_set.material_name
     assert material_name == result_set.exp_id.split("_")[0]
@@ -271,6 +263,10 @@ def generate_metrics_from_exp_ids_without_seed(
             )
 
         all_metrics[exp_id] = metrics
+
+    if len(all_results) == 0:
+        raise ValueError("No results could be found for the specified experiment IDs.")
+
     df = pd.DataFrame(all_results)
     df["params_label"] = df["n_params"].astype(str)
 
