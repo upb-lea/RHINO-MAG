@@ -30,6 +30,8 @@ if __name__ == "__main__":
 
     if args.material == "A":
         epochs = 10_000
+    elif args.material == "E":
+        epochs = 2500
     else:
         epochs = 1500
 
@@ -41,7 +43,7 @@ if __name__ == "__main__":
     ## Default setup
     train_model_jax(
         material=args.material,
-        model_type=["GRU8"],
+        model_type=["GRU10"],
         seeds=[12, 53, 66, 105, 6],
         exp_name=f"final{accuracy_tag}",
         loss_type="adapted_RMS",

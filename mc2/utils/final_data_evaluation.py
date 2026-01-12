@@ -234,7 +234,7 @@ def generate_metrics_from_exp_ids_without_seed(
             batch_size_per_frequency=1000,
             loader_key=loader_key,
         )
-        model_params = count_model_parameters(wrapped_model)
+        model_params = wrapped_model.n_params
 
         seed = exp_id.split("seed")[-1]
         model_type = exp_id.split("_")[1]
