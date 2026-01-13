@@ -30,25 +30,36 @@ if __name__ == "__main__":
 
     if args.material == "A":
         epochs = 10_000
+        model_type = ["GRU8"]
+        dyn_avg_kernel_size = 11
+        past_size = 28
+    elif args.material == "B":
+        epochs = 1500
+        model_type = ["GRU10"]
+        dyn_avg_kernel_size = 11
+        past_size = 28
+    elif args.material == "C":
+        epochs = 1500
+        model_type = ["GRU10"]
+        dyn_avg_kernel_size = 11
+        past_size = 1
+    elif args.material == "D":
+        epochs = 1500
+        model_type = ["GRU10"]
+        dyn_avg_kernel_size = 11
+        past_size = 28
     elif args.material == "E":
         epochs = 2500
-    else:
-        epochs = 1500
-
-    if args.material == "A":
+        model_type = ["GRU10"]
         dyn_avg_kernel_size = 11
-    else:
-        dyn_avg_kernel_size = 11
-
-    if args.material == "C":
-        past_size = 1
-    else:
         past_size = 28
+    else:
+        raise ValueError(f"Material '{args.material} is unknown.")
 
     ## Default setup
     train_model_jax(
         material=args.material,
-        model_type=["GRU10"],
+        model_type=model_type,
         seeds=[12, 53, 66, 105, 6],
         exp_name=f"final{accuracy_tag}",
         loss_type="adapted_RMS",
