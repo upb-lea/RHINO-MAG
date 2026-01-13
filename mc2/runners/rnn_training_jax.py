@@ -134,7 +134,8 @@ def run_experiment_for_seed(
     time_shift: int,
     noise_on_data: float,
     tbptt_size_start: tuple[int, int] | None,
-    disable_features: bool,
+    disable_features: bool | str,
+    dyn_avg_kernel_size: int,
     transform_H: bool,
     use_all_data: bool,
 ):
@@ -167,6 +168,7 @@ def run_experiment_for_seed(
         disable_features=disable_features,
         transform_H=transform_H,
         noise_on_data=noise_on_data,
+        dyn_avg_kernel_size=dyn_avg_kernel_size,
         use_all_data=use_all_data,
     )
 
@@ -235,6 +237,7 @@ def main(
     past_size: int = 10,
     time_shift: int = 0,
     noise_on_data: float = 0.0,
+    dyn_avg_kernel_size: int = 11,
     tbptt_size_start: tuple[int, int] | None = None,
     disable_f64: bool = False,
     disable_features: bool = False,
@@ -273,6 +276,7 @@ def main(
                     past_size=past_size,
                     time_shift=time_shift,
                     noise_on_data=noise_on_data,
+                    dyn_avg_kernel_size=dyn_avg_kernel_size,
                     tbptt_size_start=tbptt_size_start,
                     disable_features=disable_features,
                     transform_H=transform_H,

@@ -8,7 +8,7 @@ import equinox as eqx
 import optax
 
 from mc2.losses import MSE_loss, adapted_RMS_loss
-from mc2.features.features_jax import compute_fe_single, shift_signal
+from mc2.features.features_jax import compute_fe_single, shift_signal, db_dt, d2b_dt2
 from mc2.data_management import MaterialSet, load_data_into_pandas_df, Normalizer
 
 # Models
@@ -110,9 +110,10 @@ def setup_model(
     past_size: int = 10,
     time_shift: int = 0,
     tbptt_size_start=None,  # (size, n_epochs_steps)
-    disable_features: bool = False,
+    disable_features: bool | str = False,
     transform_H: bool = False,
     noise_on_data: float = 0.0,
+    dyn_avg_kernel_size: int = 11,
     use_all_data: bool = False,
     val_every: int = 1,
     **kwargs,
@@ -122,15 +123,33 @@ def setup_model(
         def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
             return norm_B_future[..., None]
 
-    else:
+    elif disable_features == "reduce":
 
         def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
             past_length = norm_B_past.shape[0]
             B_all = jnp.hstack([norm_B_past, norm_B_future])
 
-            featurized_B = compute_fe_single(B_all, n_s=11, time_shift=time_shift)
+            featurized_B = compute_fe_single(B_all, n_s=dyn_avg_kernel_size, time_shift=time_shift)
+
+            db = db_dt(B_all)
+            d2b = d2b_dt2(B_all)
+
+            featurized_B = jnp.stack((db, d2b), axis=-1)
 
             return featurized_B[past_length:]
+
+    elif not disable_features:
+
+        def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
+            past_length = norm_B_past.shape[0]
+            B_all = jnp.hstack([norm_B_past, norm_B_future])
+
+            featurized_B = compute_fe_single(B_all, n_s=dyn_avg_kernel_size, time_shift=time_shift)
+
+            return featurized_B[past_length:]
+
+    else:
+        raise ValueError("Option 'disable_features' with value '{disable_features}' cannot be processed.")
 
     featurize = partial(featurize, time_shift=time_shift)
 
@@ -296,6 +315,7 @@ def setup_model(
             batch_size=batch_size,
             tbptt_size_start=tbptt_size_start,
             noise_on_data=noise_on_data,
+            dyn_avg_kernel_size=dyn_avg_kernel_size,
             transform_H=transform_H,
             disable_features=disable_features,
         ),
