@@ -276,7 +276,7 @@ def generate_metrics_from_exp_ids_without_seed(
     return df, all_metrics
 
 
-def visualize_df(df, scenarios, metrics, x_label=None):
+def visualize_df(df, scenarios, metrics, x_label=None, scale_log: bool = False):
 
     fig, axs = plt.subplots(nrows=len(scenarios), ncols=len(metrics), figsize=(12, 12 / 3 * len(scenarios)))
     axs = np.atleast_2d(axs)
@@ -306,6 +306,9 @@ def visualize_df(df, scenarios, metrics, x_label=None):
                 else:
                     ax.plot(metric_avg, marker="o", alpha=0.6, c=c, label=exp_id)
                     ax.plot(metric_95th, marker="^", alpha=0.6, c=c)
+
+                if scale_log:
+                    ax.set_yscale("log")
 
                 ax.grid(True, alpha=0.3)
                 ax.legend()
