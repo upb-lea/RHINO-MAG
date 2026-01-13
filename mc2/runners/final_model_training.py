@@ -35,6 +35,11 @@ if __name__ == "__main__":
     else:
         epochs = 1500
 
+    if args.material == "A":
+        dyn_avg_kernel_size = 11
+    else:
+        dyn_avg_kernel_size = 11
+
     if args.material == "C":
         past_size = 1
     else:
@@ -55,6 +60,7 @@ if __name__ == "__main__":
         time_shift=0,
         noise_on_data=0.0,
         tbptt_size_start=None,
+        dyn_avg_kernel_size=dyn_avg_kernel_size,
         disable_f64=args.disable_f64,
         disable_features=False,
         transform_H=False,

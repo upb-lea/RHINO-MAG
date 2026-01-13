@@ -318,6 +318,7 @@ def setup_model(
             dyn_avg_kernel_size=dyn_avg_kernel_size,
             transform_H=transform_H,
             disable_features=disable_features,
+            use_all_data=use_all_data,
         ),
     )
 
