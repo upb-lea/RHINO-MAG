@@ -33,7 +33,7 @@ if __name__ == "__main__":
     if args.material == "A":
         epochs = 10_000
     else:
-        epochs = 2500
+        epochs = 1_500
 
     if args.material == "C":
         past_size = 1

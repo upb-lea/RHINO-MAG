@@ -118,7 +118,9 @@ def setup_model(
     val_every: int = 1,
     **kwargs,
 ):
-    if disable_features:
+    if disable_features == True:
+
+        raise NotImplementedError("This is likely not working as intended")
 
         def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
             return norm_B_future[..., None]
@@ -128,8 +130,6 @@ def setup_model(
         def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
             past_length = norm_B_past.shape[0]
             B_all = jnp.hstack([norm_B_past, norm_B_future])
-
-            featurized_B = compute_fe_single(B_all, n_s=dyn_avg_kernel_size, time_shift=time_shift)
 
             db = db_dt(B_all)
             d2b = d2b_dt2(B_all)
