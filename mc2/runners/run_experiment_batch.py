@@ -43,7 +43,7 @@ if __name__ == "__main__":
     ## reduced feature set
     train_model_jax(
         material=args.material,
-        model_type=["GRU10"],
+        model_type=["GRU8"],
         seeds=[12, 53, 66],
         exp_name=f"reduced-features{accuracy_tag}",
         loss_type="adapted_RMS",

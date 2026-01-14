@@ -73,7 +73,7 @@ if __name__ == "__main__":
         tbptt_size_start=None,
         dyn_avg_kernel_size=dyn_avg_kernel_size,
         disable_f64=args.disable_f64,
-        disable_features=False,
+        disable_features="reduce",
         transform_H=False,
         use_all_data=True,
     )
