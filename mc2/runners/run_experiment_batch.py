@@ -64,7 +64,7 @@ if __name__ == "__main__":
     ## Default setup
     train_model_jax(
         material=args.material,
-        model_type=["GRU10"],
+        model_type=["GRU8"],
         seeds=[12, 53, 66],
         exp_name=f"default{accuracy_tag}",
         loss_type="adapted_RMS",
@@ -84,7 +84,7 @@ if __name__ == "__main__":
     ## larger kernel
     train_model_jax(
         material=args.material,
-        model_type=["GRU10"],
+        model_type=["GRU8"],
         seeds=[12, 53, 66],
         exp_name=f"larger-kernel{accuracy_tag}",
         loss_type="adapted_RMS",

@@ -61,7 +61,7 @@ if __name__ == "__main__":
         material=args.material,
         model_type=model_type,
         seeds=[12, 53, 66, 105, 6],
-        exp_name=f"final{accuracy_tag}",
+        exp_name=f"final-reduced-features{accuracy_tag}",
         loss_type="adapted_RMS",
         gpu_id=args.gpu_id,
         epochs=epochs,
