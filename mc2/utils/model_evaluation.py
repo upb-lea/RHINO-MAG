@@ -118,7 +118,7 @@ def load_gt_and_pred(exp_id, seed, freq_idx):
     return gt, pred
 
 
-def plot_loss_trends(exp_id, seed):
+def plot_loss_trends(exp_id, seed, plot_together: bool = False, figsize=(8, 8)):
     loss_trend = EXPERIMENT_LOGS_ROOT / f"{exp_id}/seed_{seed}_loss_trends.parquet"
     loss_train_val = pd.read_parquet(loss_trend).to_numpy()
 
@@ -127,26 +127,32 @@ def plot_loss_trends(exp_id, seed):
     val_loss = loss_train_val[:, 1]
 
     # Fig with two subplots
-    fig, axes = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
+    if plot_together:
+        n_plots = 1
+    else:
+        n_plots = 2
+
+    fig, axes = plt.subplots(n_plots, 1, squeeze=False, figsize=figsize, sharex=True)
 
     # Training Loss Plot
-    axes[0].plot(epochs, train_loss, color="tab:blue", marker="o", label="Training Loss (normalized)")
-    axes[0].set_ylabel("Training Loss", color="tab:blue")
-    axes[0].tick_params(axis="y", labelcolor="tab:blue")
-    axes[0].legend(loc="upper right")
-    axes[0].set_title("Training Loss")
-    axes[0].set_yscale("log")
+    ax = axes[0, 0]
+    ax.plot(epochs, train_loss, color="tab:blue", marker="o", markersize=1, label="Training Loss (normalized)")
+    ax.tick_params(axis="y")
+    ax.legend()
+    ax.set_yscale("log")
+    ax.set_ylabel(r"$\mathcal{L}_{\mathrm{RMSE}}$")
 
+    ax = axes[0, 0] if plot_together else axes[1, 0]
     # Validation Loss Plot
-    axes[1].plot(epochs, val_loss, color="tab:red", marker="s", label="Validation (non-normalized)")
-    axes[1].set_xlabel("Epoch")
-    axes[1].set_ylabel("Validation", color="tab:red")
-    axes[1].tick_params(axis="y", labelcolor="tab:red")
-    axes[1].legend(loc="upper right")
-    axes[1].set_title("Validation Loss")
-    axes[1].set_yscale("log")
+    ax.plot(epochs, val_loss, color="tab:red", marker="s", markersize=1, label="Validation Loss (normalized)")
+    ax.set_xlabel("Epoch")
+    ax.tick_params(axis="y")
+    ax.legend()
+    ax.set_yscale("log")
+
+    ax.set_ylabel(r"$\mathcal{L}_{\mathrm{RMSE}}$")
+
     # Layout und Anzeige
-    fig.suptitle("Training vs Validation Loss", fontsize=14)
     fig.tight_layout()
     for ax in axes.flatten():
         ax.grid(alpha=0.3)
