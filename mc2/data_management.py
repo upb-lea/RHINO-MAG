@@ -113,6 +113,26 @@ class Normalizer(eqx.Module):
     def denormalize_fe(self, features):
         return features * jnp.array(self.norm_fe_max)
 
+    @classmethod
+    def from_dict(cls, params: dict):
+        if params["transform_H"] == False:
+            params["H_transform"] = lambda x: x
+            params["H_inverse_transform"] = lambda x: x
+        elif params["transform_H"] == True:
+            params["H_transform"] = lambda h: jnp.tanh(h * 1.2)
+            params["H_inverse_transform"] = lambda h: jnp.atanh(h) / 1.2
+        del params["transform_H"]
+        return cls(**params)
+
+    def to_dict(self, transform_H: bool = False):
+        params = {}
+        params["transform_H"] = transform_H
+        params["B_max"] = self.B_max
+        params["H_max"] = self.H_max
+        params["T_max"] = self.T_max
+        params["norm_fe_max"] = self.norm_fe_max
+        return params
+
 
 class FrequencySet(eqx.Module):
     """Class to store measurement data for a single material for a single frequency
@@ -401,7 +421,7 @@ class MaterialSet(eqx.Module):
             H_key = f"{key_base}_H"
             T_key = f"{key_base}_T"
 
-            #assert B_key in data_d and H_key in data_d and T_key in data_d, f"Missing data for frequency {freq} Hz"
+            # assert B_key in data_d and H_key in data_d and T_key in data_d, f"Missing data for frequency {freq} Hz"
             if B_key not in data_d or H_key not in data_d or T_key not in data_d:
                 print(f"No data found for frequency index {idx+1}, skipping frequency.")
                 continue

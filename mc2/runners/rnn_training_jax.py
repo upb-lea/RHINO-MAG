@@ -139,7 +139,6 @@ def run_experiment_for_seed(
     transform_H: bool,
     use_all_data: bool,
 ):
-    # args = parse_args()
 
     if gpu_id != -1:
         gpus = jax.devices()

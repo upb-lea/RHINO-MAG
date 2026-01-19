@@ -1,4 +1,6 @@
 import json
+from copy import deepcopy
+import pathlib
 
 import pandas as pd
 import numpy as np
@@ -8,10 +10,10 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.data_management import EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT, MaterialSet
+from mc2.data_management import DATA_ROOT, EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT, MaterialSet, Normalizer
 from mc2.training.data_sampling import draw_data_uniformly
 from mc2.runners.model_setup_jax import setup_model
-from mc2.model_interfaces.model_interface import load_model, ModelInterface
+from mc2.model_interfaces.model_interface import load_model, ModelInterface, save_model
 from mc2.metrics import sre, nere
 
 from functools import partial
@@ -63,6 +65,55 @@ def load_parameterization(exp_id):
     with open(experiment_path / f"{exp_id}.json", "r") as f:
         params = json.load(f)["params"]
     return params
+
+
+def reconstruct_model_from_file(filename: pathlib.Path) -> ModelInterface:
+
+    filename = pathlib.Path(filename)
+
+    # append the '.eqx' suffix if it is missing
+    if filename.suffix == "":
+        filename = filename.with_name(f"{filename.name}.eqx")
+
+    # check for the filename in the 'single_file_models' if it is not already an existing file
+    if filename.is_file():
+        filename = filename
+    else:
+        search_path = DATA_ROOT / "single_file_models" / filename
+        if search_path.is_file():
+            print(f"Found model file at {search_path}. Loading model..")
+            filename = search_path
+        else:
+            raise ValueError(f"No model could be found for the specified filepath: {filename}")
+
+    with open(filename, "rb") as f:
+        params = json.loads(f.readline().decode())
+
+        normalizer = Normalizer.from_dict(params["normalizer_dict"])
+        fresh_wrapped_model, _, _, data_tuple = setup_model(
+            model_label=params["model_type"],
+            material_name=params["material_name"],
+            model_key=jax.random.PRNGKey(0),
+            **params["training_params"],
+            normalizer=normalizer,
+            data_tuple=(None, None, None),
+        )
+
+        loading_params = deepcopy(params["model_params"])
+        loading_params["key"] = jnp.array(loading_params["key"], dtype=jnp.uint32)
+        model = type(fresh_wrapped_model.model)(**loading_params)
+        model = eqx.tree_deserialise_leaves(f, model, partial(filter_spec, f64_enabled=jax.config.x64_enabled))
+        wrapped_model = eqx.tree_at(lambda t: t.model, fresh_wrapped_model, model)
+
+    return wrapped_model
+
+
+def store_model_to_file(filename: pathlib.Path, wrapped_model: ModelInterface, params: dict):
+    assert "model_type" in params.keys()
+    assert "material_name" in params.keys()
+
+    params["normalizer_dict"] = wrapped_model.normalizer.to_dict(params["training_params"]["transform_H"])
+    save_model(filename, params, wrapped_model)
 
 
 def reconstruct_model_from_exp_id(exp_id, **kwargs):
