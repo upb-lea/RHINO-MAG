@@ -8,7 +8,7 @@ import equinox as eqx
 
 from mc2.data_management import DATA_ROOT, FINAL_MATERIALS, load_data_into_pandas_based_on_path, MaterialSet
 from mc2.model_interfaces.model_interface import ModelInterface, count_model_parameters
-from mc2.utils.model_evaluation import reconstruct_model_from_exp_id, get_exp_ids, evaluate_cross_validation
+from mc2.utils.model_evaluation import reconstruct_model_from_file, get_exp_ids, evaluate_cross_validation
 
 
 FINAL_SCENARIOS_PER_MATERIAL = {
@@ -217,7 +217,7 @@ def generate_metrics_from_exp_ids_without_seed(
 ):
     assert np.all([material_name == exp_id.split("_")[0] for exp_id in exp_ids_without_seed])
     exp_ids = [exp_id for exp_id in get_exp_ids() if "_".join(exp_id.split("_")[:-1]) in exp_ids_without_seed]
-    models = {exp_id: reconstruct_model_from_exp_id(exp_id)[0] for exp_id in exp_ids}
+    models = {exp_id: reconstruct_model_from_file(exp_id) for exp_id in exp_ids}
 
     mat_set = MaterialSet.from_material_name(material_name)
     _, _, test_set = mat_set.split_into_train_val_test(train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=0)
