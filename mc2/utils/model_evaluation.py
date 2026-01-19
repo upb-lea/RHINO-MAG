@@ -19,8 +19,17 @@ from mc2.metrics import sre, nere
 from functools import partial
 
 
-def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | list[str] | None = None):
-    model_paths = list(MODEL_DUMP_ROOT.glob("*.eqx"))
+def get_exp_ids(
+    material_name: str | list[str] | None = None,
+    model_type: str | list[str] | None = None,
+    exp_name: str | None = None,
+    legacy_mode: bool = False,
+):
+    if legacy_mode:
+        model_paths = list(MODEL_DUMP_ROOT.glob("*.eqx"))
+    else:
+        model_paths = list((DATA_ROOT / "single_file_models").glob("*.eqx"))
+
     exp_ids = [model_path.stem for model_path in model_paths]
 
     if material_name is None:
@@ -52,6 +61,20 @@ def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | 
                 relevant_exp_ids.append(exp_id)
     else:
         raise ValueError("'model_type' needs to be a string, list of strings, or None.")
+
+    exp_ids = relevant_exp_ids
+
+    if exp_name is None:
+        relevant_exp_ids = exp_ids
+    elif isinstance(exp_name, str):
+        relevant_exp_ids = []
+        for exp_id in exp_ids:
+            if len(exp_id.split("_")) < 3:
+                continue
+            elif exp_id.split("_")[2] == exp_name:
+                relevant_exp_ids.append(exp_id)
+    else:
+        raise ValueError("'exp_name' needs to be a string or None.")
 
     return relevant_exp_ids
 

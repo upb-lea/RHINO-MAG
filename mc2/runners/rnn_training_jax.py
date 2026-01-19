@@ -20,11 +20,12 @@ import json
 import optax
 from uuid import uuid4
 
-from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
+from mc2.data_management import DATA_ROOT, AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
 from mc2.runners.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES, SUPPORTED_FEATURES
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.model_interfaces.model_interface import save_model
+from mc2.utils.model_evaluation import store_model_to_file
 
 
 def parse_args() -> argparse.Namespace:
@@ -212,9 +213,17 @@ def run_experiment_for_seed(
 
     # store model
     print(model)
-    save_model_params = deepcopy(params["model_params"])
-    del save_model_params["key"]
-    save_model(MODEL_DUMP_ROOT / f"{exp_id}.eqx", save_model_params, model.model)
+
+    params["material_name"] = material
+    params["model_type"] = model_type
+
+    save_model_params = deepcopy(params)
+    store_model_to_file(
+        filename=DATA_ROOT / "single_file_models" / f"{exp_id}.eqx",
+        wrapped_model=model,
+        params=save_model_params,
+    )
+    # save_model(MODEL_DUMP_ROOT / f"{exp_id}.eqx", save_model_params, model.model)
 
     log.info(
         f"Experiment with id '{exp_id}' finished successfully. "
