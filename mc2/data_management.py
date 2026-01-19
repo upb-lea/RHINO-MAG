@@ -699,6 +699,10 @@ class DataSet(eqx.Module):
     _name_to_idx: dict[str, int]
 
     @classmethod
+    def from_material_names(cls, material_names: list[str]) -> "DataSet":
+        return cls([MaterialSet.from_material_name(material_name) for material_name in material_names])
+
+    @classmethod
     def load_from_raw_data(
         cls,
         file_overview: pd.DataFrame,

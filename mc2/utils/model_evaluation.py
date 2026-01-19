@@ -450,8 +450,8 @@ def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, f
         axs[1, freq_idx].plot(H_pred[freq_idx])
         axs[1, freq_idx].plot(H_future[freq_idx] - H_pred[freq_idx], color="tab:red", linestyle="--")
 
-        axs[2, freq_idx].plot(B_future[freq_idx], H_future[freq_idx])
-        axs[2, freq_idx].plot(B_future[freq_idx], H_pred[freq_idx])
+        axs[2, freq_idx].plot(H_future[freq_idx], B_future[freq_idx])
+        axs[2, freq_idx].plot(H_pred[freq_idx], B_future[freq_idx])
 
         axs[0, freq_idx].grid(True, alpha=0.3)
         axs[1, freq_idx].grid(True, alpha=0.3)
@@ -461,8 +461,10 @@ def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, f
         axs[0, freq_idx].set_xlabel("k")
         axs[1, freq_idx].set_ylabel("H")
         axs[1, freq_idx].set_xlabel("k")
-        axs[2, freq_idx].set_ylabel("H")
-        axs[2, freq_idx].set_xlabel("B")
+        axs[2, freq_idx].set_ylabel("B")
+        axs[2, freq_idx].set_xlabel("H")
 
-    fig.tight_layout(pad=-0.2)
+        axs[0, freq_idx].set_title("frequency: " + str(int(test_set.frequencies[freq_idx] / 1e3)) + " kHz")
+
+    fig.tight_layout()
     return fig, axs

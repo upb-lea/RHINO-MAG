@@ -1,15 +1,8 @@
 # magnet-challenge-2
-Official site for the second magnet challenge https://github.com/minjiechen/magnetchallenge-2
 
-## Timeline (copied from official site):
-- 05-01-2025 1-Page Letter of Intent Due with Signature 
-- 06-01-2025 2-Page Concept Proposal Due
-- 07-01-2025 Notification of Acceptance
-- 08-01-2025 Expert Feedback on the Concept Proposal
-- 11-01-2025 Preliminary Submission Due
-- 11-01-2025 Testing Data for 5 New Materials Available
-- 12-24-2025 Final Submission Due
-- 03-01-2026 Winners Selected
+This is the contribution of Team "Siegen and Paderborn" to the MagNet Challenge 2 (MC2).
+
+Official site for the second magnet challenge https://github.com/minjiechen/magnetchallenge-2
 
 ## Installation:
 - use `python3.11` (specifically python3.11.11, should not make a difference though)
@@ -19,25 +12,26 @@ Official site for the second magnet challenge https://github.com/minjiechen/magn
 - navigate to the downloaded repo
 - install it with `pip install -e .` (this is to have installed as an editable site package)
 - now you should be able to import `mc2` from within your venv
+ 
+## Repository structure:
 
-## Getting Started:
-The raw dataset is rougly 15 GB (compressed) and 30 GB (uncompressed).
-It will not be uploaded, but it might make sense to put it into the 'LEA' network.
-You can download the dataset from the official mc2 site and decompress it.
-To use it properly:
+The repository is structured as follows:
 
-- download and unzip dataset
-- place all the data into `data/raw/`
-- ensure that the `.csv` file lie direcly in the material folder, i.e., `raw/{material_name}/{file_name}.csv`
-- go to `dev/data_inspection/inspect_raw_data.ipynb`
-- run the notebook (you may have to change the path slightly)
-- now you should have your `ten_mat_data.pickle` file in the `data/processed/` folder
-- look into `dev/data_inspection/exploratory_data_analysis.ipynb` for loading and inspecting of the data
-- look into `dev/model_tests/RNN_tests.ipynb` for a simple usage example with a basic RNN
-
-
-> ⚠️: Note that EVERYTHING is essentially WIP and a lot more implementation and finetuning will be necessary and bugs might exist (even though I hope they don't.)
-> So please look at the code critically.
-
-
-  
+- `data/` holds the material data, stored models, experiment logs, etc.
+    - `data/raw/` should contain the unprocessed material folders (e.g., `raw/A/A_1_B.csv`). Upon first load, a cached version of the data will be stored in `data/cache/`
+    - `data/single_file_models` contains the models as a single `.eqx` file
+- `dev/` holds a variety of jupyter notebooks, these will generally not be maintained, i.e., they might work, but could also be outdated
+- `examples/` holds example notebooks that will always be maintained
+    - `examples/model_inspection.ipynb` shows how to load models and data, and how to evaluate and visualize the performance of models
+    - `examples/model_training.ipynb` shows how to train models
+    - `examples/final_test_data_evaluation.ipynb` shows how to apply the models to the test data provided by the MC2 hosts
+- `mc2/` holds the source code and training scripts:
+    - `mc2/features` implemenation of features
+    - `mc2/model_interface` interface for the models to interact with the material data
+    - `mc2/models/` these model implementations could generally be used for different tasks, and the correct model interface is necessary so that they may properly interact with the material data set
+    - `mc2/runners/` trainings scripts
+    - `mc2/training` some training specific utilies
+    - `mc2/utils/` some general utilities regarding model evaluation, plotting, processing of test data, etc.
+    - `mc2/data_management.py` general management of data sets (e.g. loading from disk, splitting into traing, eval, test)
+    - `mc2/losses.py` implementation of the training loss functions
+    - `mc2/metrics.py` implementation of evaluation metrics
