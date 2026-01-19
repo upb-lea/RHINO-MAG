@@ -37,3 +37,84 @@ The repository is structured as follows:
     - `mc2/data_management.py` general management of data sets (e.g. loading from disk, splitting into traing, eval, test)
     - `mc2/losses.py` implementation of the training loss functions
     - `mc2/metrics.py` implementation of evaluation metrics
+
+
+## Exemplary Usage:
+
+### Training:
+```
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"  # disable preallocation of memory
+
+from mc2.runners.rnn_training_jax import main as train_model_jax
+
+
+train_model_jax(
+    material="A",
+    model_type=["GRU4", "JA"],
+    seeds=[1, 2, 3],
+    exp_name="demonstration",
+    loss_type="adapted_RMS",
+    gpu_id=0,
+    epochs=10,
+    batch_size=512,
+    tbptt_size=156,
+    past_size=28,
+    time_shift=0,
+    noise_on_data=0.0,
+    tbptt_size_start=None,
+    dyn_avg_kernel_size=11,
+    disable_f64=True,
+    disable_features="reduce",
+    transform_H=False,
+    use_all_data=False,
+)
+```
+
+### Loading & inference:
+```
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"  # disable preallocation of memory
+
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+
+from mc2.utils.model_evaluation import reconstruct_model_from_file
+from mc2.data_management import MaterialSet
+from mc2.utils.data_plotting import plot_sequence_prediction
+
+# load model and data
+model = reconstruct_model_from_file("A_GRU8_final-reduced-features-f32_0d2b6cb5_seed12.eqx")
+material_set = MaterialSet.from_material_name("A")
+
+# extract exemplary sequences from data set
+past_size = 100
+sequence_length = 2000
+frequency = 50_000
+
+relevant_frequency_set = material_set.at_frequency(jnp.array([frequency]))
+
+B = relevant_frequency_set.B[:, :sequence_length]
+H = relevant_frequency_set.H[:, :sequence_length]
+T = relevant_frequency_set.T[:]
+
+# prediction:
+print("Shape of the arrays (n_sequences, sequence_length) B:", B.shape)
+print("Shape of the arrays (n_sequences, sequence_length) H:", H.shape)
+print("Shape of the arrays (n_sequences,) T:", T.shape)
+
+H_pred = model(
+    B_past=B[:, :past_size],
+    B_future=B[:, past_size:],
+    H_past=H[:, :past_size],
+    T=T,
+)
+
+print("Shape of the prediction (n_sequences, sequence_length - past_size), H_pred:", H_pred.shape)
+
+# visualization of predicted trajectories:
+max_n_plots = 5
+for idx in range(min(H_pred.shape[0], max_n_plots)):
+    plot_sequence_prediction(B[idx], H[idx], T[idx], H_pred[idx], past_size=past_size, figsize=(4,4))
+    plt.show()
+```
