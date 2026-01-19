@@ -26,9 +26,9 @@ def get_exp_ids(
     legacy_mode: bool = False,
 ):
     if legacy_mode:
-        model_paths = list(MODEL_DUMP_ROOT.glob("*.eqx"))
+        model_paths = list((DATA_ROOT / "legacy_model_dump").glob("*.eqx"))
     else:
-        model_paths = list((DATA_ROOT / "single_file_models").glob("*.eqx"))
+        model_paths = list(MODEL_DUMP_ROOT.glob("*.eqx"))
 
     exp_ids = [model_path.stem for model_path in model_paths]
 
@@ -98,11 +98,11 @@ def reconstruct_model_from_file(filename: pathlib.Path) -> ModelInterface:
     if filename.suffix == "":
         filename = filename.with_name(f"{filename.name}.eqx")
 
-    # check for the filename in the 'single_file_models' if it is not already an existing file
+    # check for the filename in the 'MODEL_DUMP_ROOT' if it is not already an existing file
     if filename.is_file():
         filename = filename
     else:
-        search_path = DATA_ROOT / "single_file_models" / filename
+        search_path = MODEL_DUMP_ROOT / filename
         if search_path.is_file():
             print(f"Found model file at {search_path}. Loading model..")
             filename = search_path
@@ -169,7 +169,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
             **kwargs,
         )
 
-    model_path = MODEL_DUMP_ROOT / f"{exp_id}.eqx"
+    model_path = DATA_ROOT / "legacy_model_dump" / f"{exp_id}.eqx"
     try:
         model = load_model(model_path, type(fresh_wrapped_model.model))
     except TypeError:

@@ -19,7 +19,7 @@ The repository is structured as follows:
 
 - `data/` holds the material data, stored models, experiment logs, etc.
     - `data/raw/` should contain the unprocessed material folders (e.g., `raw/A/A_1_B.csv`). Upon first load, a cached version of the data will be stored in `data/cache/`
-    - `data/single_file_models` contains the models as a single `.eqx` file
+    - `data/models` contains the models as a single `.eqx` file
 - `dev/` holds a variety of jupyter notebooks, these will generally not be maintained, i.e., they might work, but could also be outdated
 - `examples/` holds example notebooks that will always be maintained
     - `examples/model_inspection.ipynb` shows how to load models and data, and how to evaluate and visualize the performance of models

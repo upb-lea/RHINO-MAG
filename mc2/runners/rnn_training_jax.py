@@ -213,17 +213,15 @@ def run_experiment_for_seed(
 
     # store model
     print(model)
-
     params["material_name"] = material
     params["model_type"] = model_type
 
     save_model_params = deepcopy(params)
     store_model_to_file(
-        filename=DATA_ROOT / "single_file_models" / f"{exp_id}.eqx",
+        filename=MODEL_DUMP_ROOT / f"{exp_id}.eqx",
         wrapped_model=model,
         params=save_model_params,
     )
-    # save_model(MODEL_DUMP_ROOT / f"{exp_id}.eqx", save_model_params, model.model)
 
     log.info(
         f"Experiment with id '{exp_id}' finished successfully. "
