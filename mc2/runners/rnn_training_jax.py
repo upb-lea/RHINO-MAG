@@ -196,15 +196,6 @@ def main():
     else:
         seeds_to_run = args.seeds
 
-    # log.info(f"Starting experiments for {len(seeds_to_run)} seeds: {seeds_to_run}")
-    # base_id = f"{args.material}_{args.model_type}_{str(uuid4())[:8]}"
-    # for seed in seeds_to_run:
-    #     try:
-    #         run_experiment_for_seed(args, seed,base_id)
-    #     except Exception as e:
-    #         log.error(f"Experiment for seed {seed} failed with error: {e}")
-    
-    # log.info("All scheduled experiments completed.")
     log.info(f"Starting experiments for material(s) {len(args.material)} for {len(args.model_type)} model type(s) and {len(seeds_to_run)} seeds: {args.model_type}, {seeds_to_run}")
     for material in args.material:
         log.info(f"=== Starting experiments for Material: {material} ===")
