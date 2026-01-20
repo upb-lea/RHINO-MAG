@@ -1,3 +1,43 @@
+"""Main training script.
+
+Either use the function `train_model_jax` in another python script / jupyter-notebook or run the script via commandline:
+
+```
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"  # disable preallocation of memory
+
+from mc2.runners.rnn_training_jax import train_model_jax
+
+
+train_model_jax(
+    material="A",
+    model_type=["GRU4", "JA"],
+    seeds=[1, 2, 3],
+    exp_name="demonstration",
+    loss_type="adapted_RMS",
+    gpu_id=0,
+    epochs=10,
+    batch_size=512,
+    tbptt_size=156,
+    past_size=28,
+    time_shift=0,
+    noise_on_data=0.0,
+    tbptt_size_start=None,
+    dyn_avg_kernel_size=11,
+    disable_f64=True,
+    disable_features="reduce",
+    transform_H=False,
+    use_all_data=False,
+)
+```
+
+or, e.g.:
+
+```
+python mc2/runners/rnn_training_jax.py --material "A" --model_type "GRU4" "JA" --seeds 1 2 3 --exp_name "demonstration"
+
+"""
+
 import argparse
 import pathlib
 from copy import deepcopy
