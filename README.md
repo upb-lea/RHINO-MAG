@@ -17,27 +17,28 @@ Official site for the second magnet challenge https://github.com/minjiechen/magn
 
 ## Repository structure:
 
-The repository is structured as follows:
-
-- `data/` holds the material data, stored models, experiment logs, etc.
-    - `data/raw/` should contain the unprocessed material folders (e.g., `raw/A/A_1_B.csv`). Upon first load, a cached version of the data will be stored in `data/cache/`
-    - `data/models` contains the models as a single `.eqx` file
-- `dev/` holds a variety of jupyter notebooks, these will generally not be maintained, i.e., they might work, but could also be outdated
-- `examples/` holds example notebooks that will always be maintained
-    - `examples/model_inspection.ipynb` shows how to load models and data, and how to evaluate and visualize the performance of models
-    - `examples/model_training.ipynb` shows how to train models
-    - `examples/final_test_data_evaluation.ipynb` shows how to apply the models to the test data provided by the MC2 hosts
-- `mc2/` holds the source code and training scripts:
-    - `mc2/features` implemenation of features
-    - `mc2/model_interface` interface for the models to interact with the material data
-    - `mc2/models/` these model implementations could generally be used for different tasks, and the correct model interface is necessary so that they may properly interact with the material data set
-    - `mc2/runners/` trainings scripts
-    - `mc2/training` some training specific utilies
-    - `mc2/utils/` some general utilities regarding model evaluation, plotting, processing of test data, etc.
-    - `mc2/data_management.py` general management of data sets (e.g. loading from disk, splitting into traing, eval, test)
-    - `mc2/losses.py` implementation of the training loss functions
-    - `mc2/metrics.py` implementation of evaluation metrics
-
+```text
+├── data/                           # Holds the material data, stored models, experiment logs, etc
+│   ├── cache/                      # Cached versions of raw data (auto-generated after first load of raw data)
+│   ├── models/                     # Stored models as .eqx files
+│   └── raw/                        # Unprocessed material folders (e.g., A/A_1_B.csv)
+├── dev/                            # Unmaintained Jupyter notebooks (i.e., they might work, but could be outdated)
+├── examples/                       # Maintained example notebooks
+│   ├── final_test_data_eval.ipynb  # Testing on MC2 host data
+│   ├── model_inspection.ipynb      # Loading, evaluation, and visualization
+│   └── model_training.ipynb        # Model training walkthrough
+└── mc2/                            # Core source code
+    ├── features/                   # Feature engineering implementations
+    ├── model_interface/            # Logic for model-data interaction
+    ├── models/                     # Generic model architectures
+    ├── runners/                    # Executable training scripts
+    ├── training/                   # Training-specific utilities
+    ├── utils/                      # Evaluation, plotting, and processing tools
+    ├── data_management.py          # Dataset loading and splitting logic
+    ├── losses.py                   # Training loss function implementations
+    ├── model_setup.py              # Generate model objects from parameterizations (used for creating models and loading models from disk)
+    └── metrics.py                  # Evaluation metric implementations
+```
 
 ## Exemplary Usage:
 
