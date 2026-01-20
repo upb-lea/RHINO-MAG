@@ -62,7 +62,7 @@ from uuid import uuid4
 
 from mc2.data_management import DATA_ROOT, AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
-from mc2.runners.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
+from mc2.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.model_interfaces.model_interface import save_model
 from mc2.utils.model_evaluation import store_model_to_file
