@@ -22,7 +22,7 @@ from uuid import uuid4
 
 from mc2.data_management import DATA_ROOT, AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
-from mc2.runners.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES, SUPPORTED_FEATURES
+from mc2.runners.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.model_interfaces.model_interface import save_model
 from mc2.utils.model_evaluation import store_model_to_file
@@ -230,9 +230,9 @@ def run_experiment_for_seed(
     )
 
 
-def main(
-    material: str,
-    model_type: str,
+def train_model_jax(
+    material_name: str,
+    model_type: list[str],
     seeds: list[int],
     exp_name: str | None = None,
     loss_type: str = "adapted_RMS",
@@ -246,10 +246,43 @@ def main(
     dyn_avg_kernel_size: int = 11,
     tbptt_size_start: tuple[int, int] | None = None,
     disable_f64: bool = False,
-    disable_features: bool = False,
+    disable_features: bool | str = False,
     transform_H: bool = False,
     use_all_data: bool = False,
 ):
+    """Train a model based on the specified parameterization.
+
+    Args:
+        material_name (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
+        model_type (list[str]): List of identifiers of the model types to be trained.
+            See `mc2.runners.model_setup_jax.SUPPORTED_MODELS` for all available models. The trainings for
+            each specified model type are done sequentially, i.e., each model_type is trained for all
+            seeds specified individually.
+        seeds (list[int]): List of seeds for which a model should be trained.
+        exp_name (str): Additional identifier for the experiment (There is a randomly generated identifer for each
+            experiment, but this can still be useful for sorting/finding experiments after training)
+        loss_type (str): Identifier for the loss to use in training. See `mc2.runners.model_setup_jax.SUPPORTED_LOSSES`.
+        gpu_id (int): The index of the CUDA device / GPU to use. Specifying "-1" uses the CPU instead.
+        epochs (int): The number of epochs to train for.
+        batch_size (int): Number of parallel sequences to process per parameter update (i.e., per gradient calculation).
+        tbptt_size (int): Length of the sequences to process per parameter update (i.e., per gradient calculation).
+        past_size (int): Number of warmup steps before the prediction starts.
+        time_shift (int): When specifying a value `!=0`, a feature is added where the `B` trajectory is shifted by that
+            number of time steps
+        noise_on_data (float): The standard deviation of noise added to the `B` trajectories.
+        dyn_avg_kernel_size (int): The kernel size of the dynamic average feature
+        tbptt_size_start (tuple[int, int] | None): Optional training with specified sequence length (first element of tuple)
+            and the number of epochs to train with this sequence length (second element of tuple). This might be helpful when
+            the model diverges on the full sequence length and needs to start training with shorter sequences to stabiliz first.
+        disable_f64 (bool): Whether f64 should be disabled. When `True` float32 is used for all jax.Arrays instead
+        disable_features (bool): One of (True, False, "reduce"), True uses no features, False uses all default features,
+            "reduce" uses the dB/dt and d^2 B / dt^2 as features
+        transform_H (bool): Whether a tanh transform for H should be utilized
+        use_all_data (bool): Whether all data should be used for training or if instead a train, eval, test split should be performed
+
+    Returns:
+        None
+    """
     jax.config.update("jax_enable_x64", not disable_f64)
 
     if not seeds:
@@ -264,15 +297,15 @@ def main(
     for model_type in model_type:
         log.info(f"--- Starting experiments for Model Type: {model_type} ---")
         if exp_name is None:
-            base_id = f"{material}_{model_type}_{str(uuid4())[:8]}"
+            base_id = f"{material_name}_{model_type}_{str(uuid4())[:8]}"
         else:
-            base_id = f"{material}_{model_type}_{exp_name}_{str(uuid4())[:8]}"
+            base_id = f"{material_name}_{model_type}_{exp_name}_{str(uuid4())[:8]}"
         for seed in seeds_to_run:
             try:
                 run_experiment_for_seed(
                     seed=seed,
                     base_id=base_id,
-                    material=material,
+                    material=material_name,
                     model_type=model_type,
                     loss_type=loss_type,
                     gpu_id=gpu_id,
@@ -297,8 +330,8 @@ def main(
 
 if __name__ == "__main__":
     args = parse_args()
-    main(
-        material=args.material,
+    train_model_jax(
+        material_name=args.material,
         model_type=args.model_type,
         seeds=args.seeds,
         exp_name=args.exp_name,
