@@ -13,9 +13,6 @@ from typing import Type, Callable
 import pathlib
 import json
 
-import numpy as np
-import numpy.typing as npt
-
 import jax
 import jax.numpy as jnp
 import equinox as eqx
@@ -26,26 +23,26 @@ class ModelInterface(eqx.Module):
     @abstractmethod
     def __call__(
         self,
-        B_past: npt.NDArray[np.float64],
-        H_past: npt.NDArray[np.float64],
-        B_future: npt.NDArray[np.float64],
-        T: npt.NDArray[np.float64],
-    ) -> npt.NDArray[np.float64]:
+        B_past: jax.Array,
+        H_past: jax.Array,
+        B_future: jax.Array,
+        T: jax.Array,
+    ) -> jax.Array:
         """Model prediction interface for batched inputs, i.e. for inputs with an extra
         leading dimension.
 
         Args:
-            B_past (np.array): The physical (non-normalized) flux density values from time
-                step t0 to t1 with shape (n_batches, past_sequence_length)
-            H_past (np.array): The physical (non-normalized) field values from time step
-                t0 to t1 with shape (n_batches, past_sequence_length)
-            B_future (np.array): The physical (non-normalized) flux density values from
-                time step t1 to t2 with shape (n_batches, future_sequence_length)
+            B_past (jax.Array): The physical (non-normalized) flux density values from time
+                step k0 to k1 with shape (n_batches, past_sequence_length)
+            H_past (jax.Array): The physical (non-normalized) field values from time step
+                k0 to k1 with shape (n_batches, past_sequence_length)
+            B_future (jax.Array): The physical (non-normalized) flux density values from
+                time step k1 to k2 with shape (n_batches, future_sequence_length)
             T (float): The temperature of the material with shape (n_batches,)
 
         Returns:
-            H_future (np.array): The physical (non-normalized) field values from time
-                step t1 to t2 with shape (n_batches, future_sequence_length)
+            H_future (jax.Array): The physical (non-normalized) field values from time
+                step k1 to k2 with shape (n_batches, future_sequence_length)
         """
         pass
 
@@ -62,16 +59,16 @@ class ModelInterface(eqx.Module):
         an extra leading dimension.
 
         Args:
-            B_past_norm (np.array): The normalized flux density values from time step t0
-                to t1 with shape (n_batches, past_sequence_length)
-            H_past_norm (np.array): The normalized field values from time step t0 to t1
+            B_past_norm (jax.Array): The normalized flux density values from time step k0
+                to k1 with shape (n_batches, past_sequence_length)
+            H_past_norm (jax.Array): The normalized field values from time step k0 to k1
                 with shape (n_batches, past_sequence_length)
-            B_future_norm (np.array): The physical normalized flux density values from
-                time step t1 to t2 with shape (n_batches, future_sequence_length)
+            B_future_norm (jax.Array): The physical normalized flux density values from
+                time step k1 to k2 with shape (n_batches, future_sequence_length)
             T_norm (float): The normalized temperature of the material with shape (n_batches,)
 
         Returns:
-            H_future_norm (np.array): The normalized field values from time step t1 to t2
+            H_future_norm (jax.Array): The normalized field values from time step k1 to k2
                 with shape (n_batches, future_sequence_length)
         """
         pass
