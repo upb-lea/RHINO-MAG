@@ -1,3 +1,9 @@
+"""Setup of models based on specified parameterization.
+
+This code is generally used to create the model based on the parameterization of training
+scripts and to reconstruct models that have been stored to disk.
+"""
+
 from typing import Callable
 from functools import partial
 from copy import deepcopy
@@ -8,12 +14,12 @@ import equinox as eqx
 import optax
 
 from mc2.losses import MSE_loss, adapted_RMS_loss
-from mc2.features.features_jax import compute_fe_single, shift_signal, db_dt, d2b_dt2
-from mc2.data_management import MaterialSet, load_data_into_pandas_df, Normalizer
+from mc2.features.features_jax import compute_fe_single, db_dt, d2b_dt2
+from mc2.data_management import MaterialSet, Normalizer
 
 # Models
 from mc2.features.features_jax import compute_fe_single
-from mc2.data_management import MaterialSet, load_data_into_pandas_df
+from mc2.data_management import MaterialSet
 from mc2.model_interfaces.rnn_interfaces import (
     NODEwInterface,
     RNNwInterface,
@@ -56,46 +62,51 @@ from mc2.model_interfaces.ja_interfaces import (
 )
 from mc2.model_interfaces.linear_interfaces import LinearInterface
 
-SUPPORTED_MODELS = ["GRU", "HNODE", "JA"]
-
+SUPPORTED_MODELS = ["GRU{hidden-size}", "HNODE", "JA"]
 SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
-
-SUPPORTED_FEATURES = ["b_signal", "db_dt", "d2b_dt2", "dyn_avg", "pwm"]
 
 
 def get_normalizer(
     material_name: str,
     featurize: Callable,
     subsampling_freq: int,
-    do_normalization: bool,
     transform_H: bool,
     use_all_data: bool = False,
-):
-    if do_normalization:
-        mat_set = MaterialSet.from_material_name(material_name)
+) -> tuple[Normalizer, tuple[MaterialSet | None, MaterialSet | None, MaterialSet | None]]:
+    """Builds a normalizer based for the specified material by loading the data and
+    checking the maximum values.
 
-        mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
+    For practicality, the (non-normalized) data is returned together with the normalizer.
 
-        if use_all_data:
-            train_set = deepcopy(mat_set)
-            val_set = None
-            test_set = None
-        else:
-            train_set, val_set, test_set = mat_set.split_into_train_val_test(
-                train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=0
-            )
-        train_set_norm = train_set.normalize(transform_H=transform_H, featurize=featurize)
-        normalizer = train_set_norm.normalizer
+    Args:
+        material_name (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
+        featurize (Callable): A callable function that takes (B_past, H_past, B_future, T, timeshift)
+            and returns a feature vector
+        subsampling_freq (int): The frequency with which the data set should be subsampled after loading.
+            `1` returns the data set as is, `2` only returns every other element, etc.
+        transform_H (bool): Whether a `tanh` transformation is to be applied to the data before it is
+            fed into the model
+        use_all_data (bool): Whether all data should be used in the training script or a (70/15/15)
+            training/eval/test split should be done
+
+    Returns:
+        The `Normalizer` object and the data tuple of `(training_set, eval_set, test_set)`
+    """
+
+    mat_set = MaterialSet.from_material_name(material_name)
+
+    mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
+
+    if use_all_data:
+        train_set = deepcopy(mat_set)
+        val_set = None
+        test_set = None
     else:
-        normalizer = Normalizer(
-            B_max=1.0,
-            H_max=1.0,
-            T_max=1.0,
-            norm_fe_max=jnp.ones(5).tolist(),  # TODO: adapt to number of features?
-            H_transform=lambda h: h,
-            H_inverse_transform=lambda h: h,
+        train_set, val_set, test_set = mat_set.split_into_train_val_test(
+            train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=0
         )
-        train_set, val_set, test_set = None, None, None
+    train_set_norm = train_set.normalize(transform_H=transform_H, featurize=featurize)
+    normalizer = train_set_norm.normalizer
     return normalizer, (train_set, val_set, test_set)
 
 

@@ -1,3 +1,18 @@
+"""Training script for the final models.
+
+The submitted versions are stored at `data/models/` with the IDs:
+
+```
+exp_ids = {
+    "A": 'A_GRU8_final-reduced-features-f32_0d2b6cb5_seed12',
+    "B": 'B_GRU8_final-reduced-features-f32_6437bf39_seed12',
+    "C": 'C_GRU8_final-reduced-features-f32_5fe02cfa_seed12',
+    "D": 'D_GRU8_final-reduced-features-f32_3d0f8de4_seed12',
+    "E": 'E_GRU8_final-reduced-features-f32_8f8a200e_seed12',
+}
+```
+"""
+
 from mc2.runners.rnn_training_jax import main as train_model_jax
 
 import argparse
