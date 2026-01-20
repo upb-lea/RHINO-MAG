@@ -7,7 +7,7 @@ import equinox as eqx
 import optax
 
 from mc2.losses import MSE_loss, adapted_RMS_loss
-from mc2.features.features_jax import compute_fe_single, shift_signal
+from mc2.features.features_jax import compute_fe_single, shift_signal, compute_fe_single2,compute_fe_single3,compute_fe_single4,compute_fe_single5,compute_fe_single6
 from mc2.data_management import MaterialSet, load_data_into_pandas_df, Normalizer
 
 # Models
@@ -70,14 +70,14 @@ def get_normalizer(material_name: str, featurize: Callable, subsampling_freq: in
         train_set, val_set, test_set = mat_set.split_into_train_val_test(
             train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=0
         )
-        train_set_norm = train_set.normalize(transform_H=True, featurize=featurize) #True
+        train_set_norm = train_set.normalize(transform_H=False, featurize=featurize) #True
         normalizer = train_set_norm.normalizer
     else:
         normalizer = Normalizer(
             B_max=1.0,
             H_max=1.0,
             T_max=1.0,
-            norm_fe_max=jnp.ones(5).tolist(),  # TODO: adapt to number of features?
+            norm_fe_max=jnp.ones(5).tolist(), #5  # TODO: adapt to number of features?
             H_transform=lambda h: h,
             H_inverse_transform=lambda h: h,
         )
@@ -102,17 +102,19 @@ def setup_model(
         past_length = norm_B_past.shape[0]
         B_all = jnp.hstack([norm_B_past, norm_B_future])
 
-        featurized_B = compute_fe_single(B_all, n_s=11, time_shift=time_shift)
+        featurized_B =compute_fe_single(B_all, n_s=11, time_shift=time_shift) #compute_fe_single(B_all, n_s=11, time_shift=time_shift)
 
         return featurized_B[past_length:]
 
     featurize = partial(featurize, time_shift=time_shift)
 
+    if "featurize" in kwargs:
+        featurize = kwargs.pop("featurize")
+
     if "normalizer" in kwargs and "data_tuple" in kwargs:
         normalizer = kwargs.pop("normalizer")
         data_tuple = kwargs.pop("data_tuple")
     else:
-        # get_normalizer nur aufrufen, wenn sie nicht in kwargs sind
         normalizer, data_tuple = get_normalizer(
             material_name,
             featurize,

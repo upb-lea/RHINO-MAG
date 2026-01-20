@@ -32,7 +32,8 @@ def parse_args() -> argparse.Namespace:
     # parser.add_argument("-t", "--tag", default=None, required=False, help="an identifier/tag/comment for the trials")
     parser.add_argument(
         "--material",
-        default=None,
+        #default=None,
+        nargs="+",
         required=True,
         help=f"Material label to train on. One of {AVAILABLE_MATERIALS}",
     )
@@ -104,7 +105,7 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def run_experiment_for_seed(args: argparse.Namespace, seed: int, base_id: str, model_type: str):
+def run_experiment_for_seed(args: argparse.Namespace,material:str, seed: int, base_id: str, model_type: str):
     #args = parse_args()
 
     jax.config.update("jax_enable_x64", not args.disable_f64)
@@ -121,13 +122,13 @@ def run_experiment_for_seed(args: argparse.Namespace, seed: int, base_id: str, m
     key, training_key, model_key = jax.random.split(key, 3)
 
     assert (
-        args.material in AVAILABLE_MATERIALS
-    ), f"Material {args.material} is not available. Choose on of {AVAILABLE_MATERIALS}."
+        material in AVAILABLE_MATERIALS
+    ), f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
 
     # TODO: params as .yaml files?
     wrapped_model, optimizer, params, data_tuple = setup_model(
         model_type,
-        args.material,
+        material,
         model_key,
         n_epochs=args.epochs,
         tbptt_size=args.tbptt_size,
@@ -148,7 +149,7 @@ def run_experiment_for_seed(args: argparse.Namespace, seed: int, base_id: str, m
         model=wrapped_model,
         loss_function=loss_function,
         optimizer=optimizer,
-        material_name=args.material,
+        material_name=material,
         data_tuple=data_tuple,
         key=training_key,
         seed=seed,
@@ -204,19 +205,21 @@ def main():
     #         log.error(f"Experiment for seed {seed} failed with error: {e}")
     
     # log.info("All scheduled experiments completed.")
-    log.info(f"Starting experiments for {len(args.model_type)} model type(s) and {len(seeds_to_run)} seeds: {args.model_type}, {seeds_to_run}")
-    for model_type in args.model_type:
-        log.info(f"--- Starting experiments for Model Type: {model_type} ---")
-        if args.exp_name is None:
-            base_id = f"{args.material}_{model_type}_{str(uuid4())[:8]}"
-        else:
-            base_id = f"{args.material}_{model_type}_{args.exp_name}_{str(uuid4())[:8]}"
-        for seed in seeds_to_run:
-            try:
-                # model_type wird jetzt an die Funktion übergeben
-                run_experiment_for_seed(args, seed, base_id, model_type)
-            except Exception as e:
-                log.error(f"Experiment for model {model_type} and seed {seed} failed with error: {e}")
+    log.info(f"Starting experiments for material(s) {len(args.material)} for {len(args.model_type)} model type(s) and {len(seeds_to_run)} seeds: {args.model_type}, {seeds_to_run}")
+    for material in args.material:
+        log.info(f"=== Starting experiments for Material: {material} ===")
+        for model_type in args.model_type:
+            log.info(f"--- Starting experiments for Model Type: {model_type} ---")
+            if args.exp_name is None:
+                base_id = f"{material}_{model_type}_{str(uuid4())[:8]}"
+            else:
+                base_id = f"{material}_{model_type}_{args.exp_name}_{str(uuid4())[:8]}"
+            for seed in seeds_to_run:
+                try:
+                    # model_type wird jetzt an die Funktion übergeben
+                    run_experiment_for_seed(args,material, seed, base_id, model_type)
+                except Exception as e:
+                    log.error(f"Experiment for material {material}, model {model_type} and seed {seed} failed with error: {e}")
         
     log.info("All scheduled experiments completed.")
 
