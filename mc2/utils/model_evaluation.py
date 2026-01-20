@@ -1,4 +1,6 @@
 import json
+from copy import deepcopy
+import pathlib
 
 import pandas as pd
 import numpy as np
@@ -8,16 +10,26 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.data_management import EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT, MaterialSet
+from mc2.data_management import DATA_ROOT, EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT, MaterialSet, Normalizer
 from mc2.training.data_sampling import draw_data_uniformly
-from mc2.runners.model_setup_jax import setup_model
-from mc2.model_interfaces.model_interface import load_model, ModelInterface
+from mc2.model_setup_jax import setup_model
+from mc2.model_interfaces.model_interface import load_model, ModelInterface, save_model
 from mc2.metrics import sre, nere
 
 from functools import partial
 
-def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | list[str] | None = None):
-    model_paths = list(MODEL_DUMP_ROOT.glob("*.eqx"))
+
+def get_exp_ids(
+    material_name: str | list[str] | None = None,
+    model_type: str | list[str] | None = None,
+    exp_name: str | None = None,
+    legacy_mode: bool = False,
+):
+    if legacy_mode:
+        model_paths = list((DATA_ROOT / "legacy_model_dump").glob("*.eqx"))
+    else:
+        model_paths = list(MODEL_DUMP_ROOT.glob("*.eqx"))
+
     exp_ids = [model_path.stem for model_path in model_paths]
 
     if material_name is None:
@@ -50,11 +62,81 @@ def get_exp_ids(material_name: str | list[str] | None = None, model_type: str | 
     else:
         raise ValueError("'model_type' needs to be a string, list of strings, or None.")
 
+    exp_ids = relevant_exp_ids
+
+    if exp_name is None:
+        relevant_exp_ids = exp_ids
+    elif isinstance(exp_name, str):
+        relevant_exp_ids = []
+        for exp_id in exp_ids:
+            if len(exp_id.split("_")) < 3:
+                continue
+            elif exp_id.split("_")[2] == exp_name:
+                relevant_exp_ids.append(exp_id)
+    else:
+        raise ValueError("'exp_name' needs to be a string or None.")
+
     return relevant_exp_ids
 
 
 from functools import partial
 from mc2.model_interfaces.model_interface import filter_spec
+
+
+def load_parameterization(exp_id):
+    experiment_path = EXPERIMENT_LOGS_ROOT / "jax_experiments"
+    with open(experiment_path / f"{exp_id}.json", "r") as f:
+        params = json.load(f)["params"]
+    return params
+
+
+def reconstruct_model_from_file(filename: pathlib.Path) -> ModelInterface:
+
+    filename = pathlib.Path(filename)
+
+    # append the '.eqx' suffix if it is missing
+    if filename.suffix == "":
+        filename = filename.with_name(f"{filename.name}.eqx")
+
+    # check for the filename in the 'MODEL_DUMP_ROOT' if it is not already an existing file
+    if filename.is_file():
+        filename = filename
+    else:
+        search_path = MODEL_DUMP_ROOT / filename
+        if search_path.is_file():
+            print(f"Found model file at {search_path}. Loading model..")
+            filename = search_path
+        else:
+            raise ValueError(f"No model could be found for the specified filepath: {filename}")
+
+    with open(filename, "rb") as f:
+        params = json.loads(f.readline().decode())
+
+        normalizer = Normalizer.from_dict(params["normalizer_dict"])
+        fresh_wrapped_model, _, _, data_tuple = setup_model(
+            model_label=params["model_type"],
+            material_name=params["material_name"],
+            model_key=jax.random.PRNGKey(0),
+            **params["training_params"],
+            normalizer=normalizer,
+            data_tuple=(None, None, None),
+        )
+
+        loading_params = deepcopy(params["model_params"])
+        loading_params["key"] = jnp.array(loading_params["key"], dtype=jnp.uint32)
+        model = type(fresh_wrapped_model.model)(**loading_params)
+        model = eqx.tree_deserialise_leaves(f, model, partial(filter_spec, f64_enabled=jax.config.x64_enabled))
+        wrapped_model = eqx.tree_at(lambda t: t.model, fresh_wrapped_model, model)
+
+    return wrapped_model
+
+
+def store_model_to_file(filename: pathlib.Path, wrapped_model: ModelInterface, params: dict):
+    assert "model_type" in params.keys()
+    assert "material_name" in params.keys()
+
+    params["normalizer_dict"] = wrapped_model.normalizer.to_dict(params["training_params"]["transform_H"])
+    save_model(filename, params, wrapped_model)
 
 
 def reconstruct_model_from_exp_id(exp_id, **kwargs):
@@ -67,7 +149,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
     try:
         with open(experiment_path / f"{exp_id}.json", "r") as f:
             params = json.load(f)["params"]
-        print(f"Parameters for the model setup were found at '{EXPERIMENT_LOGS_ROOT / exp_id}' and are utilized.")
+        print(f"Parameters for the model setup were found at '{experiment_path / exp_id}' and are utilized.")
         fresh_wrapped_model, _, _, data_tuple = setup_model(
             model_label=model_type,
             material_name=material_name,
@@ -77,7 +159,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
         )
     except FileNotFoundError:
         print(
-            f"No parameters could be found under '{EXPERIMENT_LOGS_ROOT}' for exp_id: '{exp_id}', "
+            f"No parameters could be found under '{experiment_path}' for exp_id: '{exp_id}', "
             + "continues with default setup for the given model type specified in 'setup_model'."
         )
         fresh_wrapped_model, _, _, data_tuple = setup_model(
@@ -87,7 +169,7 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
             **kwargs,
         )
 
-    model_path = MODEL_DUMP_ROOT / f"{exp_id}.eqx"
+    model_path = DATA_ROOT / "legacy_model_dump" / f"{exp_id}.eqx"
     try:
         model = load_model(model_path, type(fresh_wrapped_model.model))
     except TypeError:
@@ -110,7 +192,7 @@ def load_gt_and_pred(exp_id, seed, freq_idx):
     return gt, pred
 
 
-def plot_loss_trends(exp_id, seed):
+def plot_loss_trends(exp_id, seed, plot_together: bool = False, figsize=(8, 8)):
     loss_trend = EXPERIMENT_LOGS_ROOT / f"{exp_id}/seed_{seed}_loss_trends.parquet"
     loss_train_val = pd.read_parquet(loss_trend).to_numpy()
 
@@ -119,26 +201,32 @@ def plot_loss_trends(exp_id, seed):
     val_loss = loss_train_val[:, 1]
 
     # Fig with two subplots
-    fig, axes = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
+    if plot_together:
+        n_plots = 1
+    else:
+        n_plots = 2
+
+    fig, axes = plt.subplots(n_plots, 1, squeeze=False, figsize=figsize, sharex=True)
 
     # Training Loss Plot
-    axes[0].plot(epochs, train_loss, color="tab:blue", marker="o", label="Training Loss (normalized)")
-    axes[0].set_ylabel("Training Loss", color="tab:blue")
-    axes[0].tick_params(axis="y", labelcolor="tab:blue")
-    axes[0].legend(loc="upper right")
-    axes[0].set_title("Training Loss")
-    axes[0].set_yscale("log")
+    ax = axes[0, 0]
+    ax.plot(epochs, train_loss, color="tab:blue", marker="o", markersize=1, label="Training Loss (normalized)")
+    ax.tick_params(axis="y")
+    ax.legend()
+    ax.set_yscale("log")
+    ax.set_ylabel(r"$\mathcal{L}_{\mathrm{RMSE}}$")
 
+    ax = axes[0, 0] if plot_together else axes[1, 0]
     # Validation Loss Plot
-    axes[1].plot(epochs, val_loss, color="tab:red", marker="s", label="Validation (non-normalized)")
-    axes[1].set_xlabel("Epoch")
-    axes[1].set_ylabel("Validation", color="tab:red")
-    axes[1].tick_params(axis="y", labelcolor="tab:red")
-    axes[1].legend(loc="upper right")
-    axes[1].set_title("Validation Loss")
-    axes[1].set_yscale("log")
+    ax.plot(epochs, val_loss, color="tab:red", marker="s", markersize=1, label="Validation Loss (normalized)")
+    ax.set_xlabel("Epoch")
+    ax.tick_params(axis="y")
+    ax.legend()
+    ax.set_yscale("log")
+
+    ax.set_ylabel(r"$\mathcal{L}_{\mathrm{RMSE}}$")
+
     # Layout und Anzeige
-    fig.suptitle("Training vs Validation Loss", fontsize=14)
     fig.tight_layout()
     for ax in axes.flatten():
         ax.grid(alpha=0.3)
@@ -383,9 +471,10 @@ def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, f
         axs[0, freq_idx].plot(B_future[freq_idx])
         axs[1, freq_idx].plot(H_future[freq_idx])
         axs[1, freq_idx].plot(H_pred[freq_idx])
+        axs[1, freq_idx].plot(H_future[freq_idx] - H_pred[freq_idx], color="tab:red", linestyle="--")
 
-        axs[2, freq_idx].plot(B_future[freq_idx], H_future[freq_idx])
-        axs[2, freq_idx].plot(B_future[freq_idx], H_pred[freq_idx])
+        axs[2, freq_idx].plot(H_future[freq_idx], B_future[freq_idx])
+        axs[2, freq_idx].plot(H_pred[freq_idx], B_future[freq_idx])
 
         axs[0, freq_idx].grid(True, alpha=0.3)
         axs[1, freq_idx].grid(True, alpha=0.3)
@@ -395,8 +484,10 @@ def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, f
         axs[0, freq_idx].set_xlabel("k")
         axs[1, freq_idx].set_ylabel("H")
         axs[1, freq_idx].set_xlabel("k")
-        axs[2, freq_idx].set_ylabel("H")
-        axs[2, freq_idx].set_xlabel("B")
+        axs[2, freq_idx].set_ylabel("B")
+        axs[2, freq_idx].set_xlabel("H")
 
-    fig.tight_layout(pad=-0.2)
+        axs[0, freq_idx].set_title("frequency: " + str(int(test_set.frequencies[freq_idx] / 1e3)) + " kHz")
+
+    fig.tight_layout()
     return fig, axs

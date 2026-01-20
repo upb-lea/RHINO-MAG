@@ -12,7 +12,7 @@ import equinox as eqx
 
 from mc2.model_interfaces.model_interface import ModelInterface
 from mc2.models.NODE import HiddenStateNeuralEulerODE
-from mc2.models.RNN import GRU, VectorfieldGRU, GRUwLinear, GRUwLinearModel
+from mc2.models.RNN import GRU, VectorfieldGRU, GRUwLinear, GRUwLinearModel, GRUaroundLinearModel
 
 MU_0 = 4 * jnp.pi * 1e-7
 
@@ -442,6 +442,62 @@ class GRUwLinearModelInterface(ModelInterface):
 
         gru_in = self._prepare_gru_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
         linear_in = self._prepare_linear_input(B_past_norm, B_future_norm)
+
+        batch_H_pred_norm = eqx.filter_vmap(self.model)(gru_in, linear_in, init_hidden)
+
+        return jnp.squeeze(batch_H_pred_norm)
+
+
+class GRUaroundLinearModelInterface(GRUwLinearModelInterface):
+    model: GRUaroundLinearModel
+    normalizer: Normalizer
+    featurize: Callable = eqx.field(static=True)
+
+    def _warmup(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+    ) -> jax.Array:
+        """Warm-up the hidden state of the RNN based on the previous trajectory data."""
+        gru_in = self._prepare_gru_input(B_past_norm, H_past_norm, B_past_norm, T_norm)
+        gru_in = gru_in[:, 1:]
+
+        init_hidden = self.model.construct_init_hidden(
+            out_true=None,  # TODO
+            batch_size=H_past_norm.shape[0],
+        )
+        linear_in = self._prepare_linear_input(B_past_norm[:, :1], B_past_norm[:, 1:])
+        _, final_hidden_warmup = jax.vmap(self.model.warmup_call)(
+            gru_in,
+            linear_in,
+            init_hidden,
+            None,  # TODO
+        )
+        return final_hidden_warmup
+
+    def normalized_call(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+        warmup: bool = True,
+    ) -> jax.Array:
+
+        gru_in = self._prepare_gru_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
+        linear_in = self._prepare_linear_input(B_past_norm, B_future_norm)
+
+        # if warmup and H_past_norm.shape[1] > 1:
+        #     init_hidden = self._warmup(B_past_norm, H_past_norm, B_future_norm, T_norm)
+        # else:
+        linear_out = eqx.filter_vmap(self.model.linear.predict)(linear_in[:, 0, :])
+
+        init_hidden = self.model.construct_init_hidden(
+            out_true=H_past_norm[:, -1][..., None] - linear_out,  # TODO: we need the linaer out for one step earlier...
+            batch_size=H_past_norm.shape[0],
+        )
 
         batch_H_pred_norm = eqx.filter_vmap(self.model)(gru_in, linear_in, init_hidden)
 

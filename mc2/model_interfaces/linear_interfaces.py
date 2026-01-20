@@ -15,11 +15,11 @@ class LinearInterface(ModelInterface):
 
     def __call__(self, B_past, H_past, B_future, T):
         B_all = jnp.concatenate([B_past, B_future], axis=1)
-        B_all_norm, _, _ = self.normalizer.normalize(B_all, H_past, T)
+        B_all_norm, H_past_norm, T_norm = self.normalizer.normalize(B_all, H_past, T)
         B_past_norm = B_all_norm[:, : B_past.shape[1]]
         B_future_norm = B_all_norm[:, B_past.shape[1] :]
 
-        batch_H_pred_norm = self.normalized_call(B_past_norm, None, B_future_norm, None)
+        batch_H_pred_norm = self.normalized_call(B_past_norm, H_past_norm, B_future_norm, T_norm)
         batch_H_pred_denorm = jax.vmap(jax.vmap(self.normalizer.denormalize_H))(batch_H_pred_norm)
         return batch_H_pred_denorm
 
@@ -32,21 +32,37 @@ class LinearInterface(ModelInterface):
         past_size = B_past_norm.shape[1]
         M_per_side = int((self.model.in_size - 1) / 2)
 
-        B_all_padded = jnp.pad(B_all, ((0, 0), (M_per_side, M_per_side)), mode="reflect", reflect_type="odd")
+        if M_per_side > 0:
 
-        B_in = jnp.concatenate(
-            [
-                jnp.roll(B_all_padded, idx)[..., None]
-                for idx in jnp.arange(
-                    -M_per_side,
-                    M_per_side + 1,
-                    1,
-                )
-            ],
-            axis=-1,
-        )[:, M_per_side + past_size : -M_per_side, :]
+            B_all_padded = jnp.pad(B_all, ((0, 0), (M_per_side, M_per_side)), mode="reflect", reflect_type="odd")
 
-        batch_H_pred_norm = eqx.filter_vmap(self.model)(B_in)
+            B_in = jnp.concatenate(
+                [
+                    jnp.roll(B_all_padded, idx)[..., None]
+                    for idx in jnp.arange(
+                        -M_per_side,
+                        M_per_side + 1,
+                        1,
+                    )
+                ],
+                axis=-1,
+            )[:, M_per_side + past_size : -M_per_side, :]
+        else:
+            B_in = B_all[:, past_size:, None]
+
+        # features = eqx.filter_vmap(
+        #     eqx.filter_vmap(self.featurize, in_axes=(0, 0, 0, 0)),
+        #     in_axes=(None, None, 2, None),
+        #     out_axes=2,
+        # )(B_past_norm, H_past_norm, B_in, T_norm)
+        # features_norm = eqx.filter_vmap(eqx.filter_vmap(eqx.filter_vmap(self.normalizer.normalize_fe)))(features)
+        # features_norm = features_norm.reshape((features.shape[0], features.shape[1], -1))
+
+        # model_in = jnp.concatenate([features_norm, B_in], axis=-1)
+
+        model_in = B_in
+
+        batch_H_pred_norm = eqx.filter_vmap(self.model)(model_in)
 
         return batch_H_pred_norm[..., 0]
 

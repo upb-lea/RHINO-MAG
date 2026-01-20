@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.models.linear import LinearDynamicParameters
+from mc2.models.linear import LinearDynamicParameters, LinearStatic
 
 
 class GRU(eqx.Module):
@@ -89,6 +89,40 @@ class GRU2(eqx.Module):
     def construct_init_hidden(self, out_true, batch_size):
         out_true = jnp.squeeze(out_true)
         return jnp.broadcast_to(out_true[:, None], (batch_size, self.hidden_size))
+
+
+class ExpGRU(GRU):
+
+    def __call__(self, input, init_hidden):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            rnn_out = self.cell(inp, carry)
+            rnn_out = rnn_out.at[..., -1].set(jnp.exp(rnn_out[..., -1]))
+
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+            out = rnn_out_o[..., 0]
+            return rnn_out, out
+
+        _, out = jax.lax.scan(f, hidden, input)
+        return out
+
+    def warmup_call(self, input, init_hidden, out_true):
+        hidden = init_hidden
+        # TODO: move construct hidden here?
+
+        def f(carry, inp):
+            inp_t, out_true_t = inp
+            rnn_out = self.cell(inp_t, carry)
+            rnn_out = rnn_out.at[0].set(out_true_t)
+            rnn_out = rnn_out.at[..., -1].set(jnp.exp(rnn_out[..., -1]))
+
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+            out = rnn_out_o[..., 0]
+            return rnn_out, out
+
+        final_hidden, out = jax.lax.scan(f, hidden, (input, out_true))
+        return out, final_hidden
 
 
 class VectorfieldGRU(eqx.Module):
@@ -217,6 +251,82 @@ class GRUwLinearModel(eqx.Module):
             rnn_out_o = jnp.atleast_2d(rnn_out)
             linear_params = rnn_out_o[..., : self.linear_in_size]
             out = self.linear.predict(inp_lin_t, linear_params)
+            return rnn_out, out
+
+        final_hidden, out = jax.lax.scan(f, hidden, (gru_in, linear_in, out_true))
+        return out, final_hidden
+
+    def construct_init_hidden(self, out_true, batch_size):
+        return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])
+
+
+class GRUaroundLinearModel(eqx.Module):
+    hidden_size: int = eqx.field(static=True)
+    cell: eqx.Module
+    linear: LinearStatic = eqx.field(static=True)
+    linear_in_size: int = eqx.field(static=True)
+
+    def __init__(self, in_size, hidden_size, linear_in_size, *, key):
+        self.hidden_size = hidden_size
+        self.linear_in_size = linear_in_size
+
+        gru_key, l_key = jax.random.split(key, 2)
+
+        self.cell = eqx.nn.GRUCell(in_size, hidden_size, key=gru_key)
+        # linear_dummy = LinearStatic(linear_in_size, out_size=1, key=l_key)
+        from mc2.utils.model_evaluation import reconstruct_model_from_exp_id
+
+        self.linear = reconstruct_model_from_exp_id("3C90_Linear_a3943263-1c37-48").model
+        assert self.linear.in_size == linear_in_size
+
+    def __call__(self, input_gru, input_linear, init_hidden):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_gru_t, inp_lin_t = inp
+
+            rnn_out = self.cell(inp_gru_t, carry)
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+
+            mu_bias = rnn_out_o[..., 0]
+
+            out = self.linear.predict(inp_lin_t) + mu_bias
+            return rnn_out, out
+
+        _, out = jax.lax.scan(f, hidden, (input_gru, input_linear))
+        return out
+
+    def debug_call(self, input_gru, input_linear, init_hidden):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_gru_t, inp_lin_t = inp
+
+            rnn_out = self.cell(inp_gru_t, carry)
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+
+            mu_bias = rnn_out_o[..., 0]
+
+            linear_out = self.linear.predict(inp_lin_t)
+
+            out = linear_out + mu_bias
+            return rnn_out, (out, linear_out, rnn_out)
+
+        _, (out, linear_out, rnn_out) = jax.lax.scan(f, hidden, (input_gru, input_linear))
+        return out, linear_out, rnn_out
+
+    def warmup_call(self, gru_in, linear_in, init_hidden, out_true):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_gru_t, inp_lin_t, out_true_t = inp
+            rnn_out = self.cell(inp_gru_t, carry)
+            rnn_out = rnn_out.at[0:2].set(out_true_t)
+
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+            mu_bias = rnn_out_o[..., 0]
+
+            out = self.linear.predict(inp_lin_t) + mu_bias
             return rnn_out, out
 
         final_hidden, out = jax.lax.scan(f, hidden, (gru_in, linear_in, out_true))

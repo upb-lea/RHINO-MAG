@@ -1,3 +1,43 @@
+"""Main training script.
+
+Either use the function `train_model_jax` in another python script / jupyter-notebook or run the script via commandline:
+
+```
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"  # disable preallocation of memory
+
+from mc2.runners.rnn_training_jax import train_model_jax
+
+
+train_model_jax(
+    material="A",
+    model_type=["GRU4", "JA"],
+    seeds=[1, 2, 3],
+    exp_name="demonstration",
+    loss_type="adapted_RMS",
+    gpu_id=0,
+    epochs=10,
+    batch_size=512,
+    tbptt_size=156,
+    past_size=28,
+    time_shift=0,
+    noise_on_data=0.0,
+    tbptt_size_start=None,
+    dyn_avg_kernel_size=11,
+    disable_f64=True,
+    disable_features="reduce",
+    transform_H=False,
+    use_all_data=False,
+)
+```
+
+or, e.g.:
+
+```
+python mc2/runners/rnn_training_jax.py --material "A" --model_type "GRU4" "JA" --seeds 1 2 3 --exp_name "demonstration"
+
+"""
+
 import argparse
 import pathlib
 from copy import deepcopy
@@ -10,7 +50,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 import jax
 
-#jax.config.update("jax_enable_x64", True)
+# jax.config.update("jax_enable_x64", True)
 # jax.config.update("jax_debug_nans", True)
 # jax.config.update("jax_log_compiles", True)
 
@@ -20,11 +60,12 @@ import json
 import optax
 from uuid import uuid4
 
-from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
+from mc2.data_management import DATA_ROOT, AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
-from mc2.runners.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
+from mc2.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.model_interfaces.model_interface import save_model
+from mc2.utils.model_evaluation import store_model_to_file
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,7 +79,7 @@ def parse_args() -> argparse.Namespace:
         help=f"Material label to train on. One of {AVAILABLE_MATERIALS}",
     )
     parser.add_argument(
-        "--model_type",
+        "--model_types",
         nargs="+",
         required=True,
         help=f"Model type to train with. One of {SUPPORTED_MODELS}",
@@ -49,6 +90,14 @@ def parse_args() -> argparse.Namespace:
         required=False,
         help=f"Loss type to train with. One of {SUPPORTED_LOSSES}",
     )
+    # parser.add_argument(
+    #     "-f",
+    #     "--features",
+    #     nargs="+",
+    #     default=SUPPORTED_FEATURES,
+    #     required=False,
+    #     help=f"The features to use. Multiple (at least one) of {SUPPORTED_FEATURES}",
+    # )
     parser.add_argument(
         "--exp_name",
         default=None,
@@ -84,6 +133,13 @@ def parse_args() -> argparse.Namespace:
         help="Time shift for the B trajectory in featurize",
     )
     parser.add_argument(
+        "--noise_on_data",
+        default=0.0,
+        required=False,
+        type=float,
+        help="Standard deviation of gaussian noise applied to the B trajectory.",
+    )
+    parser.add_argument(
         "-ts",
         "--tbptt_size_start",
         default=None,
@@ -100,48 +156,70 @@ def parse_args() -> argparse.Namespace:
         help="One or more seeds to run the experiments with. Default is [0].",
     )
     parser.add_argument("--disable_f64", action="store_true", default=False)
+    parser.add_argument("--disable_features", action="store_true", default=False)
+    parser.add_argument("--transform_H", action="store_true", default=False)
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
     return args
 
 
-def run_experiment_for_seed(args: argparse.Namespace,material:str, seed: int, base_id: str, model_type: str):
-    #args = parse_args()
+def run_experiment_for_seed(
+    seed: int,
+    base_id: str,
+    material: str,
+    model_type: str,
+    loss_type: str,
+    gpu_id: int,
+    epochs: int,
+    batch_size: int,
+    tbptt_size: int,
+    past_size: int,
+    time_shift: int,
+    noise_on_data: float,
+    tbptt_size_start: tuple[int, int] | None,
+    disable_features: bool | str,
+    dyn_avg_kernel_size: int,
+    transform_H: bool,
+    use_all_data: bool,
+):
 
-    jax.config.update("jax_enable_x64", not args.disable_f64)
-
-    if args.gpu_id != -1:
+    if gpu_id != -1:
         gpus = jax.devices()
-        jax.config.update("jax_default_device", gpus[args.gpu_id])
-    elif args.gpu_id == -1:
+        jax.config.update("jax_default_device", gpus[gpu_id])
+    elif gpu_id == -1:
         jax.config.update("jax_platform_name", "cpu")
 
     # setup
-    #seed = 0
+    # seed = 0
     key = jax.random.PRNGKey(seed)
     key, training_key, model_key = jax.random.split(key, 3)
 
     assert (
         material in AVAILABLE_MATERIALS
     ), f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
+    assert material in AVAILABLE_MATERIALS, f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
 
     # TODO: params as .yaml files?
     wrapped_model, optimizer, params, data_tuple = setup_model(
         model_type,
         material,
         model_key,
-        n_epochs=args.epochs,
-        tbptt_size=args.tbptt_size,
-        batch_size=args.batch_size,
-        past_size=args.past_size,
-        time_shift=args.time_shift,
-        tbptt_size_start=args.tbptt_size_start,
+        n_epochs=epochs,
+        tbptt_size=tbptt_size,
+        batch_size=batch_size,
+        past_size=past_size,
+        time_shift=time_shift,
+        tbptt_size_start=tbptt_size_start,
+        disable_features=disable_features,
+        transform_H=transform_H,
+        noise_on_data=noise_on_data,
+        dyn_avg_kernel_size=dyn_avg_kernel_size,
+        use_all_data=use_all_data,
     )
 
-    loss_function = setup_loss(args.loss_type)
+    loss_function = setup_loss(loss_type)
 
     exp_id = f"{base_id}_seed{seed}"
-    #exp_id = f"{args.material}_{args.model_type}_{str(uuid4())[:16]}"
     log.info(f"Training starting. Experiment ID is {exp_id}.")
 
     # run training
@@ -158,7 +236,10 @@ def run_experiment_for_seed(args: argparse.Namespace,material:str, seed: int, ba
     train_set, val_set, test_set = data_tuple
     log.info("Training done. Proceeding with evaluation..")
 
-    eval_metrics = evaluate_model_on_test_set(model, test_set)
+    if test_set is None:
+        eval_metrics = {}
+    else:
+        eval_metrics = evaluate_model_on_test_set(model, test_set)
 
     log.info("Evaluation done. Proceeding with storing experiment data..")
 
@@ -177,9 +258,15 @@ def run_experiment_for_seed(args: argparse.Namespace,material:str, seed: int, ba
 
     # store model
     print(model)
-    save_model_params = deepcopy(params["model_params"])
-    del save_model_params["key"]
-    save_model(MODEL_DUMP_ROOT / f"{exp_id}.eqx", save_model_params, model.model)
+    params["material_name"] = material
+    params["model_type"] = model_type
+
+    save_model_params = deepcopy(params)
+    store_model_to_file(
+        filename=MODEL_DUMP_ROOT / f"{exp_id}.eqx",
+        wrapped_model=model,
+        params=save_model_params,
+    )
 
     log.info(
         f"Experiment with id '{exp_id}' finished successfully. "
@@ -187,32 +274,122 @@ def run_experiment_for_seed(args: argparse.Namespace,material:str, seed: int, ba
         + "have been stored successfully."
     )
 
-def main():
-    args = parse_args()
 
-    if not args.seeds:
+def train_model_jax(
+    material_name: str,
+    model_types: list[str],
+    seeds: list[int],
+    exp_name: str | None = None,
+    loss_type: str = "adapted_RMS",
+    gpu_id: int = -1,
+    epochs: int = 100,
+    batch_size: int = 256,
+    tbptt_size: int = 1024,
+    past_size: int = 10,
+    time_shift: int = 0,
+    noise_on_data: float = 0.0,
+    dyn_avg_kernel_size: int = 11,
+    tbptt_size_start: tuple[int, int] | None = None,
+    disable_f64: bool = False,
+    disable_features: bool | str = False,
+    transform_H: bool = False,
+    use_all_data: bool = False,
+):
+    """Train a model based on the specified parameterization.
+
+    Args:
+        material_name (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
+        model_type (list[str]): List of identifiers of the model types to be trained.
+            See `mc2.runners.model_setup_jax.SUPPORTED_MODELS` for all available models. The trainings for
+            each specified model type are done sequentially, i.e., each model_type is trained for all
+            seeds specified individually.
+        seeds (list[int]): List of seeds for which a model should be trained.
+        exp_name (str): Additional identifier for the experiment (There is a randomly generated identifer for each
+            experiment, but this can still be useful for sorting/finding experiments after training)
+        loss_type (str): Identifier for the loss to use in training. See `mc2.runners.model_setup_jax.SUPPORTED_LOSSES`.
+        gpu_id (int): The index of the CUDA device / GPU to use. Specifying "-1" uses the CPU instead.
+        epochs (int): The number of epochs to train for.
+        batch_size (int): Number of parallel sequences to process per parameter update (i.e., per gradient calculation).
+        tbptt_size (int): Length of the sequences to process per parameter update (i.e., per gradient calculation).
+        past_size (int): Number of warmup steps before the prediction starts.
+        time_shift (int): When specifying a value `!=0`, a feature is added where the `B` trajectory is shifted by that
+            number of time steps
+        noise_on_data (float): The standard deviation of noise added to the `B` trajectories.
+        dyn_avg_kernel_size (int): The kernel size of the dynamic average feature.
+        tbptt_size_start (tuple[int, int] | None): Optional training with specified sequence length (first element of tuple)
+            and the number of epochs to train with this sequence length (second element of tuple). This might be helpful when
+            the model diverges on the full sequence length and needs to start training with shorter sequences to stabilize first.
+        disable_f64 (bool): Whether f64 should be disabled. When `True` float32 is used for all jax.Arrays instead
+        disable_features (bool): One of (True, False, "reduce"), True uses no features, False uses all default features,
+            "reduce" uses the dB/dt and d^2 B / dt^2 as features.
+        transform_H (bool): Whether a tanh transform for H should be utilized.
+        use_all_data (bool): Whether all data should be used for training or if instead a train, eval, test split should be performed.
+
+    Returns:
+        None
+    """
+    jax.config.update("jax_enable_x64", not disable_f64)
+
+    if not seeds:
         log.warning("No seeds provided. Using default seed 0.")
         seeds_to_run = [0]
     else:
-        seeds_to_run = args.seeds
+        seeds_to_run = seeds
 
     log.info(f"Starting experiments for material(s) {len(args.material)} for {len(args.model_type)} model type(s) and {len(seeds_to_run)} seeds: {args.model_type}, {seeds_to_run}")
     for material in args.material:
         log.info(f"=== Starting experiments for Material: {material} ===")
-        for model_type in args.model_type:
+        for model_type in model_types:
             log.info(f"--- Starting experiments for Model Type: {model_type} ---")
-            if args.exp_name is None:
-                base_id = f"{material}_{model_type}_{str(uuid4())[:8]}"
+            if exp_name is None:
+                base_id = f"{material_name}_{model_type}_{str(uuid4())[:8]}"
             else:
-                base_id = f"{material}_{model_type}_{args.exp_name}_{str(uuid4())[:8]}"
+                base_id = f"{material_name}_{model_type}_{exp_name}_{str(uuid4())[:8]}"
             for seed in seeds_to_run:
                 try:
-                    # model_type wird jetzt an die Funktion übergeben
-                    run_experiment_for_seed(args,material, seed, base_id, model_type)
+                    run_experiment_for_seed(
+                        seed=seed,
+                        base_id=base_id,
+                        material=material_name,
+                        model_type=model_type,
+                        loss_type=loss_type,
+                        gpu_id=gpu_id,
+                        epochs=epochs,
+                        batch_size=batch_size,
+                        tbptt_size=tbptt_size,
+                        past_size=past_size,
+                        time_shift=time_shift,
+                        noise_on_data=noise_on_data,
+                        dyn_avg_kernel_size=dyn_avg_kernel_size,
+                        tbptt_size_start=tbptt_size_start,
+                        disable_features=disable_features,
+                        transform_H=transform_H,
+                        use_all_data=use_all_data,
+                    )
                 except Exception as e:
-                    log.error(f"Experiment for material {material}, model {model_type} and seed {seed} failed with error: {e}")
-        
+                    log.error(f"Experiment for model {model_type} and seed {seed} failed with error: {e}")
+                jax.clear_caches()
+
     log.info("All scheduled experiments completed.")
 
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    train_model_jax(
+        material_name=args.material,
+        model_types=args.model_types,
+        seeds=args.seeds,
+        exp_name=args.exp_name,
+        loss_type=args.loss_type,
+        gpu_id=args.gpu_id,
+        epochs=args.epochs,
+        batch_size=args.batch_size,
+        tbptt_size=args.tbptt_size,
+        past_size=args.past_size,
+        time_shift=args.time_shift,
+        noise_on_data=args.noise_on_data,
+        tbptt_size_start=args.tbptt_size_start,
+        disable_f64=args.disable_f64,
+        disable_features=args.disable_features,
+        transform_H=args.transform_H,
+    )

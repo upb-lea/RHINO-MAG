@@ -134,8 +134,23 @@ def batched_step(model, batch_H, batch_B, batch_T, batch_H_RMS, past_size, loss_
     return loss, model, opt_state
 
 
+def add_gaussian_noise(in_data, noise_key, noise_std: float = 0.002):
+    return in_data + jax.random.normal(noise_key, shape=in_data.shape) * noise_std
+
+
 @eqx.filter_jit
-def single_batch_step(material_set, tbptt_size, past_size, batch_pairs, model, loss_function, optimizer, opt_state):
+def single_batch_step(
+    material_set,
+    tbptt_size,
+    past_size,
+    batch_pairs,
+    model,
+    loss_function,
+    optimizer,
+    opt_state,
+    noise_key,
+    noise_on_data,
+):
     n_frequency_indices = batch_pairs[:, 0]
     n_sequence_indices = batch_pairs[:, 1]
     starting_points = batch_pairs[:, 2]
@@ -146,6 +161,10 @@ def single_batch_step(material_set, tbptt_size, past_size, batch_pairs, model, l
         starting_points,
         training_sequence_length=tbptt_size + past_size,
     )
+
+    if noise_on_data > 0.0:
+        batch_B = add_gaussian_noise(batch_B, noise_key, noise_on_data)
+
     loss, new_model, new_opt_state = batched_step(
         model, batch_H, batch_B, batch_T, batch_H_RMS, past_size, loss_function, optimizer, opt_state
     )
@@ -174,7 +193,9 @@ def scan_step(carry, batch_indices, model, train_set_norm, tbptt_size, past_size
 
 
 @eqx.filter_jit
-def train_epoch(model, opt_state, train_set_norm, loss_function, optimizer, key, past_size, tbptt_size, batch_size):
+def train_epoch(
+    model, opt_state, train_set_norm, loss_function, optimizer, key, past_size, tbptt_size, batch_size, noise_on_data
+):
     all_pairs_list = []
     for freq_idx in range(len(train_set_norm.frequency_sets)):
         freq_set = train_set_norm.frequency_sets[freq_idx]
@@ -195,17 +216,28 @@ def train_epoch(model, opt_state, train_set_norm, loss_function, optimizer, key,
     all_batch_pairs = create_batch_pairs(shuffled_pairs, batch_size)
 
     trainable_model_arrays = eqx.filter(model, eqx.is_inexact_array)
-    carry_init = (trainable_model_arrays, opt_state)
+    carry_init = (trainable_model_arrays, opt_state, key)
 
     def scan_step(carry, batch_indices):
-        model_arrays, opt_state = carry
+        model_arrays, opt_state, key = carry
+
+        key, noise_key = jax.random.split(key)
         full_model = eqx.combine(model_arrays, model)
         full_model, opt_state, loss = single_batch_step(
-            train_set_norm, tbptt_size, past_size, batch_indices, full_model, loss_function, optimizer, opt_state
+            train_set_norm,
+            tbptt_size,
+            past_size,
+            batch_indices,
+            full_model,
+            loss_function,
+            optimizer,
+            opt_state,
+            noise_key,
+            noise_on_data,
         )
-        return (eqx.filter(full_model, eqx.is_inexact_array), opt_state), loss
+        return (eqx.filter(full_model, eqx.is_inexact_array), opt_state, key), loss
 
-    (final_model_arrays, final_opt_state), losses = jax.lax.scan(
+    (final_model_arrays, final_opt_state, final_key), losses = jax.lax.scan(
         scan_step,
         carry_init,
         all_batch_pairs,
@@ -270,6 +302,9 @@ def process_freq_set_val(freq_set, model: ModelInterface, past_size):
 
 
 def val_test(set, model, past_size):
+    if set is None:
+        return jnp.array(-1.0), [jnp.array([-1.0])], [jnp.array([-1.0])]
+
     val_loss = 0.0
     val_pred_l = []
     val_gt_l = []
@@ -297,18 +332,28 @@ def train_model(
     past_size: int,
     batch_size: int,
     time_shift: int,
+    noise_on_data: float,
     tbptt_size_start: list[int] | None = None,  # (size, n_epochs_steps)
+    **kwargs,
 ):
     train_set, val_set, test_set = data_tuple
 
-    log.info(
-        f"train size: {sum(freq_set.H.shape[0] for freq_set in train_set.frequency_sets)}, "
-        f"val size: {sum(freq_set.H.shape[0] for freq_set in val_set.frequency_sets)}, "
-        f"test size: {sum(freq_set.H.shape[0] for freq_set in test_set.frequency_sets)}"
-    )
-    train_set_norm = train_set.normalize(normalizer=model.normalizer, transform_H=True)
-    val_set_norm = val_set.normalize(normalizer=model.normalizer, transform_H=True)
-    test_set_norm = test_set.normalize(normalizer=model.normalizer, transform_H=True)
+    if test_set is not None and val_set is not None:
+        log.info(
+            f"train size: {sum(freq_set.H.shape[0] for freq_set in train_set.frequency_sets)}, "
+            f"val size: {sum(freq_set.H.shape[0] for freq_set in val_set.frequency_sets)}, "
+            f"test size: {sum(freq_set.H.shape[0] for freq_set in test_set.frequency_sets)}"
+        )
+    else:
+        log.info(
+            f"train size: {sum(freq_set.H.shape[0] for freq_set in train_set.frequency_sets)}, "
+            f"val size: {val_set}, "
+            f"test size: {test_set}"
+        )
+
+    train_set_norm = train_set.normalize(normalizer=model.normalizer, transform_H=None)
+    # val_set_norm = val_set.normalize(normalizer=model.normalizer, transform_H=None)
+    # test_set_norm = test_set.normalize(normalizer=model.normalizer, transform_H=None)
 
     logs = {
         "material": material_name,
@@ -322,8 +367,8 @@ def train_model(
     # manager = ocp.CheckpointManager(
     #     checkpoint_dir, ocp.PyTreeCheckpointer(), options
     # )
-    
-    best_val_loss = float("inf") 
+
+    best_val_loss = float("inf")
     best_model = jax.tree_util.tree_map(lambda x: x, model)
 
     test_loss, *_ = val_test(test_set, model, past_size)  # test_set_norm
@@ -359,6 +404,7 @@ def train_model(
             past_size,
             current_tbptt_size,
             batch_size,
+            noise_on_data,
         )
         pbar_str = f"Loss {train_loss:.2e}"
         if step_epoch % val_every == 0:
@@ -366,17 +412,20 @@ def train_model(
             logs["loss_trends_val"].append(val_loss.item())
             if val_loss.item() < best_val_loss:
                 best_val_loss = val_loss.item()
-                best_model = jax.tree_util.tree_map(lambda x: x, model) 
+                best_model = jax.tree_util.tree_map(lambda x: x, model)
         pbar_str += f"| val loss {val_loss:.2e}"
         logs["loss_trends_train"].append(train_loss.item())
         pbar.set_postfix_str(pbar_str)
 
     pbar.close()
 
-    if val_every>0 and val_every < n_epochs:
-        final_model=best_model
+    if val_set is not None:
+        if val_every > 0 and val_every < n_epochs:
+            final_model = best_model
+        else:
+            final_model = model
     else:
-        final_model=model
+        final_model = model
 
     test_loss, test_pred_l, test_gt_l = val_test(test_set, final_model, past_size)  # test_set_norm
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")

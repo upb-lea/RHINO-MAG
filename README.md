@@ -1,15 +1,8 @@
 # magnet-challenge-2
-Official site for the second magnet challenge https://github.com/minjiechen/magnetchallenge-2
 
-## Timeline (copied from official site):
-- 05-01-2025 1-Page Letter of Intent Due with Signature 
-- 06-01-2025 2-Page Concept Proposal Due
-- 07-01-2025 Notification of Acceptance
-- 08-01-2025 Expert Feedback on the Concept Proposal
-- 11-01-2025 Preliminary Submission Due
-- 11-01-2025 Testing Data for 5 New Materials Available
-- 12-24-2025 Final Submission Due
-- 03-01-2026 Winners Selected
+This is the contribution of Team "Siegen and Paderborn" to the MagNet Challenge 2 (MC2).
+
+Official site for the second magnet challenge https://github.com/minjiechen/magnetchallenge-2
 
 ## Installation:
 - use `python3.11` (specifically python3.11.11, should not make a difference though)
@@ -19,25 +12,110 @@ Official site for the second magnet challenge https://github.com/minjiechen/magn
 - navigate to the downloaded repo
 - install it with `pip install -e .` (this is to have installed as an editable site package)
 - now you should be able to import `mc2` from within your venv
-
-## Getting Started:
-The raw dataset is rougly 15 GB (compressed) and 30 GB (uncompressed).
-It will not be uploaded, but it might make sense to put it into the 'LEA' network.
-You can download the dataset from the official mc2 site and decompress it.
-To use it properly:
-
-- download and unzip dataset
-- place all the data into `data/raw/`
-- ensure that the `.csv` file lie direcly in the material folder, i.e., `raw/{material_name}/{file_name}.csv`
-- go to `dev/data_inspection/inspect_raw_data.ipynb`
-- run the notebook (you may have to change the path slightly)
-- now you should have your `ten_mat_data.pickle` file in the `data/processed/` folder
-- look into `dev/data_inspection/exploratory_data_analysis.ipynb` for loading and inspecting of the data
-- look into `dev/model_tests/RNN_tests.ipynb` for a simple usage example with a basic RNN
+- additionally to the installation, you will need to add the raw material data to `data/raw/` (e.g., `data/raw/A/A_1_B.csv`, `data/raw/C/C_3_B.csv`). The data itself should be available in the [MagNetX Database](http://github.com/PaulShuk/MagNetX?tab=readme-ov-file).
 
 
-> ⚠️: Note that EVERYTHING is essentially WIP and a lot more implementation and finetuning will be necessary and bugs might exist (even though I hope they don't.)
-> So please look at the code critically.
+## Repository structure:
+
+```text
+├── data/                           # Holds the material data, stored models, experiment logs, etc
+│   ├── cache/                      # Cached versions of raw data (auto-generated after first load of raw data)
+│   ├── models/                     # Stored models as .eqx files
+│   └── raw/                        # Unprocessed material folders (e.g., A/A_1_B.csv)
+├── dev/                            # Unmaintained Jupyter notebooks (i.e., they might work, but could be outdated)
+├── examples/                       # Maintained example notebooks
+│   ├── final_test_data_eval.ipynb  # Testing on MC2 host data
+│   ├── model_inspection.ipynb      # Loading, evaluation, and visualization
+│   └── model_training.ipynb        # Model training walkthrough
+└── mc2/                            # Core source code
+    ├── features/                   # Feature engineering implementations
+    ├── model_interface/            # Logic for model-data interaction
+    ├── models/                     # Generic model architectures
+    ├── runners/                    # Executable training scripts
+    ├── training/                   # Training-specific utilities
+    ├── utils/                      # Evaluation, plotting, and processing tools
+    ├── data_management.py          # Dataset loading and splitting logic
+    ├── losses.py                   # Training loss function implementations
+    ├── model_setup.py              # Generate model objects from parameterizations (used for creating models and loading models from disk)
+    └── metrics.py                  # Evaluation metric implementations
+```
+
+## Exemplary Usage:
+
+### Training:
+```
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"  # disable preallocation of memory
+
+from mc2.runners.rnn_training_jax import main as train_model_jax
 
 
-  
+train_model_jax(
+    material="A",
+    model_type=["GRU4", "JA"],
+    seeds=[1, 2, 3],
+    exp_name="demonstration",
+    loss_type="adapted_RMS",
+    gpu_id=0,
+    epochs=10,
+    batch_size=512,
+    tbptt_size=156,
+    past_size=28,
+    time_shift=0,
+    noise_on_data=0.0,
+    tbptt_size_start=None,
+    dyn_avg_kernel_size=11,
+    disable_f64=True,
+    disable_features="reduce",
+    transform_H=False,
+    use_all_data=False,
+)
+```
+
+### Loading & inference:
+```
+import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"  # disable preallocation of memory
+
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+
+from mc2.utils.model_evaluation import reconstruct_model_from_file
+from mc2.data_management import MaterialSet
+from mc2.utils.data_plotting import plot_sequence_prediction
+
+# load model and data
+model = reconstruct_model_from_file("A_GRU8_final-reduced-features-f32_0d2b6cb5_seed12.eqx")
+material_set = MaterialSet.from_material_name("A")
+
+# extract exemplary sequences from data set
+past_size = 100
+sequence_length = 2000
+frequency = 50_000
+
+relevant_frequency_set = material_set.at_frequency(jnp.array([frequency]))
+
+B = relevant_frequency_set.B[:, :sequence_length]
+H = relevant_frequency_set.H[:, :sequence_length]
+T = relevant_frequency_set.T[:]
+
+# prediction:
+print("Shape of the arrays (n_sequences, sequence_length) B:", B.shape)
+print("Shape of the arrays (n_sequences, sequence_length) H:", H.shape)
+print("Shape of the arrays (n_sequences,) T:", T.shape)
+
+H_pred = model(
+    B_past=B[:, :past_size],
+    B_future=B[:, past_size:],
+    H_past=H[:, :past_size],
+    T=T,
+)
+
+print("Shape of the prediction (n_sequences, sequence_length - past_size), H_pred:", H_pred.shape)
+
+# visualization of predicted trajectories:
+max_n_plots = 5
+for idx in range(min(H_pred.shape[0], max_n_plots)):
+    plot_sequence_prediction(B[idx], H[idx], T[idx], H_pred[idx], past_size=past_size, figsize=(4,4))
+    plt.show()
+```
