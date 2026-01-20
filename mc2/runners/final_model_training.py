@@ -13,7 +13,7 @@ exp_ids = {
 ```
 """
 
-from mc2.runners.rnn_training_jax import main as train_model_jax
+from mc2.runners.rnn_training_jax import train_model_jax
 
 import argparse
 from mc2.data_management import AVAILABLE_MATERIALS
