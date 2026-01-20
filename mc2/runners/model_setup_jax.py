@@ -44,6 +44,7 @@ from mc2.models.jiles_atherton import (
 from mc2.models.linear import LinearStatic
 
 # Interfaces
+from mc2.model_interfaces.model_interface import ModelInterface
 from mc2.model_interfaces.rnn_interfaces import (
     NODEwInterface,
     RNNwInterface,
@@ -114,13 +115,13 @@ def setup_model(
     model_label: str,
     material_name: str,
     model_key: jax.random.PRNGKey,
-    subsample_freq=1,
-    n_epochs=100,
-    tbptt_size=1024,
-    batch_size=256,
+    subsample_freq: int = 1,
+    n_epochs: int = 100,
+    tbptt_size: int = 1024,
+    batch_size: int = 256,
     past_size: int = 10,
     time_shift: int = 0,
-    tbptt_size_start=None,  # (size, n_epochs_steps)
+    tbptt_size_start: tuple[int, int] | None = None,  # (size, n_epochs_steps)
     disable_features: bool | str = False,
     transform_H: bool = False,
     noise_on_data: float = 0.0,
@@ -128,7 +129,39 @@ def setup_model(
     use_all_data: bool = False,
     val_every: int = 1,
     **kwargs,
-):
+) -> tuple[ModelInterface, optax.GradientTransformation, dict, tuple[MaterialSet, MaterialSet, MaterialSet]]:
+    """Create a model ready for training from the specified parameterization.
+
+    Args:
+        model_label (str): Identifier of the model types to be created.
+        material_name (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
+        model_key (jax.random.PRNGKey): Pseudo random number generation key for the creation of the model.
+            This key is derived from the key initially given into the algorithm, if `setup_model` is used
+            from within the training script.
+        subsample_freq (int): The frequency with which the data set should be subsampled after loading.
+            `1` returns the data set as is, `2` only returns every other element, etc.
+        n_epochs (int): The number of epochs to train for.
+        tbptt_size (int): Length of the sequences to process per parameter update (i.e., per gradient calculation).
+        batch_size (int): Number of parallel sequences to process per parameter update (i.e., per gradient calculation).
+        past_size (int): Number of warmup steps before the prediction starts.
+        time_shift (int): When specifying a value `!=0`, a feature is added where the `B` trajectory is shifted by that
+            number of time steps
+        tbptt_size_start (tuple[int, int]): Optional training with specified sequence length (first element of tuple)
+            and the number of epochs to train with this sequence length (second element of tuple). This might be helpful when
+            the model diverges on the full sequence length and needs to start training with shorter sequences to stabilize
+            first.
+        disable_features (bool | str): One of (True, False, "reduce"), True uses no features, False uses all default features,
+            "reduce" uses the dB/dt and d^2 B / dt^2 as features.
+        transform_H (bool): Whether a tanh transform for H should be utilized.
+        noise_on_data (float): The standard deviation of noise added to the `B` trajectories.
+        dyn_avg_kernel_size (int): The kernel size of the dynamic average feature.
+        use_all_data (bool): Whether all data should be used for training or if instead a train, eval, test split should be performed.
+        val_every (int): How often the a validation loss should be computed.
+
+    Returns:
+        The model with the proper interface, the parameter optimizer, a dict of parameters
+            and the data tuple containing (train_set, eval_set, test_set).
+    """
     if disable_features == True:
 
         raise NotImplementedError("This is likely not working as intended")
@@ -173,7 +206,6 @@ def setup_model(
             material_name,
             featurize,
             subsample_freq,
-            True,
             transform_H,
             use_all_data,
         )
@@ -360,6 +392,7 @@ def setup_model(
 
 
 def setup_loss(loss_label: str) -> Callable:
+    """Returns the callable loss function based on the provided string identifier."""
 
     match loss_label:
         case "MSE":

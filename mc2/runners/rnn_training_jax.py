@@ -310,15 +310,15 @@ def train_model_jax(
         time_shift (int): When specifying a value `!=0`, a feature is added where the `B` trajectory is shifted by that
             number of time steps
         noise_on_data (float): The standard deviation of noise added to the `B` trajectories.
-        dyn_avg_kernel_size (int): The kernel size of the dynamic average feature
+        dyn_avg_kernel_size (int): The kernel size of the dynamic average feature.
         tbptt_size_start (tuple[int, int] | None): Optional training with specified sequence length (first element of tuple)
             and the number of epochs to train with this sequence length (second element of tuple). This might be helpful when
-            the model diverges on the full sequence length and needs to start training with shorter sequences to stabiliz first.
+            the model diverges on the full sequence length and needs to start training with shorter sequences to stabilize first.
         disable_f64 (bool): Whether f64 should be disabled. When `True` float32 is used for all jax.Arrays instead
         disable_features (bool): One of (True, False, "reduce"), True uses no features, False uses all default features,
-            "reduce" uses the dB/dt and d^2 B / dt^2 as features
-        transform_H (bool): Whether a tanh transform for H should be utilized
-        use_all_data (bool): Whether all data should be used for training or if instead a train, eval, test split should be performed
+            "reduce" uses the dB/dt and d^2 B / dt^2 as features.
+        transform_H (bool): Whether a tanh transform for H should be utilized.
+        use_all_data (bool): Whether all data should be used for training or if instead a train, eval, test split should be performed.
 
     Returns:
         None
