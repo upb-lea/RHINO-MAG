@@ -4,6 +4,8 @@ This is the contribution of Team "Siegen and Paderborn" to the MagNet Challenge 
 
 Official site for the second magnet challenge https://github.com/minjiechen/magnetchallenge-2
 
+![Exemplary Prediction Task](fig/B_H_prediction_example.png)
+
 ## Installation:
 - use `python3.11` (specifically python3.11.11, should not make a difference though)
 - `git clone git@github.com:upb-lea/magnet-challenge-2.git` the repo to your PC or workstation
@@ -13,6 +15,7 @@ Official site for the second magnet challenge https://github.com/minjiechen/magn
 - install it with `pip install -e .` (this is to have installed as an editable site package)
 - now you should be able to import `mc2` from within your venv
 - additionally to the installation, you will need to add the raw material data to `data/raw/` (e.g., `data/raw/A/A_1_B.csv`, `data/raw/C/C_3_B.csv`). The data itself should be available in the [MagNetX Database](http://github.com/PaulShuk/MagNetX?tab=readme-ov-file).
+
 
 
 ## Repository structure:
@@ -119,3 +122,4 @@ for idx in range(min(H_pred.shape[0], max_n_plots)):
     plot_sequence_prediction(B[idx], H[idx], T[idx], H_pred[idx], past_size=past_size, figsize=(4,4))
     plt.show()
 ```
+<img src="fig/prediction_0.png" width=33%> <img src="fig/prediction_1.png" width=33%> <img src="fig/prediction_2.png" width=33%>
