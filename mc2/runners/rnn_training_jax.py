@@ -60,9 +60,9 @@ import json
 import optax
 from uuid import uuid4
 
-from mc2.data_management import DATA_ROOT, AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
+from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
-from mc2.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
+from mc2.model_setup_jax import setup_experiment, SUPPORTED_MODELS, SUPPORTED_LOSSES
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.model_interfaces.model_interface import save_model
 from mc2.utils.model_evaluation import store_model_to_file
@@ -194,10 +194,10 @@ def run_experiment_for_seed(
 
     assert material in AVAILABLE_MATERIALS, f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
 
-    # TODO: params as .yaml files?
-    wrapped_model, optimizer, params, data_tuple = setup_model(
+    wrapped_model, optimizer, loss_function, params, data_tuple = setup_experiment(
         model_type,
         material,
+        loss_type,
         model_key,
         n_epochs=epochs,
         tbptt_size=tbptt_size,
@@ -211,8 +211,6 @@ def run_experiment_for_seed(
         dyn_avg_kernel_size=dyn_avg_kernel_size,
         use_all_data=use_all_data,
     )
-
-    loss_function = setup_loss(loss_type)
 
     exp_id = f"{base_id}_seed{seed}"
     log.info(f"Training starting. Experiment ID is {exp_id}.")

@@ -67,37 +67,26 @@ SUPPORTED_MODELS = ["GRU{hidden-size}", "HNODE", "JA"]
 SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
 
 
-def get_normalizer(
+def setup_dataset(
     material_name: str,
-    featurize: Callable,
     subsampling_freq: int,
-    transform_H: bool,
     use_all_data: bool = False,
-) -> tuple[Normalizer, tuple[MaterialSet | None, MaterialSet | None, MaterialSet | None]]:
-    """Builds a normalizer based for the specified material by loading the data and
-    checking the maximum values.
-
-    For practicality, the (non-normalized) data is returned together with the normalizer.
+) -> tuple[MaterialSet, MaterialSet, MaterialSet]:
+    """Loads the material data from disk and splits it into a train, eval, and test set
 
     Args:
         material_name (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
-        featurize (Callable): A callable function that takes (B_past, H_past, B_future, T, timeshift)
-            and returns a feature vector
         subsampling_freq (int): The frequency with which the data set should be subsampled after loading.
             `1` returns the data set as is, `2` only returns every other element, etc.
-        transform_H (bool): Whether a `tanh` transformation is to be applied to the data before it is
-            fed into the model
         use_all_data (bool): Whether all data should be used in the training script or a (70/15/15)
             training/eval/test split should be done
 
     Returns:
-        The `Normalizer` object and the data tuple of `(training_set, eval_set, test_set)`
+        The data tuple of `(training_set, eval_set, test_set)`
     """
 
     mat_set = MaterialSet.from_material_name(material_name)
-
     mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
-
     if use_all_data:
         train_set = deepcopy(mat_set)
         val_set = None
@@ -106,64 +95,50 @@ def get_normalizer(
         train_set, val_set, test_set = mat_set.split_into_train_val_test(
             train_frac=0.7, val_frac=0.15, test_frac=0.15, seed=0
         )
-    train_set_norm = train_set.normalize(transform_H=transform_H, featurize=featurize)
-    normalizer = train_set_norm.normalizer
-    return normalizer, (train_set, val_set, test_set)
+    return train_set, val_set, test_set
 
 
-def setup_model(
-    model_label: str,
-    material_name: str,
-    model_key: jax.random.PRNGKey,
-    subsample_freq: int = 1,
-    n_epochs: int = 100,
-    tbptt_size: int = 1024,
-    batch_size: int = 256,
-    past_size: int = 10,
-    time_shift: int = 0,
-    tbptt_size_start: tuple[int, int] | None = None,  # (size, n_epochs_steps)
-    disable_features: bool | str = False,
-    transform_H: bool = False,
-    noise_on_data: float = 0.0,
-    dyn_avg_kernel_size: int = 11,
-    use_all_data: bool = False,
-    val_every: int = 1,
-    **kwargs,
-) -> tuple[ModelInterface, optax.GradientTransformation, dict, tuple[MaterialSet, MaterialSet, MaterialSet]]:
-    """Create a model ready for training from the specified parameterization.
+def setup_normalizer(
+    train_set: MaterialSet,
+    featurize: Callable,
+    transform_H: bool,
+) -> tuple[Normalizer, tuple[MaterialSet | None, MaterialSet | None, MaterialSet | None]]:
+    """Builds a normalizer for the given train set
 
     Args:
-        model_label (str): Identifier of the model types to be created.
-        material_name (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
-        model_key (jax.random.PRNGKey): Pseudo random number generation key for the creation of the model.
-            This key is derived from the key initially given into the algorithm, if `setup_model` is used
-            from within the training script.
-        subsample_freq (int): The frequency with which the data set should be subsampled after loading.
-            `1` returns the data set as is, `2` only returns every other element, etc.
-        n_epochs (int): The number of epochs to train for.
-        tbptt_size (int): Length of the sequences to process per parameter update (i.e., per gradient calculation).
-        batch_size (int): Number of parallel sequences to process per parameter update (i.e., per gradient calculation).
-        past_size (int): Number of warmup steps before the prediction starts.
-        time_shift (int): When specifying a value `!=0`, a feature is added where the `B` trajectory is shifted by that
-            number of time steps
-        tbptt_size_start (tuple[int, int]): Optional training with specified sequence length (first element of tuple)
-            and the number of epochs to train with this sequence length (second element of tuple). This might be helpful when
-            the model diverges on the full sequence length and needs to start training with shorter sequences to stabilize
-            first.
-        disable_features (bool | str): One of (True, False, "reduce"), True uses no features, False uses all default features,
-            "reduce" uses the dB/dt and d^2 B / dt^2 as features.
-        transform_H (bool): Whether a tanh transform for H should be utilized.
-        noise_on_data (float): The standard deviation of noise added to the `B` trajectories.
-        dyn_avg_kernel_size (int): The kernel size of the dynamic average feature.
-        use_all_data (bool): Whether all data should be used for training or if instead a train, eval, test split should be performed.
-        val_every (int): How often the a validation loss should be computed.
+        featurize (Callable): A callable function that takes (B_past, H_past, B_future, T, timeshift)
+            and returns a feature vector
+        transform_H (bool): Whether a `tanh` transformation is to be applied to the data before it is
+            fed into the model
 
     Returns:
-        The model with the proper interface, the parameter optimizer, a dict of parameters
-            and the data tuple containing (train_set, eval_set, test_set).
+        The `Normalizer` object
+    """
+
+    train_set_norm = train_set.normalize(transform_H=transform_H, featurize=featurize)
+    normalizer = train_set_norm.normalizer
+    return normalizer
+
+
+def setup_featurize(
+    disable_features: bool,
+    dyn_avg_kernel_size: int,
+    time_shift: int,
+) -> Callable:
+    """Setup the `featurize` function.
+
+    Args:
+        disable_features (bool | str): One of (True, False, "reduce"), True uses no features, False uses all default features,
+            "reduce" uses the dB/dt and d^2 B / dt^2 as features.
+        dyn_avg_kernel_size (int): The kernel size of the dynamic average feature.
+        time_shift (int): When specifying a value `!=0`, a feature is added where the `B` trajectory is shifted by that
+            number of time steps
+
+    Returns:
+        Function that adds features to the input material data
+
     """
     if disable_features == True:
-
         raise NotImplementedError("This is likely not working as intended")
 
         def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
@@ -174,12 +149,9 @@ def setup_model(
         def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
             past_length = norm_B_past.shape[0]
             B_all = jnp.hstack([norm_B_past, norm_B_future])
-
             db = db_dt(B_all)
             d2b = d2b_dt2(B_all)
-
             featurized_B = jnp.stack((db, d2b), axis=-1)
-
             return featurized_B[past_length:]
 
     elif not disable_features:
@@ -187,28 +159,37 @@ def setup_model(
         def featurize(norm_B_past, norm_H_past, norm_B_future, temperature, time_shift):
             past_length = norm_B_past.shape[0]
             B_all = jnp.hstack([norm_B_past, norm_B_future])
-
             featurized_B = compute_fe_single(B_all, n_s=dyn_avg_kernel_size, time_shift=time_shift)
-
             return featurized_B[past_length:]
 
     else:
         raise ValueError("Option 'disable_features' with value '{disable_features}' cannot be processed.")
-
     featurize = partial(featurize, time_shift=time_shift)
 
-    if "normalizer" in kwargs and "data_tuple" in kwargs:
-        normalizer = kwargs.pop("normalizer")
-        data_tuple = kwargs.pop("data_tuple")
-    else:
-        # get_normalizer nur aufrufen, wenn sie nicht in kwargs sind
-        normalizer, data_tuple = get_normalizer(
-            material_name,
-            featurize,
-            subsample_freq,
-            transform_H,
-            use_all_data,
-        )
+
+def setup_model(
+    model_label: str,
+    model_key: jax.random.PRNGKey,
+    normalizer: Normalizer,
+    featurize: Callable,
+    time_shift: int = 0.0,
+) -> tuple[ModelInterface, dict]:
+    """
+    Creates the model wrapped into its model interface from the provided parameterization.
+
+    Args:
+        model_label (str): Identifier of the model types to be created.
+        model_key (jax.random.PRNGKey): Pseudo random number generation key for the creation of the model.
+            This key is derived from the key initially given into the algorithm, if `setup_model` is used
+            from within the training script.
+        normalizer (Normalizer): Normalizer object used to normalize the material data.
+        featurize (Callable): Featurize function used to add features to the input of the model.
+        time_shift (int): When specifying a value `!=0`, a feature is added where the `B` trajectory is shifted by that
+            number of time steps
+
+    Returns:
+        The ModelInterface (i.e. the wrapped model) and the model parameterization as a dict
+    """
 
     # dynamically choose model input size:
     test_seq_length = 100
@@ -221,8 +202,6 @@ def setup_model(
     )
     assert test_out.shape[0] == test_seq_length
     model_in_size = test_out.shape[-1] + 2  # (+2) due to: flux density B and temperature T
-
-    lr_params = None
 
     match model_label:
         case "HNODE":
@@ -338,6 +317,124 @@ def setup_model(
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
 
+    wrapped_model = mdl_interface_cls(
+        model=model,
+        normalizer=normalizer,
+        featurize=featurize,
+    )
+
+    return wrapped_model, model_params_d
+
+
+def setup_loss(loss_label: str) -> Callable:
+    """Returns the callable loss function based on the provided string identifier."""
+
+    match loss_label:
+        case "MSE":
+            loss_function = MSE_loss
+        case "adapted_RMS":
+            loss_function = adapted_RMS_loss
+        case _:
+            raise ValueError(f"Unknown loss type: {loss_label}. Choose on of {SUPPORTED_LOSSES}")
+
+    # loss function is expected to return the value and the gradient w.r.t. to the model parameters
+    loss_function = eqx.filter_value_and_grad(loss_function)
+
+    return loss_function
+
+
+def setup_experiment(
+    model_label: str,
+    material_name: str,
+    loss_type: str,
+    model_key: jax.random.PRNGKey,
+    subsample_freq: int = 1,
+    n_epochs: int = 100,
+    tbptt_size: int = 1024,
+    batch_size: int = 256,
+    past_size: int = 10,
+    time_shift: int = 0,
+    tbptt_size_start: tuple[int, int] | None = None,  # (size, n_epochs_steps)
+    disable_features: bool | str = False,
+    transform_H: bool = False,
+    noise_on_data: float = 0.0,
+    dyn_avg_kernel_size: int = 11,
+    use_all_data: bool = False,
+    val_every: int = 1,
+    **kwargs,
+) -> tuple[ModelInterface, optax.GradientTransformation, dict, tuple[MaterialSet, MaterialSet, MaterialSet]]:
+    """Create everything necessary for a training experiment from the given parameterization.
+
+    Args:
+        model_label (str): Identifier of the model types to be created.
+        material_name (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
+        loss_type (str): Idenfier for the type of training loss to use.
+        model_key (jax.random.PRNGKey): Pseudo random number generation key for the creation of the model.
+            This key is derived from the key initially given into the algorithm, if `setup_model` is used
+            from within the training script.
+        subsample_freq (int): The frequency with which the data set should be subsampled after loading.
+            `1` returns the data set as is, `2` only returns every other element, etc.
+        n_epochs (int): The number of epochs to train for.
+        tbptt_size (int): Length of the sequences to process per parameter update (i.e., per gradient calculation).
+        batch_size (int): Number of parallel sequences to process per parameter update (i.e., per gradient calculation).
+        past_size (int): Number of warmup steps before the prediction starts.
+        time_shift (int): When specifying a value `!=0`, a feature is added where the `B` trajectory is shifted by that
+            number of time steps
+        tbptt_size_start (tuple[int, int]): Optional training with specified sequence length (first element of tuple)
+            and the number of epochs to train with this sequence length (second element of tuple). This might be helpful when
+            the model diverges on the full sequence length and needs to start training with shorter sequences to stabilize
+            first.
+        disable_features (bool | str): One of (True, False, "reduce"), True uses no features, False uses all default features,
+            "reduce" uses the dB/dt and d^2 B / dt^2 as features.
+        transform_H (bool): Whether a tanh transform for H should be utilized.
+        noise_on_data (float): The standard deviation of noise added to the `B` trajectories.
+        dyn_avg_kernel_size (int): The kernel size of the dynamic average feature.
+        use_all_data (bool): Whether all data should be used for training or if instead a train, eval, test split should be performed.
+        val_every (int): How often the a validation loss should be computed.
+
+    Returns:
+        The model with the proper interface, the parameter optimizer, the loss function, a dict of parameters,
+            and the data tuple containing (train_set, eval_set, test_set).
+    """
+    if "data_tuple" in kwargs:
+        data_tuple = kwargs.pop("data_tuple")
+    else:
+        data_tuple = setup_dataset(
+            material_name=material_name,
+            subsampling_freq=subsample_freq,
+            use_all_data=use_all_data,
+        )
+
+    featurize = setup_featurize(
+        disable_features=disable_features,
+        dyn_avg_kernel_size=dyn_avg_kernel_size,
+        time_shift=time_shift,
+    )
+
+    if "normalizer" in kwargs:
+        normalizer = kwargs.pop("normalizer")
+    else:
+        # get_normalizer nur aufrufen, wenn sie nicht in kwargs sind
+        normalizer = setup_normalizer(
+            data_tuple[0],
+            featurize,
+            transform_H,
+        )
+
+    wrapped_model, model_params_d = setup_model(
+        model_label=model_label,
+        model_key=model_key,
+        normalizer=normalizer,
+        featurize=featurize,
+        tbptt_size=tbptt_size,
+        past_size=past_size,
+        time_shift=time_shift,
+        tbptt_size_start=tbptt_size_start,
+    )
+
+    loss_function = setup_loss(loss_label=loss_type)
+
+    # validate parameterization
     assert (
         past_size < tbptt_size
     ), f"The trajectory is too short for the specified warm-up time. {past_size} < {tbptt_size}."
@@ -347,6 +444,7 @@ def setup_model(
             + f"the specified warm-up time. {past_size} < {tbptt_size_start[0]}."
         )
 
+    lr_params = None
     params = dict(
         training_params=dict(
             n_epochs=n_epochs,
@@ -379,30 +477,7 @@ def setup_model(
     lr_schedule = optax.schedules.exponential_decay(**params["lr_params"])
     optimizer = optax.adam(lr_schedule)
 
-    wrapped_model = mdl_interface_cls(
-        model=model,
-        normalizer=normalizer,
-        featurize=featurize,
-    )
-
     params["model_params"] = model_params_d  # defined from outside
     params["model_params"]["key"] = params["model_params"]["key"].tolist()
 
-    return wrapped_model, optimizer, params, data_tuple
-
-
-def setup_loss(loss_label: str) -> Callable:
-    """Returns the callable loss function based on the provided string identifier."""
-
-    match loss_label:
-        case "MSE":
-            loss_function = MSE_loss
-        case "adapted_RMS":
-            loss_function = adapted_RMS_loss
-        case _:
-            raise ValueError(f"Unknown loss type: {loss_label}. Choose on of {SUPPORTED_LOSSES}")
-
-    # loss function is expected to return the value and the gradient w.r.t. to the model parameters
-    loss_function = eqx.filter_value_and_grad(loss_function)
-
-    return loss_function
+    return wrapped_model, optimizer, loss_function, params, data_tuple
