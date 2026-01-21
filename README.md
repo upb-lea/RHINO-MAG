@@ -122,6 +122,6 @@ for idx in range(min(H_pred.shape[0], max_n_plots)):
     plot_sequence_prediction(B[idx], H[idx], T[idx], H_pred[idx], past_size=past_size, figsize=(4,4))
     plt.show()
 ```
-Exemplary results:
+Exemplary results (for material B with model `B_GRU8_reduced-features-f32_c785b2c3_seed12`):
 
 <img src="fig/prediction_0.png" width=33%> <img src="fig/prediction_1.png" width=33%> <img src="fig/prediction_2.png" width=33%> <img src="fig/prediction_3.png" width=33%> <img src="fig/prediction_4.png" width=33%>
