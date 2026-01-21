@@ -11,7 +11,7 @@ from mc2.runners.rnn_training_jax import train_model_jax
 
 train_model_jax(
     material="A",
-    model_type=["GRU4", "JA"],
+    model_types=["GRU4", "JA"],
     seeds=[1, 2, 3],
     exp_name="demonstration",
     loss_type="adapted_RMS",
@@ -34,7 +34,7 @@ train_model_jax(
 or, e.g.:
 
 ```
-python mc2/runners/rnn_training_jax.py --material "A" --model_type "GRU4" "JA" --seeds 1 2 3 --exp_name "demonstration"
+python mc2/runners/rnn_training_jax.py --material "A" --model_types "GRU4" "JA" --seeds 1 2 3 --exp_name "demonstration"
 
 """
 
@@ -77,10 +77,10 @@ def parse_args() -> argparse.Namespace:
         help=f"Material label to train on. One of {AVAILABLE_MATERIALS}",
     )
     parser.add_argument(
-        "--model_type",
+        "--model_types",
         nargs="+",
         required=True,
-        help=f"Model type to train with. One of {SUPPORTED_MODELS}",
+        help=f"Model types to train with. One or multiple of {SUPPORTED_MODELS}",
     )
     parser.add_argument(
         "--loss_type",
@@ -270,7 +270,7 @@ def run_experiment_for_seed(
 
 def train_model_jax(
     material_name: str,
-    model_type: list[str],
+    model_types: list[str],
     seeds: list[int],
     exp_name: str | None = None,
     loss_type: str = "adapted_RMS",
@@ -292,7 +292,7 @@ def train_model_jax(
 
     Args:
         material_name (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
-        model_type (list[str]): List of identifiers of the model types to be trained.
+        model_types (list[str]): List of identifiers of the model types to be trained.
             See `mc2.runners.model_setup.SUPPORTED_MODELS` for all available models. The trainings for
             each specified model type are done sequentially, i.e., each model_type is trained for all
             seeds specified individually.
@@ -330,9 +330,9 @@ def train_model_jax(
         seeds_to_run = seeds
 
     log.info(
-        f"Starting experiments for {len(model_type)} model type(s) and {len(seeds_to_run)} seeds: {model_type}, {seeds_to_run}"
+        f"Starting experiments for {len(model_types)} model type(s) and {len(seeds_to_run)} seeds: {model_types}, {seeds_to_run}"
     )
-    for model_type in model_type:
+    for model_type in model_types:
         log.info(f"--- Starting experiments for Model Type: {model_type} ---")
         if exp_name is None:
             base_id = f"{material_name}_{model_type}_{str(uuid4())[:8]}"
@@ -370,7 +370,7 @@ if __name__ == "__main__":
     args = parse_args()
     train_model_jax(
         material_name=args.material,
-        model_type=args.model_type,
+        model_types=args.model_types,
         seeds=args.seeds,
         exp_name=args.exp_name,
         loss_type=args.loss_type,
