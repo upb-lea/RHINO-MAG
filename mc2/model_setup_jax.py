@@ -427,10 +427,7 @@ def setup_experiment(
         model_key=model_key,
         normalizer=normalizer,
         featurize=featurize,
-        tbptt_size=tbptt_size,
-        past_size=past_size,
         time_shift=time_shift,
-        tbptt_size_start=tbptt_size_start,
     )
 
     loss_function = setup_loss(loss_label=loss_type)
