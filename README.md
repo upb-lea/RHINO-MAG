@@ -14,7 +14,25 @@ Official site for the second magnet challenge https://github.com/minjiechen/magn
 - navigate to the downloaded repo
 - install it with `pip install -e .` (this is to have installed as an editable site package)
 - now you should be able to import `mc2` from within your venv
-- additionally to the installation, you will need to add the raw material data to `data/raw/` (e.g., `data/raw/A/A_1_B.csv`, `data/raw/C/C_3_B.csv`). The data itself should be available in the [MagNetX Database](http://github.com/PaulShuk/MagNetX?tab=readme-ov-file).
+
+## Sort data in:
+- additionally to the installation, you will need to add the raw material data to `data/raw/` (e.g., `data/raw/A/A_1_B.csv`, `data/raw/C/C_3_B.csv`).
+- the data itself should be available in the [MagNetX Database](http://github.com/PaulShuk/MagNetX?tab=readme-ov-file).
+- download the data, unzip it, and move the content to `data/raw/`
+- the folder structure should look like this:
+    ```text
+    └── data/raw
+        ├── Material A/
+        ├── Material B/
+        ├── Material C/
+        ├── Material D/
+        ├── Material E/
+        ├── (optional further folders, e.g., 3C90, N49, ...)
+        ├── ...
+        ├── ...
+        └── sort_raw_data.py
+    ```
+- run the script `python data/raw/sort_raw_data.py`
 
 
 

@@ -2,7 +2,6 @@
 
 import tqdm
 import pandas as pd
-import pickle
 import json
 from typing import Dict, Tuple, Callable
 from pathlib import Path
@@ -22,6 +21,7 @@ import equinox as eqx
 DATA_ROOT = Path(__file__).parent.parent / "data"
 PRETEST_DATA_ROOT = DATA_ROOT / "pretest_raw"
 MODEL_DUMP_ROOT = DATA_ROOT / "models"
+RAW_DATA_ROOT = DATA_ROOT / "raw"
 CACHE_ROOT = DATA_ROOT / "cache"
 PRETEST_CACHE_ROOT = DATA_ROOT / "pretest_cache"
 EXPERIMENT_LOGS_ROOT = DATA_ROOT / "experiment_logs"
@@ -30,6 +30,7 @@ NORMALIZATION_ROOT = DATA_ROOT / "normalization_values"
 # create data directories if they do not exist yet
 for root_dir in (
     CACHE_ROOT,
+    RAW_DATA_ROOT,
     MODEL_DUMP_ROOT,
     EXPERIMENT_LOGS_ROOT,
     PRETEST_DATA_ROOT,
