@@ -39,7 +39,7 @@ def make_step(
 ):
     loss, grads = loss_function(model, B_past, H_past, B_future, H_future, T, batch_H_rms)
 
-    grads = jax.tree_map(lambda g: jnp.nan_to_num(g, nan=0.0, posinf=1.0, neginf=-1.0), grads)
+    grads = jax.tree.map(lambda g: jnp.nan_to_num(g, nan=0.0, posinf=1.0, neginf=-1.0), grads)
 
     updates, opt_state = optim.update(grads, opt_state)
     model = eqx.apply_updates(model, updates)
@@ -369,7 +369,7 @@ def train_model(
     # )
 
     best_val_loss = float("inf")
-    best_model = jax.tree_util.tree_map(lambda x: x, model)
+    best_model = jax.tree.map(lambda x: x, model)
 
     test_loss, *_ = val_test(test_set, model, past_size)  # test_set_norm
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
@@ -412,7 +412,7 @@ def train_model(
             logs["loss_trends_val"].append(val_loss.item())
             if val_loss.item() < best_val_loss:
                 best_val_loss = val_loss.item()
-                best_model = jax.tree_util.tree_map(lambda x: x, model)
+                best_model = jax.tree.map(lambda x: x, model)
         pbar_str += f"| val loss {val_loss:.2e}"
         logs["loss_trends_train"].append(train_loss.item())
         pbar.set_postfix_str(pbar_str)
