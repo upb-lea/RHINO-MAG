@@ -62,7 +62,7 @@ from uuid import uuid4
 
 from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
-from mc2.model_setup_jax import setup_experiment, SUPPORTED_MODELS, SUPPORTED_LOSSES
+from mc2.model_setup import setup_experiment, SUPPORTED_MODELS, SUPPORTED_LOSSES
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.model_interfaces.model_interface import save_model
 from mc2.utils.model_evaluation import store_model_to_file
@@ -293,13 +293,13 @@ def train_model_jax(
     Args:
         material_name (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
         model_type (list[str]): List of identifiers of the model types to be trained.
-            See `mc2.runners.model_setup_jax.SUPPORTED_MODELS` for all available models. The trainings for
+            See `mc2.runners.model_setup.SUPPORTED_MODELS` for all available models. The trainings for
             each specified model type are done sequentially, i.e., each model_type is trained for all
             seeds specified individually.
         seeds (list[int]): List of seeds for which a model should be trained.
         exp_name (str): Additional identifier for the experiment (There is a randomly generated identifer for each
             experiment, but this can still be useful for sorting/finding experiments after training)
-        loss_type (str): Identifier for the loss to use in training. See `mc2.runners.model_setup_jax.SUPPORTED_LOSSES`.
+        loss_type (str): Identifier for the loss to use in training. See `mc2.runners.model_setup.SUPPORTED_LOSSES`.
         gpu_id (int): The index of the CUDA device / GPU to use. Specifying "-1" uses the CPU instead.
         epochs (int): The number of epochs to train for.
         batch_size (int): Number of parallel sequences to process per parameter update (i.e., per gradient calculation).
