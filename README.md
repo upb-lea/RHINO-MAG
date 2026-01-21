@@ -4,6 +4,9 @@ This is the contribution of Team "Siegen and Paderborn" to the MagNet Challenge 
 
 Official site for the second magnet challenge https://github.com/minjiechen/magnetchallenge-2
 
+## The task:
+Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)$ based on the previously observed magnetic field $H_t$ with $t \in \left[t_0, t_1\right)$, the magnetic flux density $B_t$ with $t \in \left[t_0, t_2\right)$, and the temperature $\vartheta$.
+
 ![Exemplary Prediction Task](fig/B_H_prediction_example.png)
 
 ## Installation:
@@ -73,7 +76,7 @@ from mc2.runners.rnn_training_jax import main as train_model_jax
 
 train_model_jax(
     material_name="A",
-    model_type=["GRU4", "JA"],
+    model_types=["GRU4", "JA"],
     seeds=[1, 2, 3],
     exp_name="demonstration",
     loss_type="adapted_RMS",
