@@ -41,7 +41,7 @@ class ModelInterface(eqx.Module):
             T (float): The temperature of the material with shape (n_batches,)
 
         Returns:
-            H_future (jax.Array): The physical (non-normalized) field values from time
+            H_pred (jax.Array): The physical (non-normalized) field values from time
                 step k1 to k2 with shape (n_batches, future_sequence_length)
         """
         pass
@@ -68,7 +68,7 @@ class ModelInterface(eqx.Module):
             T_norm (float): The normalized temperature of the material with shape (n_batches,)
 
         Returns:
-            H_future_norm (jax.Array): The normalized field values from time step k1 to k2
+            H_pred_norm (jax.Array): The normalized field values from time step k1 to k2
                 with shape (n_batches, future_sequence_length)
         """
         pass
