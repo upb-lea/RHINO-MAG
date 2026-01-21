@@ -1,3 +1,5 @@
+"""Generic RNN model implementations."""
+
 from typing import Callable
 
 import jax
@@ -13,11 +15,34 @@ class GRU(eqx.Module):
     hidden_size: int = eqx.field(static=True)
     cell: eqx.Module
 
-    def __init__(self, in_size, hidden_size, *, key):
+    def __init__(self, in_size: int, hidden_size: int, *, key):
+        """Construct a basic Gated Recurrent Unit (GRU) based on the `equinox.nn.GRUCell`.
+
+        Args:
+            in_size (int): Number of input elements
+            hidden_size (int): Number of hidden state elements
+            key (jax.random.PRNGkey): Pseudo random number generation key for initialization of the
+                model parameters
+        """
         self.hidden_size = hidden_size
         self.cell = eqx.nn.GRUCell(in_size, hidden_size, key=key)
 
-    def __call__(self, input, init_hidden):
+    def __call__(self, input: jax.Array, init_hidden: jax.Array) -> jax.Array:
+        """Use the GRU to roll over an input sequence.
+
+        The first element of the hidden state is interpreted as the output of the GRU in each.
+
+        NOTE: This function is not expecting a batch dimension. It is intended to vmapped over for
+            batch-wise predictions!
+
+        Args:
+            input (jax.Array): Input sequence with shape (sequence_length, in_size)
+            init_hidden (jax.Array): Initial vector for the hidden state with shape (hidden_size,)
+
+        Returns:
+            The output sequence as a jax.Array with shape (sequence_length, 1)
+        """
+
         hidden = init_hidden
 
         def f(carry, inp):
@@ -29,9 +54,23 @@ class GRU(eqx.Module):
         _, out = jax.lax.scan(f, hidden, input)
         return out
 
-    def warmup_call(self, input, init_hidden, out_true):
+    def warmup_call(self, input: jax.Array, init_hidden: jax.Array, out_true: jax.Array) -> jax.Array:
+        """Warm up the hidden state of the GRU with an input sequence where the true outputs are known.
+
+        The basic idea is to feed the true value into the first element of the hidden state in each step
+        so that the output prediction does not diverge while the other elements of the GRU may change to
+        get into shape to best predict the following sequence without known true values.
+
+        Args:
+            input (jax.Array): Input sequence with shape (sequence_length, in_size)
+            init_hidden (jax.Array): Initial vector for the hidden state with shape (hidden_size,)
+            out_true (jax.Array): The true output values with shape (sequence_length,)
+
+        Returns:
+            The outputs as jax.Array with shape (sequence_length,) (these will be the same as out_true) and
+                the final warmed up hidden_state
+        """
         hidden = init_hidden
-        # TODO: move construct hidden here?
 
         def f(carry, inp):
             inp_t, out_true_t = inp
@@ -44,9 +83,9 @@ class GRU(eqx.Module):
         final_hidden, out = jax.lax.scan(f, hidden, (input, out_true))
         return out, final_hidden
 
-    def construct_init_hidden(self, out_true, batch_size):
+    def construct_init_hidden(self, out_true: jax.Array, batch_size: int) -> jax.Array:
+        """Put together the very first initial state. Concatenates the given true value with zeros."""
         return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])
-    
 
 
 class GRU2(eqx.Module):
