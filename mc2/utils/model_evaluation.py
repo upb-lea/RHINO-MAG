@@ -12,7 +12,7 @@ import equinox as eqx
 
 from mc2.data_management import DATA_ROOT, EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT, MaterialSet, Normalizer
 from mc2.training.data_sampling import draw_data_uniformly
-from mc2.model_setup_jax import setup_model
+from mc2.model_setup_jax import setup_model, setup_experiment, setup_featurize
 from mc2.model_interfaces.model_interface import load_model, ModelInterface, save_model
 from mc2.metrics import sre, nere
 
@@ -91,6 +91,29 @@ def load_parameterization(exp_id):
 
 
 def reconstruct_model_from_file(filename: pathlib.Path) -> ModelInterface:
+    """Reconstruct a model from its file stored on disk.
+
+    Args:
+        filename (pathlib.Path): The path of file to load. If the suffix is missing, `.eqx` is
+            added by default. One can  give the full path of the model file or, if the
+            file cannot be found at the specified path, the function looks for the model in
+            the `mc2.data_management.MODEL_DUMP_ROOT`, which is the default folder models are
+            stored in.
+
+            The commands:
+            ```
+            from mc2.data_management import MODEL_DUMP_ROOT
+            reconstruct_model_from_file('A_GRU8_reduced-features-f32_2a1473b6_seed12')
+            reconstruct_model_from_file('A_GRU8_reduced-features-f32_2a1473b6_seed12.eqx')
+            reconstruct_model_from_file(MODEL_DUMP_ROOT / 'A_GRU8_reduced-features-f32_2a1473b6_seed12.eqx')
+            ```
+            All load the same model at `data/models` unless a file with the same name is present in the cwd
+            in which case the first two calls load that model from the cwd and the last one loads the model
+            from `data/models`. Generally, the intended way is to call using the first version.
+
+    Returns:
+        The ModelInterface object (i.e., the model wrapped into the corresponing interface)
+    """
 
     filename = pathlib.Path(filename)
 
@@ -113,13 +136,17 @@ def reconstruct_model_from_file(filename: pathlib.Path) -> ModelInterface:
         params = json.loads(f.readline().decode())
 
         normalizer = Normalizer.from_dict(params["normalizer_dict"])
-        fresh_wrapped_model, _, _, data_tuple = setup_model(
+        featurize = setup_featurize(
+            disable_features=params["training_params"]["disable_features"],
+            dyn_avg_kernel_size=params["training_params"]["dyn_avg_kernel_size"],
+            time_shift=params["training_params"]["time_shift"],
+        )
+        fresh_wrapped_model, _ = setup_model(
             model_label=params["model_type"],
-            material_name=params["material_name"],
             model_key=jax.random.PRNGKey(0),
-            **params["training_params"],
             normalizer=normalizer,
-            data_tuple=(None, None, None),
+            featurize=featurize,
+            time_shift=params["training_params"]["time_shift"],
         )
 
         loading_params = deepcopy(params["model_params"])
@@ -132,6 +159,19 @@ def reconstruct_model_from_file(filename: pathlib.Path) -> ModelInterface:
 
 
 def store_model_to_file(filename: pathlib.Path, wrapped_model: ModelInterface, params: dict):
+    """Store the given model at the specified filepath.
+
+    NOTE: This needs the parameter dict from which the model was created!
+
+    Args:
+        filename (pathlib.Path): Filepath at which to store the model
+        wrapped_model (ModelInterface): Model object to save on disk
+        params (dict): Parameter dict that was used to create the model
+
+    Returns:
+        None
+
+    """
     assert "model_type" in params.keys()
     assert "material_name" in params.keys()
 
@@ -140,6 +180,9 @@ def store_model_to_file(filename: pathlib.Path, wrapped_model: ModelInterface, p
 
 
 def reconstruct_model_from_exp_id(exp_id, **kwargs):
+    """NOTE: Deprecated in favor of 'reconstruct_model_from_file' and 'store_model_to_file' for
+    saving and loading models.
+    """
 
     material_name = exp_id.split("_")[0]
     model_type = exp_id.split("_")[1]
@@ -150,10 +193,11 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
         with open(experiment_path / f"{exp_id}.json", "r") as f:
             params = json.load(f)["params"]
         print(f"Parameters for the model setup were found at '{experiment_path / exp_id}' and are utilized.")
-        fresh_wrapped_model, _, _, data_tuple = setup_model(
+        fresh_wrapped_model, _, _, data_tuple = setup_experiment(
             model_label=model_type,
             material_name=material_name,
             model_key=jax.random.PRNGKey(0),
+            loss_type=params["loss_type"] if "loss_type" in params.keys() else "adapted_RMS",
             **params["training_params"],
             **kwargs,
         )
@@ -162,10 +206,11 @@ def reconstruct_model_from_exp_id(exp_id, **kwargs):
             f"No parameters could be found under '{experiment_path}' for exp_id: '{exp_id}', "
             + "continues with default setup for the given model type specified in 'setup_model'."
         )
-        fresh_wrapped_model, _, _, data_tuple = setup_model(
+        fresh_wrapped_model, _, _, data_tuple = setup_experiment(
             model_label=model_type,
             material_name=material_name,
             model_key=jax.random.PRNGKey(0),
+            loss_type=params["loss_type"] if "loss_type" in params.keys() else "adapted_RMS",
             **kwargs,
         )
 

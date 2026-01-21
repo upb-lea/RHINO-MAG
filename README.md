@@ -54,7 +54,7 @@ from mc2.runners.rnn_training_jax import main as train_model_jax
 
 
 train_model_jax(
-    material="A",
+    material_name="A",
     model_type=["GRU4", "JA"],
     seeds=[1, 2, 3],
     exp_name="demonstration",

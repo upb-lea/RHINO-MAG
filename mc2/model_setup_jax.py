@@ -165,6 +165,7 @@ def setup_featurize(
     else:
         raise ValueError("Option 'disable_features' with value '{disable_features}' cannot be processed.")
     featurize = partial(featurize, time_shift=time_shift)
+    return featurize
 
 
 def setup_model(
@@ -479,5 +480,6 @@ def setup_experiment(
 
     params["model_params"] = model_params_d  # defined from outside
     params["model_params"]["key"] = params["model_params"]["key"].tolist()
+    params["loss_type"] = loss_type
 
     return wrapped_model, optimizer, loss_function, params, data_tuple

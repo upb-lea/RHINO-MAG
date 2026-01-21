@@ -42,7 +42,7 @@ if __name__ == "__main__":
 
     ## reduced feature set
     train_model_jax(
-        material=args.material,
+        material_name=args.material,
         model_type=["GRU8"],
         seeds=[12, 53, 66],
         exp_name=f"reduced-features{accuracy_tag}",
@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
     ## Default setup
     train_model_jax(
-        material=args.material,
+        material_name=args.material,
         model_type=["GRU8"],
         seeds=[12, 53, 66],
         exp_name=f"default{accuracy_tag}",
@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
     ## larger kernel
     train_model_jax(
-        material=args.material,
+        material_name=args.material,
         model_type=["GRU8"],
         seeds=[12, 53, 66],
         exp_name=f"larger-kernel{accuracy_tag}",
@@ -105,7 +105,7 @@ if __name__ == "__main__":
 
     # ## Transformed
     # train_model_jax(
-    #     material=args.material,
+    #     material_name=args.material,
     #     model_type=["GRU8"],
     #     seeds=[12, 53, 66, 105, 6],
     #     exp_name=f"transformed{accuracy_tag}",
@@ -125,7 +125,7 @@ if __name__ == "__main__":
 
     # ## incl shift
     # train_model_jax(
-    #     material=args.material,
+    #     material_name=args.material,
     #     model_type=["GRU8"],
     #     seeds=[12, 53, 66, 105, 6],
     #     exp_name=f"shift{accuracy_tag}",
@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
     # ## incl shift
     # train_model_jax(
-    #     material=args.material,
+    #     material_name=args.material,
     #     model_type=["GRU8"],
     #     seeds=[12, 53, 66, 105, 6],
     #     exp_name=f"long{accuracy_tag}",
