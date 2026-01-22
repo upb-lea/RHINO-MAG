@@ -127,10 +127,10 @@ def reconstruct_model_from_file(filename: pathlib.Path) -> ModelInterface:
     else:
         search_path = MODEL_DUMP_ROOT / filename
         if search_path.is_file():
-            print(f"Found model file at {search_path}. Loading model..")
+            print(f"Found model file at '{search_path}'. Loading model..")
             filename = search_path
         else:
-            raise ValueError(f"No model could be found for the specified filepath: {filename}")
+            raise ValueError(f"No model could be found for the specified filepath: '{filename}'")
 
     with open(filename, "rb") as f:
         params = json.loads(f.readline().decode())
