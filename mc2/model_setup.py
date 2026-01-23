@@ -42,6 +42,7 @@ from mc2.models.jiles_atherton import (
     LFRWithGRUJA,
 )
 from mc2.models.linear import LinearStatic
+from mc2.models.dummy_model import DummyModel
 
 # Interfaces
 from mc2.model_interfaces.model_interface import ModelInterface
@@ -62,6 +63,7 @@ from mc2.model_interfaces.ja_interfaces import (
     LFRWithGRUJAwInterface,
 )
 from mc2.model_interfaces.linear_interfaces import LinearInterface
+from mc2.model_interfaces.dummy_model_interface import DummyModelInterface
 
 SUPPORTED_MODELS = ["GRU{hidden-size}", "HNODE", "JA"]
 SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
@@ -314,7 +316,10 @@ def setup_model(
             model_params_d = dict(in_size=model_in_size + 1, hidden_size=8, key=model_key)
             model = JADirectParamGRU(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
-
+        case "DummyModel":
+            model_params_d = dict(key=model_key)
+            model = DummyModel(key=model_key)
+            mdl_interface_cls = DummyModelInterface
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
 
@@ -478,5 +483,7 @@ def setup_experiment(
     params["model_params"] = model_params_d  # defined from outside
     params["model_params"]["key"] = params["model_params"]["key"].tolist()
     params["loss_type"] = loss_type
+    params["material_name"] = material_name
+    params["model_type"] = model_label
 
     return wrapped_model, optimizer, loss_function, params, data_tuple

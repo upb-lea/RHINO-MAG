@@ -352,8 +352,6 @@ def train_model(
         )
 
     train_set_norm = train_set.normalize(normalizer=model.normalizer, transform_H=None)
-    # val_set_norm = val_set.normalize(normalizer=model.normalizer, transform_H=None)
-    # test_set_norm = test_set.normalize(normalizer=model.normalizer, transform_H=None)
 
     logs = {
         "material": material_name,
@@ -363,15 +361,11 @@ def train_model(
     }
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
-    # options = ocp.CheckpointManagerOptions(max_to_keep=3, create=True)
-    # manager = ocp.CheckpointManager(
-    #     checkpoint_dir, ocp.PyTreeCheckpointer(), options
-    # )
 
     best_val_loss = float("inf")
     best_model = jax.tree.map(lambda x: x, model)
 
-    test_loss, *_ = val_test(test_set, model, past_size)  # test_set_norm
+    test_loss, *_ = val_test(test_set, model, past_size)
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
     if (n_steps > 0 and n_epochs > 0) or (n_steps == 0 and n_epochs == 0):
         raise ValueError("Please set either `n_steps` or `n_epochs` to a value greater than 0.")

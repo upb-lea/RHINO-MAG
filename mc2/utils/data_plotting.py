@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import jax.numpy as jnp
 
+from mc2.utils.model_evaluation import get_mixed_frequency_arrays
 
 def plot_single_sequence(B, H, T, t=None, fig=None, axs=None):
     if fig is None or axs is None:
@@ -69,3 +70,65 @@ def plot_hysteresis_prediction(B, H, T, H_pred, past_size):
     axs.plot(H_pred, B[past_size:])
 
     return fig, axs
+
+
+def plot_frequency_sweep(material_set, loader_key, figsize=(30, 8), sequence_length=1000, batch_size=1):
+    # gather data
+
+    H, B, T = get_mixed_frequency_arrays(
+        material_set,
+        sequence_length=sequence_length,
+        batch_size=batch_size,
+        key=loader_key,
+    )
+
+    if batch_size == 1:
+
+        # plot
+        fig, axs = plt.subplots(3, 7, figsize=figsize)
+        for freq_idx in range(len(material_set.frequencies)):
+            axs[0, freq_idx].plot(B[freq_idx])
+            axs[1, freq_idx].plot(H[freq_idx])
+
+            axs[2, freq_idx].plot(H[freq_idx], B[freq_idx])
+
+            axs[0, freq_idx].grid(True, alpha=0.3)
+            axs[1, freq_idx].grid(True, alpha=0.3)
+            axs[2, freq_idx].grid(True, alpha=0.3)
+
+            axs[0, freq_idx].set_ylabel("B")
+            axs[0, freq_idx].set_xlabel("k")
+            axs[1, freq_idx].set_ylabel("H")
+            axs[1, freq_idx].set_xlabel("k")
+            axs[2, freq_idx].set_ylabel("B")
+            axs[2, freq_idx].set_xlabel("H")
+
+            axs[0, freq_idx].set_title("frequency: " + str(int(material_set.frequencies[freq_idx] / 1e3)) + " kHz")
+
+        fig.tight_layout()
+        return fig, axs
+
+    else:
+        for batch_idx in range(batch_size):
+            fig, axs = plt.subplots(3, 7, figsize=figsize)
+            for freq_idx in range(len(material_set.frequencies)):
+                axs[0, freq_idx].plot(B[freq_idx, batch_idx])
+                axs[1, freq_idx].plot(H[freq_idx, batch_idx])
+
+                axs[2, freq_idx].plot(H[freq_idx, batch_idx], B[freq_idx, batch_idx])
+
+                axs[0, freq_idx].grid(True, alpha=0.3)
+                axs[1, freq_idx].grid(True, alpha=0.3)
+                axs[2, freq_idx].grid(True, alpha=0.3)
+
+                axs[0, freq_idx].set_ylabel("B")
+                axs[0, freq_idx].set_xlabel("k")
+                axs[1, freq_idx].set_ylabel("H")
+                axs[1, freq_idx].set_xlabel("k")
+                axs[2, freq_idx].set_ylabel("B")
+                axs[2, freq_idx].set_xlabel("H")
+
+                axs[0, freq_idx].set_title("frequency: " + str(int(material_set.frequencies[freq_idx] / 1e3)) + " kHz")
+
+            fig.tight_layout()
+            plt.show()

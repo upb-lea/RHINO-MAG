@@ -121,4 +121,4 @@ def count_model_parameters(model: ModelInterface, filter: Callable = eqx.is_arra
     """Returns the number of Parameters in the model by summing the sizes of the jax.Arrays.
     That is, all parameters of the model must be jax.Arrays for this function to work!
     """
-    return sum([p.size if hasattr(p, "size") else 1 for p in jax.tree_leaves(eqx.filter(model, filter, None))])
+    return sum([p.size if hasattr(p, "size") else 1 for p in jax.tree.leaves(eqx.filter(model, filter, None))])
