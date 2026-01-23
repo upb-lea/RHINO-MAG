@@ -42,26 +42,30 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)
 ## Repository structure:
 
 ```text
-├── data/                           # Holds the material data, stored models, experiment logs, etc
-│   ├── cache/                      # Cached versions of raw data (auto-generated after first load of raw data)
-│   ├── models/                     # Stored models as .eqx files
-│   └── raw/                        # Unprocessed material folders (e.g., A/A_1_B.csv)
-├── dev/                            # Unmaintained Jupyter notebooks (i.e., they might work, but could be outdated)
-├── examples/                       # Maintained example notebooks
-│   ├── final_test_data_eval.ipynb  # Testing on MC2 host data
-│   ├── model_inspection.ipynb      # Loading, evaluation, and visualization
-│   └── model_training.ipynb        # Model training walkthrough
-└── mc2/                            # Core source code
-    ├── features/                   # Feature engineering implementations
-    ├── model_interface/            # Logic for model-data interaction
-    ├── models/                     # Generic model architectures
-    ├── runners/                    # Executable training scripts
-    ├── training/                   # Training-specific utilities
-    ├── utils/                      # Evaluation, plotting, and processing tools
-    ├── data_management.py          # Dataset loading and splitting logic
-    ├── losses.py                   # Training loss function implementations
-    ├── model_setup.py              # Generate model objects from parameterizations (used for creating models and loading models from disk)
-    └── metrics.py                  # Evaluation metric implementations
+├── data/                                   # Holds the material data, stored models, experiment logs, etc
+│   ├── cache/                              # Cached versions of raw data (auto-generated after first load of raw data)
+│   ├── models/                             # Stored models as .eqx files
+│   └── raw/                                # Unprocessed material folders (e.g., A/A_1_B.csv)
+├── dev/                                    # Unmaintained Jupyter notebooks (i.e., they might work, but could be outdated)
+├── examples/                               # Maintained example notebooks
+|   ├── introductory/ 
+|   |   ├── model_inspection.ipynb          # Loading, evaluation, and visualization
+|   |   ├── model_training.ipynb            # Model training walkthrough
+│   │   ├── final_test_data_eval.ipynb      # Testing on MC2 host data
+│   ├── └── overview_all_mats_models.ipynb  # Overview over all material data and the model files pushed to the repository
+│   └── advanced/
+|       └── adding_your_own_models.ipynb    # Small guide on how to add your own models to the repo
+└── mc2/                                    # Core source code
+    ├── features/                           # Feature engineering implementations
+    ├── model_interface/                    # Logic for model-data interaction
+    ├── models/                             # Generic model architectures
+    ├── runners/                            # Executable training scripts
+    ├── training/                           # Training-specific utilities
+    ├── utils/                              # Evaluation, plotting, and processing tools
+    ├── data_management.py                  # Dataset loading and splitting logic
+    ├── losses.py                           # Training loss function implementations
+    ├── model_setup.py                      # Generate model objects from parameterizations (used for creating models and loading models from disk)
+    └── metrics.py                          # Evaluation metric implementations
 ```
 
 ## Exemplary Usage:
