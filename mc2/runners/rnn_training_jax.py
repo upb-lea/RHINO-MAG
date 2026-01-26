@@ -72,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train recursive NNs")
     # parser.add_argument("-t", "--tag", default=None, required=False, help="an identifier/tag/comment for the trials")
     parser.add_argument(
-        "--material",
+        "--materials",
         #default=None,
         nargs="+",
         required=True,
@@ -156,7 +156,12 @@ def parse_args() -> argparse.Namespace:
         help="One or more seeds to run the experiments with. Default is [0].",
     )
     parser.add_argument("--disable_f64", action="store_true", default=False)
-    parser.add_argument("--disable_features", action="store_true", default=False)
+    # parser.add_argument("--disable_features", action="store_true", default=False)
+    parser.add_argument(
+        "--disable_features",
+        choices=[True, "reduce", False],
+        default=False
+    )
     parser.add_argument("--transform_H", action="store_true", default=False)
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
@@ -276,7 +281,7 @@ def run_experiment_for_seed(
 
 
 def train_model_jax(
-    material_name: str,
+    material_names: list[str],
     model_types: list[str],
     seeds: list[int],
     exp_name: str | None = None,
@@ -298,7 +303,7 @@ def train_model_jax(
     """Train a model based on the specified parameterization.
 
     Args:
-        material_name (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
+        material_name (list[str]): List of names of materials. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
         model_type (list[str]): List of identifiers of the model types to be trained.
             See `mc2.runners.model_setup_jax.SUPPORTED_MODELS` for all available models. The trainings for
             each specified model type are done sequentially, i.e., each model_type is trained for all
@@ -336,9 +341,9 @@ def train_model_jax(
     else:
         seeds_to_run = seeds
 
-    log.info(f"Starting experiments for material(s) {len(args.material)} for {len(args.model_type)} model type(s) and {len(seeds_to_run)} seeds: {args.model_type}, {seeds_to_run}")
-    for material in args.material:
-        log.info(f"=== Starting experiments for Material: {material} ===")
+    log.info(f"Starting experiments for material(s) {len(material_names)} for {len(model_types)} model type(s) and {len(seeds_to_run)} seeds: {model_types}, {seeds_to_run}")
+    for material_name in material_names:
+        log.info(f"=== Starting experiments for Material: {material_name} ===")
         for model_type in model_types:
             log.info(f"--- Starting experiments for Model Type: {model_type} ---")
             if exp_name is None:
@@ -376,7 +381,7 @@ def train_model_jax(
 if __name__ == "__main__":
     args = parse_args()
     train_model_jax(
-        material_name=args.material,
+        material_names=args.materials,
         model_types=args.model_types,
         seeds=args.seeds,
         exp_name=args.exp_name,
