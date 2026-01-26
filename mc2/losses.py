@@ -1,10 +1,14 @@
+"""Implementation of training loss functions."""
+
 import jax
 import jax.numpy as jnp
 import equinox as eqx
 
+from mc2.model_interfaces.model_interface import ModelInterface
+
 
 def MSE_loss(
-    model: eqx.Module,
+    model: ModelInterface,
     B_past: jax.Array,
     H_past: jax.Array,
     B_future: jax.Array,
@@ -13,12 +17,30 @@ def MSE_loss(
     *args,
     **kwargs,
 ) -> jax.Array:
+    """Computes the MSE between H_future and the prediction of the given model.
+
+    Args:
+        model (ModelInterface): Model to use for prediction
+        B_past (jax.Array): The normalized flux density values from time step k0
+            to k1 with shape (n_batches, past_sequence_length)
+        H_past (jax.Array): The normalized field values from time step k0 to k1
+            with shape (n_batches, past_sequence_length)
+        B_future (jax.Array): The physical normalized flux density values from
+            time step k1 to k2 with shape (n_batches, future_sequence_length)
+        T (float): The normalized temperature of the material with shape (n_batches,)
+        *args, **kwargs: The loss can take further arguments that are ignored so that
+            all losses can be called in the same way, even if some require additional
+            arguments
+
+    Returns:
+        The resulting MSE value as a jax.Array
+    """
     pred_H = (model.normalized_call)(B_past, H_past, B_future, T)
     return jnp.mean((pred_H - H_future) ** 2)
 
 
 def adapted_RMS_loss(
-    model: eqx.Module,
+    model: ModelInterface,
     B_past: jax.Array,
     H_past: jax.Array,
     B_future: jax.Array,
@@ -28,6 +50,26 @@ def adapted_RMS_loss(
     *args,
     **kwargs,
 ) -> jax.Array:
+    """Computes the adapted RMS loss between H_future and the prediction of the given model.
+
+    Args:
+        model (ModelInterface): Model to use for prediction
+        B_past (jax.Array): The normalized flux density values from time step k0
+            to k1 with shape (n_batches, past_sequence_length)
+        H_past (jax.Array): The normalized field values from time step k0 to k1
+            with shape (n_batches, past_sequence_length)
+        B_future (jax.Array): The physical normalized flux density values from
+            time step k1 to k2 with shape (n_batches, future_sequence_length)
+        T (float): The normalized temperature of the material with shape (n_batches,)
+        batch_H_rms (jax.Array): The RMS value of each of the sequences with shape
+            (n_batches,)
+        *args, **kwargs: The loss can take further arguments that are ignored so that
+            all losses can be called in the same way, even if some require additional
+            arguments
+
+    Returns:
+        The resulting adapted RMS loss value as a jax.Array
+    """
     pred_H = (model.normalized_call)(B_past, H_past, B_future, T)
 
     # approximate dB/dt

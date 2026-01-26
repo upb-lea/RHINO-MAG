@@ -1,6 +1,7 @@
+"""Classes to hold and manage the material data."""
+
 import tqdm
 import pandas as pd
-import pickle
 import json
 from typing import Dict, Tuple, Callable
 from pathlib import Path
@@ -16,19 +17,20 @@ import torch
 import numpy as np
 import equinox as eqx
 
-from mc2.utils.data_inspection import load_and_process_single_from_full_file_overview
-
 
 DATA_ROOT = Path(__file__).parent.parent / "data"
 PRETEST_DATA_ROOT = DATA_ROOT / "pretest_raw"
 MODEL_DUMP_ROOT = DATA_ROOT / "models"
+RAW_DATA_ROOT = DATA_ROOT / "raw"
 CACHE_ROOT = DATA_ROOT / "cache"
 PRETEST_CACHE_ROOT = DATA_ROOT / "pretest_cache"
 EXPERIMENT_LOGS_ROOT = DATA_ROOT / "experiment_logs"
 NORMALIZATION_ROOT = DATA_ROOT / "normalization_values"
 
+# create data directories if they do not exist yet
 for root_dir in (
     CACHE_ROOT,
+    RAW_DATA_ROOT,
     MODEL_DUMP_ROOT,
     EXPERIMENT_LOGS_ROOT,
     PRETEST_DATA_ROOT,
@@ -84,37 +86,52 @@ setup_package_logging()
 
 
 class Normalizer(eqx.Module):
+    """Class used to ease normalization of material data.
+
+    Args:
+        B_max (float): Absolute maximum of the B material data used to normalize
+        H_max (float): Absolute maximum of the H material data used to normalize
+        T_max (float): Absolute maximum of the T material data used to normalize
+        norm_fe_max (list[float]): Absolute maximum of the features used to normalize each feature independently
+        H_transform (Callable): Optional transform of H
+        H_inverse_transform (Callable): Inverse transfrom of the `H_transform`
+    """
+
     B_max: float
     H_max: float
     T_max: float
-    # f_max: float
     norm_fe_max: list[float] = eqx.field(static=True)
     H_transform: callable = eqx.field(static=True)
     H_inverse_transform: callable = eqx.field(static=True)
 
-    def normalize(self, B, H, T):  # ,f
-        return (B / self.B_max, self.H_transform(H / self.H_max), T / self.T_max)  # , f / self.f_max
+    def normalize(self, B: jax.Array, H: jax.Array, T: jax.Array) -> tuple[jax.Array, jax.Array, jax.Array]:
+        return (B / self.B_max, self.H_transform(H / self.H_max), T / self.T_max)
 
-    def normalize_H(self, H):
+    def normalize_H(self, H: jax.Array) -> jax.Array:
         return self.H_transform(H / self.H_max)
 
-    def denormalize(self, B, H, T):  # ,f
+    def denormalize(self, B: jax.Array, H: jax.Array, T: jax.Array) -> tuple[jax.Array, jax.Array, jax.Array]:
         H = self.H_inverse_transform(H)
-        return B * self.B_max, H * self.H_max, T * self.T_max  # , f / self.f_max
+        return B * self.B_max, H * self.H_max, T * self.T_max
 
-    def denormalize_H(self, H):
+    def denormalize_H(self, H: jax.Array) -> jax.Array:
         H = self.H_inverse_transform(H)
         return H * self.H_max
 
-    def normalize_fe(self, features):
+    def normalize_fe(self, features: jax.Array) -> jax.Array:
         fe_norm = features / jnp.array(self.norm_fe_max)
         return fe_norm
 
-    def denormalize_fe(self, features):
+    def denormalize_fe(self, features: jax.Array) -> jax.Array:
         return features * jnp.array(self.norm_fe_max)
 
     @classmethod
     def from_dict(cls, params: dict):
+        """Creates a normalizer from a dict for easy loading from disk.
+
+        NOTE: Assumes a tanh transformation as the only possible transformation.
+        """
+
         if params["transform_H"] == False:
             params["H_transform"] = lambda x: x
             params["H_inverse_transform"] = lambda x: x
@@ -125,6 +142,7 @@ class Normalizer(eqx.Module):
         return cls(**params)
 
     def to_dict(self, transform_H: bool = False):
+        """Creates a dict from the normalizer for easy storing on disk."""
         params = {}
         params["transform_H"] = transform_H
         params["B_max"] = self.B_max
@@ -165,14 +183,6 @@ class FrequencySet(eqx.Module):
             T=jnp.array(data_dict["T"]),
             H_RMS=jnp.sqrt(jnp.mean(jnp.square(jnp.array(data_dict["H"])), axis=1)),
         )
-
-    @classmethod
-    def load_from_raw_data(cls, file_overview: pd.DataFrame, material_name: str, frequency: float) -> "FrequencySet":
-        """Load a FrequencySet from raw data."""
-        data_dict = load_and_process_single_from_full_file_overview(
-            file_overview, material_name=material_name, data_type=["B", "T", "H"], frequency=[frequency]
-        )
-        return cls.from_dict(data_dict)
 
     def filter_temperatures(self, temperatures: list[float] | jax.Array) -> "FrequencySet":
         """Filter the frequency set by temperatures."""
@@ -365,42 +375,12 @@ class MaterialSet(eqx.Module):
     frequencies: jax.Array
 
     @classmethod
-    def load_from_file(cls, file_path: str):
-        """Load a MaterialSet from a file."""
-        with open(file_path, "rb") as f:
-            return pickle.load(f)
-
-    def save_to_file(self, file_path: str):
-        """Save the MaterialSet to a file."""
-        with open(file_path, "wb") as f:
-            pickle.dump(self, f)
-
-    @classmethod
     def from_material_name(
         cls,
         material_name: str,
     ) -> "MaterialSet":
         data_dict = load_data_into_pandas_df(material=material_name)
         return cls.from_pandas_dict(data_dict)
-
-    @classmethod
-    def load_from_raw_data(
-        cls,
-        file_overview: pd.DataFrame,
-        material_name: str,
-        frequencies: list[float] | jax.Array,
-    ) -> "MaterialSet":
-        """Load a MaterialSet from raw data."""
-        frequency_sets = []
-        for frequency in frequencies:
-            frequency_set = FrequencySet.load_from_raw_data(file_overview, material_name, frequency)
-            frequency_sets.append(frequency_set)
-
-        return cls(
-            material_name=material_name,
-            frequency_sets=frequency_sets,
-            frequencies=jnp.array(frequencies),
-        )
 
     @classmethod
     def from_pandas_dict(
@@ -701,34 +681,6 @@ class DataSet(eqx.Module):
     @classmethod
     def from_material_names(cls, material_names: list[str]) -> "DataSet":
         return cls([MaterialSet.from_material_name(material_name) for material_name in material_names])
-
-    @classmethod
-    def load_from_raw_data(
-        cls,
-        file_overview: pd.DataFrame,
-        material_names: list[str],
-        frequencies: list[float] | jax.Array,
-    ) -> "DataSet":
-        """Load a DataSet from raw data."""
-
-        material_sets = []
-
-        for material_name in tqdm.tqdm(material_names, desc="Loading MaterialSets"):
-            material_set = MaterialSet.load_from_raw_data(file_overview, material_name, frequencies)
-            material_sets.append(material_set)
-
-        return cls(material_sets)
-
-    @classmethod
-    def load_from_file(cls, file_path: str):
-        """Load a DataSet from a file."""
-        with open(file_path, "rb") as f:
-            return pickle.load(f)
-
-    def save_to_file(self, file_path: str):
-        """Save the DataSet to a file."""
-        with open(file_path, "wb") as f:
-            pickle.dump(self, f)
 
     def __init__(self, material_sets: list[MaterialSet]):
         """Initialize the DataSet with a list of MaterialSet objects."""

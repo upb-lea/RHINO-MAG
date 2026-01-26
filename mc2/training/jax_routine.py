@@ -39,7 +39,7 @@ def make_step(
 ):
     loss, grads = loss_function(model, B_past, H_past, B_future, H_future, T, batch_H_rms)
 
-    grads = jax.tree_map(lambda g: jnp.nan_to_num(g, nan=0.0, posinf=1.0, neginf=-1.0), grads)
+    grads = jax.tree.map(lambda g: jnp.nan_to_num(g, nan=0.0, posinf=1.0, neginf=-1.0), grads)
 
     updates, opt_state = optim.update(grads, opt_state)
     model = eqx.apply_updates(model, updates)
@@ -352,8 +352,6 @@ def train_model(
         )
 
     train_set_norm = train_set.normalize(normalizer=model.normalizer, transform_H=None)
-    # val_set_norm = val_set.normalize(normalizer=model.normalizer, transform_H=None)
-    # test_set_norm = test_set.normalize(normalizer=model.normalizer, transform_H=None)
 
     logs = {
         "material": material_name,
@@ -363,15 +361,11 @@ def train_model(
     }
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
-    # options = ocp.CheckpointManagerOptions(max_to_keep=3, create=True)
-    # manager = ocp.CheckpointManager(
-    #     checkpoint_dir, ocp.PyTreeCheckpointer(), options
-    # )
 
     best_val_loss = float("inf")
-    best_model = jax.tree_util.tree_map(lambda x: x, model)
+    best_model = jax.tree.map(lambda x: x, model)
 
-    test_loss, *_ = val_test(test_set, model, past_size)  # test_set_norm
+    test_loss, *_ = val_test(test_set, model, past_size)
     log.info(f"Test loss seed {seed}: {test_loss:.6f} A/m")
     if (n_steps > 0 and n_epochs > 0) or (n_steps == 0 and n_epochs == 0):
         raise ValueError("Please set either `n_steps` or `n_epochs` to a value greater than 0.")
@@ -412,7 +406,7 @@ def train_model(
             logs["loss_trends_val"].append(val_loss.item())
             if val_loss.item() < best_val_loss:
                 best_val_loss = val_loss.item()
-                best_model = jax.tree_util.tree_map(lambda x: x, model)
+                best_model = jax.tree.map(lambda x: x, model)
         pbar_str += f"| val loss {val_loss:.2e}"
         logs["loss_trends_train"].append(train_loss.item())
         pbar.set_postfix_str(pbar_str)

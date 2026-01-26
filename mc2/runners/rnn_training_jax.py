@@ -11,7 +11,7 @@ from mc2.runners.rnn_training_jax import train_model_jax
 
 train_model_jax(
     material="A",
-    model_type=["GRU4", "JA"],
+    model_types=["GRU4", "JA"],
     seeds=[1, 2, 3],
     exp_name="demonstration",
     loss_type="adapted_RMS",
@@ -34,7 +34,7 @@ train_model_jax(
 or, e.g.:
 
 ```
-python mc2/runners/rnn_training_jax.py --material "A" --model_type "GRU4" "JA" --seeds 1 2 3 --exp_name "demonstration"
+python mc2/runners/rnn_training_jax.py --material "A" --model_types "GRU4" "JA" --seeds 1 2 3 --exp_name "demonstration"
 
 """
 
@@ -60,9 +60,9 @@ import json
 import optax
 from uuid import uuid4
 
-from mc2.data_management import DATA_ROOT, AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
+from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
 from mc2.training.jax_routine import train_model
-from mc2.model_setup_jax import setup_loss, setup_model, SUPPORTED_MODELS, SUPPORTED_LOSSES
+from mc2.model_setup import setup_experiment, SUPPORTED_MODELS, SUPPORTED_LOSSES
 from mc2.metrics import evaluate_model_on_test_set
 from mc2.model_interfaces.model_interface import save_model
 from mc2.utils.model_evaluation import store_model_to_file
@@ -82,7 +82,7 @@ def parse_args() -> argparse.Namespace:
         "--model_types",
         nargs="+",
         required=True,
-        help=f"Model type to train with. One of {SUPPORTED_MODELS}",
+        help=f"Model types to train with. One or multiple of {SUPPORTED_MODELS}",
     )
     parser.add_argument(
         "--loss_type",
@@ -204,10 +204,10 @@ def run_experiment_for_seed(
     ), f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
     assert material in AVAILABLE_MATERIALS, f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
 
-    # TODO: params as .yaml files?
-    wrapped_model, optimizer, params, data_tuple = setup_model(
+    wrapped_model, optimizer, loss_function, params, data_tuple = setup_experiment(
         model_type,
         material,
+        loss_type,
         model_key,
         n_epochs=epochs,
         tbptt_size=tbptt_size,
@@ -222,10 +222,8 @@ def run_experiment_for_seed(
         use_all_data=use_all_data,
     )
 
-    loss_function = setup_loss(loss_type)
-
     exp_id = f"{base_id}_seed{seed}"
-    log.info(f"Training starting. Experiment ID is {exp_id}.")
+    log.info(f"Training starting. Experiment ID is '{exp_id}'.")
 
     # run training
     logs, model = train_model(
@@ -263,9 +261,6 @@ def run_experiment_for_seed(
 
     # store model
     print(model)
-    params["material_name"] = material
-    params["model_type"] = model_type
-
     save_model_params = deepcopy(params)
     store_model_to_file(
         filename=MODEL_DUMP_ROOT / f"{exp_id}.eqx",
@@ -303,15 +298,15 @@ def train_model_jax(
     """Train a model based on the specified parameterization.
 
     Args:
-        material_name (list[str]): List of names of materials. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
-        model_type (list[str]): List of identifiers of the model types to be trained.
+        material_names (str): The name of the material. See `mc2.datamanagement.AVAILABLE_MATERIALS`.
+        model_types (list[str]): List of identifiers of the model types to be trained.
             See `mc2.runners.model_setup_jax.SUPPORTED_MODELS` for all available models. The trainings for
             each specified model type are done sequentially, i.e., each model_type is trained for all
             seeds specified individually.
         seeds (list[int]): List of seeds for which a model should be trained.
         exp_name (str): Additional identifier for the experiment (There is a randomly generated identifer for each
             experiment, but this can still be useful for sorting/finding experiments after training)
-        loss_type (str): Identifier for the loss to use in training. See `mc2.runners.model_setup_jax.SUPPORTED_LOSSES`.
+        loss_type (str): Identifier for the loss to use in training. See `mc2.runners.model_setup.SUPPORTED_LOSSES`.
         gpu_id (int): The index of the CUDA device / GPU to use. Specifying "-1" uses the CPU instead.
         epochs (int): The number of epochs to train for.
         batch_size (int): Number of parallel sequences to process per parameter update (i.e., per gradient calculation).

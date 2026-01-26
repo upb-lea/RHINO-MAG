@@ -45,27 +45,27 @@ if __name__ == "__main__":
 
     if args.material == "A":
         epochs = 10_000
-        model_type = ["GRU8"]
+        model_types = ["GRU8"]
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "B":
         epochs = 1500
-        model_type = ["GRU8"]
+        model_types = ["GRU8"]
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "C":
         epochs = 1500
-        model_type = ["GRU8"]
+        model_types = ["GRU8"]
         dyn_avg_kernel_size = 11
         past_size = 1
     elif args.material == "D":
         epochs = 1500
-        model_type = ["GRU8"]
+        model_types = ["GRU8"]
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "E":
         epochs = 2500
-        model_type = ["GRU8"]
+        model_types = ["GRU8"]
         dyn_avg_kernel_size = 11
         past_size = 28
     else:
@@ -73,8 +73,8 @@ if __name__ == "__main__":
 
     ## Default setup
     train_model_jax(
-        material=args.material,
-        model_type=model_type,
+        material_name=args.material,
+        model_types=model_types,
         seeds=[12, 53, 66, 105, 6],
         exp_name=f"final-reduced-features{accuracy_tag}",
         loss_type="adapted_RMS",
