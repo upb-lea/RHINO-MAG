@@ -6,10 +6,101 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
+from mc2.metrics import sre, nere
 from mc2.data_management import DATA_ROOT, FINAL_MATERIALS, load_data_into_pandas_based_on_path, MaterialSet
 from mc2.model_interfaces.model_interface import ModelInterface, count_model_parameters
 from mc2.utils.model_evaluation import reconstruct_model_from_file, get_exp_ids, evaluate_cross_validation
 
+SIEGEN_PB_HOST_PROVIDED_RESULTS = {
+    "A": {
+        "10%known_90%unknown": {
+            "sre_avg": 11.83 / 100,
+            "sre_95th": 21.62 / 100,
+            "nere_avg": 1.115 / 100,
+            "nere_95th": 3.542 / 100,
+        },
+        "50%known_50%unknown": {
+            "sre_avg": 11.1 / 100,
+            "sre_95th": 21.78 / 100,
+            "nere_avg": 0.6782 / 100,
+            "nere_95th": 2.195 / 100,
+        },
+        "90%known_10%unknown": {
+            "sre_avg": 10.09 / 100,
+            "sre_95th": 26.42 / 100,
+            "nere_avg": 0.162 / 100,
+            "nere_95th": 0.49 / 100,
+        },
+    },
+    "B": {
+        "10%known_90%unknown": {
+            "sre_avg": 7.224 / 100,
+            "sre_95th": 15.17 / 100,
+            "nere_avg": 2.312 / 100,
+            "nere_95th": 6.938 / 100,
+        },
+        "50%known_50%unknown": {
+            "sre_avg": 6.861 / 100,
+            "sre_95th": 17.71 / 100,
+            "nere_avg": 1.199 / 100,
+            "nere_95th": 3.858 / 100,
+        },
+        "90%known_10%unknown": {
+            "sre_avg": 5.275 / 100,
+            "sre_95th": 19.1 / 100,
+            "nere_avg": 0.2668 / 100,
+            "nere_95th": 0.9933 / 100,
+        },
+    },
+    "C": {
+        "1%known_99%unknown": {
+            "sre_avg": 9.273 / 100,
+            "sre_95th": 27.0 / 100,
+            "nere_avg": 1.808 / 100,
+            "nere_95th": 4.849 / 100,
+        },
+    },
+    "D": {
+        "10%known_90%unknown": {
+            "sre_avg": 7.594 / 100,
+            "sre_95th": 20.51 / 100,
+            "nere_avg": 1.796 / 100,
+            "nere_95th": 6.917 / 100,
+        },
+        "50%known_50%unknown": {
+            "sre_avg": 6.425 / 100,
+            "sre_95th": 16.76 / 100,
+            "nere_avg": 1.251 / 100,
+            "nere_95th": 5.295 / 100,
+        },
+        "90%known_10%unknown": {
+            "sre_avg": 4.043 / 100,
+            "sre_95th": 11.33 / 100,
+            "nere_avg": 0.2865 / 100,
+            "nere_95th": 1.221 / 100,
+        },
+    },
+    "E": {
+        "10%known_90%unknown": {
+            "sre_avg": 7.591 / 100,
+            "sre_95th": 17.56 / 100,
+            "nere_avg": 0.9387 / 100,
+            "nere_95th": 2.661 / 100,
+        },
+        "50%known_50%unknown": {
+            "sre_avg": 7.429 / 100,
+            "sre_95th": 19.83 / 100,
+            "nere_avg": 0.591 / 100,
+            "nere_95th": 1.955 / 100,
+        },
+        "90%known_10%unknown": {
+            "sre_avg": 6.155 / 100,
+            "sre_95th": 17.71 / 100,
+            "nere_avg": 0.1415 / 100,
+            "nere_95th": 0.4651 / 100,
+        },
+    },
+}
 
 FINAL_SCENARIOS_PER_MATERIAL = {
     "A": {"10%known_90%unknown": [100, 900], "50%known_50%unknown": [500, 500], "90%known_10%unknown": [900, 100]},
@@ -46,9 +137,11 @@ class TestSet(eqx.Module):
         material_name: str
         mask: jax.Array
         H_past: jax.Array
+        H_future: jax.Array
         B_past: jax.Array
         B_future: jax.Array
         T: jax.Array
+        core_loss_gt: jax.Array
         N_unknown: int
 
         @property
@@ -59,6 +152,8 @@ class TestSet(eqx.Module):
     H: jax.Array
     B: jax.Array
     T: jax.Array
+    H_gt: jax.Array
+    core_loss_gt: jax.Array
 
     @classmethod
     def from_dict(cls, data_dict: dict) -> "TestSet":
@@ -68,6 +163,8 @@ class TestSet(eqx.Module):
             H=jnp.array(data_dict["H"]),
             B=jnp.array(data_dict["B"]),
             T=jnp.array(data_dict["T"]),
+            H_gt=jnp.array(data_dict["H_gt"]),
+            core_loss_gt=jnp.array(data_dict["core_loss_gt"])
         )
 
     @classmethod
@@ -79,6 +176,8 @@ class TestSet(eqx.Module):
                 "H": data_dict[f"{material_name}_Padded_H_seq"],
                 "B": data_dict[f"{material_name}_True_B_seq"],
                 "T": data_dict[f"{material_name}_True_T"],
+                "H_gt": data_dict[f"{material_name}_True_H_seq"],
+                "core_loss_gt": data_dict[f"{material_name}_True_Loss"],
             }
         )
 
@@ -93,17 +192,23 @@ class TestSet(eqx.Module):
 
             mask = unknowns_N == N_unknown
 
+            if self.material_name != "C":
+                assert jnp.all(self.H_gt[mask, :-N_unknown] == self.H[mask, :-N_unknown])
+
             scenarios.append(
                 self.TestScenario(
                     material_name=self.material_name,
                     mask=mask,
                     H_past=self.H[mask, :-N_unknown],
+                    H_future=self.H_gt[mask, -N_unknown:],
+                    core_loss_gt=self.core_loss_gt[mask],
                     B_past=self.B[mask, :-N_unknown],
                     B_future=self.B[mask, -N_unknown:],
                     T=self.T[mask],
                     N_unknown=N_unknown,
                 )
             )
+
         return scenarios
 
 
@@ -156,6 +261,88 @@ def predict_test_scenarios(
         result_sets[material_name] = material_result_set
         print("Done with material:", material_name, "\n")
     return result_sets
+
+
+def reduce_metrics(
+        metrics_per_sequence: dict,
+):
+    metrics_reduced = {}
+
+    for scenario_name, data in metrics_per_sequence.items():
+        mse_per_sequence = data["mse"]
+        wce_per_sequence = data["wce"]
+        sre_per_sequence = data["sre"]
+        nere_per_sequence = data["nere"]
+        # reduce metrics
+        mse = np.mean(mse_per_sequence)
+        wce = np.max(wce_per_sequence)
+
+        sre_avg = np.mean(sre_per_sequence)
+        sre_95th = np.percentile(sre_per_sequence, 95)
+
+        nere_avg = np.mean(nere_per_sequence)
+        nere_95th = np.percentile(nere_per_sequence, 95)
+
+        print(f"\tMSE : {mse:>7.2f} (A/m)²")
+        print(f"\tWCE : {wce:>7.2f} A/m")
+
+        metrics_reduced[scenario_name] = {
+            # "mse": np.round(mse, 4).item(),
+            # "wce": np.round(wce, 4).item(),
+            "sre_avg": np.round(sre_avg, 4).item(),
+            "sre_95th": np.round(sre_95th, 4).item(),
+            "nere_avg": np.round(nere_avg, 4).item(),
+            "nere_95th": np.round(nere_95th, 4).item(),
+        }
+
+    return metrics_reduced
+
+
+def evaluate_test_scenarios(
+    models: ModelInterface,
+    test_set: TestSet,
+):
+    material_name = test_set.material_name
+    print("Evaluate test data for material: ", material_name)
+    test_set = test_set
+    model = models
+
+    print(f"The model has {model.n_params} parameters.")
+
+    metrics_per_sequence = {}
+
+    for scenario in test_set.scenarios:
+        print(
+            f"Running scenario with a warmup of {scenario.N_known} steps and {scenario.N_unknown} unknown elements."
+        )
+        H_pred = model(
+            B_past=scenario.B_past,
+            H_past=scenario.H_past,
+            B_future=scenario.B_future,
+            T=jnp.squeeze(scenario.T),
+        )
+
+        # ---- metrics ----
+        wce_per_sequence = np.max(np.abs(H_pred - scenario.H_future), axis=1)
+        mse_per_sequence = np.mean((H_pred - scenario.H_future) ** 2, axis=1)
+        sre_per_sequence = eqx.filter_vmap(sre)(H_pred, scenario.H_future)
+
+        warm_up_len = scenario.N_known
+        dbdt_full = np.gradient(jnp.concatenate([scenario.B_past, scenario.B_future], axis=-1), axis=1)
+        dbdt = dbdt_full[:, warm_up_len:]
+        nere_per_sequence = eqx.filter_vmap(nere)(H_pred, scenario.H_future, dbdt, np.abs(scenario.core_loss_gt))
+
+        # ---- store metrics in dict ----
+        known_percentage = scenario.N_known / (scenario.N_known + scenario.N_unknown)
+        unknown_percentage = scenario.N_unknown / (scenario.N_known + scenario.N_unknown)
+        scenario_name = f"{int(known_percentage * 100)}%known_{int(unknown_percentage * 100)}%unknown"
+        metrics_per_sequence[scenario_name] = {
+            "mse": jnp.array(mse_per_sequence),
+            "wce": jnp.array(wce_per_sequence),
+            "sre": jnp.array(sre_per_sequence),
+            "nere": jnp.array(nere_per_sequence),
+        }
+    return reduce_metrics(metrics_per_sequence)
 
 
 def validate_result_set(
