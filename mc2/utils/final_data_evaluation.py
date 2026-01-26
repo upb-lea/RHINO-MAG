@@ -345,6 +345,35 @@ def evaluate_test_scenarios(
     return reduce_metrics(metrics_per_sequence)
 
 
+def average_over_scenarios(metrics_per_material: dict):
+    avg_per_material = {}
+
+    for material_name, material_metrics in metrics_per_material.items():
+        avg_per_material[material_name] = {
+            metric_name : [] for metric_name in list(material_metrics.values())[0].keys()
+        }
+        for scenario_name, scenario_metrics in material_metrics.items():       
+            for metric_name, metric_value in scenario_metrics.items():
+                avg_per_material[material_name][metric_name].append(metric_value)
+        for metric_name in avg_per_material[material_name]:
+            avg_per_material[material_name][metric_name] = jnp.average(jnp.array(avg_per_material[material_name][metric_name])).item()
+        
+    return avg_per_material
+
+def complete_average(metrics_per_material: dict):
+    avg_metrics = {
+        metric_name : [] for metric_name in list(list(metrics_per_material.values())[0].values())[0].keys()
+    }
+    for material_name, material_metrics in metrics_per_material.items():
+        for scenario_name, scenario_metrics in material_metrics.items():
+            for metric_name, metric_value in scenario_metrics.items():
+                avg_metrics[metric_name].append(metric_value)
+    for metric_name in avg_metrics:
+        avg_metrics[metric_name] = jnp.average(jnp.array(avg_metrics[metric_name])).item()
+
+    return avg_metrics
+
+
 def validate_result_set(
     result_set: ResultSet,
     test_set: TestSet,
