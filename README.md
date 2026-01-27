@@ -1,5 +1,9 @@
 # RHINO-MAG: Recursive H-Field Inference based on Observed Magnetic Flux
 
+<p align="center">
+    <img src="fig/rhino_mag.png" width=33% />
+</p>
+
 This is the contribution of Team "Siegen and Paderborn" to the MagNet Challenge 2 (MC2).
 
 Official site for the second magnet challenge https://github.com/minjiechen/magnetchallenge-2
