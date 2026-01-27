@@ -16,11 +16,11 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)
 ## Installation:
 - use `python3.11` (specifically python3.11.11, should not make a difference though)
 - `git clone git@github.com:upb-lea/magnet-challenge-2.git` the repo to your PC or workstation
-- create a fresh virtual enviornment (e.g., `python -m venv mc2-venv`)
-- activate it (e.g., `source path/to/venv/mc2-venv/bin/activate` (linux) or `.\path\to\venv\mc2-venv\bin\activate.sh` (windows))
+- create a fresh virtual enviornment (e.g., `python -m venv rhino-mag-venv`)
+- activate it (e.g., `source path/to/venv/rhino-mag-venv/bin/activate` (linux) or `.\path\to\venv\rhino-mag-venv\bin\activate.sh` (windows))
 - navigate to the downloaded repo
 - install it with `pip install -e .` (this is to have installed as an editable site package)
-- now you should be able to import `mc2` from within your venv
+- now you should be able to import `rhmag` from within your venv
 
 ## Sort data in:
 - additionally to the installation, you will need to add the raw material data to `data/raw/` (e.g., `data/raw/A/A_1_B.csv`, `data/raw/C/C_3_B.csv`).
@@ -59,7 +59,7 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)
 │   │   └── overview_all_mats_models.ipynb  # Overview over all material data and the model files pushed to the repository
 │   └── advanced/
 |       └── adding_your_own_models.ipynb    # Small guide on how to add your own models to the repo
-└── mc2/                                    # Core source code
+└── rhmag/                                  # Core source code
     ├── features/                           # Feature engineering implementations
     ├── model_interface/                    # Logic for model-data interaction
     ├── models/                             # Generic model architectures
@@ -79,7 +79,7 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)
 import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"  # disable preallocation of memory
 
-from mc2.runners.rnn_training_jax import main as train_model_jax
+from rhmag.runners.rnn_training_jax import main as train_model_jax
 
 
 train_model_jax(
@@ -112,9 +112,9 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"  # disable preallocation of 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
-from mc2.utils.model_evaluation import reconstruct_model_from_file
-from mc2.data_management import MaterialSet
-from mc2.utils.data_plotting import plot_sequence_prediction
+from rhmag.utils.model_evaluation import reconstruct_model_from_file
+from rhmag.data_management import MaterialSet
+from rhmag.utils.data_plotting import plot_sequence_prediction
 
 # load model and data
 model = reconstruct_model_from_file("A_GRU8_final-reduced-features-f32_0d2b6cb5_seed12.eqx")
