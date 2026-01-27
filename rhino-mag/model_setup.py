@@ -13,20 +13,20 @@ import jax.numpy as jnp
 import equinox as eqx
 import optax
 
-from mc2.losses import MSE_loss, adapted_RMS_loss
-from mc2.features.features_jax import compute_fe_single, db_dt, d2b_dt2
-from mc2.data_management import MaterialSet, Normalizer
+from rhmag.losses import MSE_loss, adapted_RMS_loss
+from rhmag.features.features_jax import compute_fe_single, db_dt, d2b_dt2
+from rhmag.data_management import MaterialSet, Normalizer
 
 # Models
-from mc2.features.features_jax import compute_fe_single
-from mc2.data_management import MaterialSet
-from mc2.model_interfaces.rnn_interfaces import (
+from rhmag.features.features_jax import compute_fe_single
+from rhmag.data_management import MaterialSet
+from rhmag.model_interfaces.rnn_interfaces import (
     NODEwInterface,
     RNNwInterface,
 )
-from mc2.models.NODE import HiddenStateNeuralEulerODE
-from mc2.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU, GRUaroundLinearModel, ExpGRU
-from mc2.models.jiles_atherton import (
+from rhmag.models.NODE import HiddenStateNeuralEulerODE
+from rhmag.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU, GRUaroundLinearModel, ExpGRU
+from rhmag.models.jiles_atherton import (
     JAStatic,
     JAStatic2,
     JAStatic3,
@@ -41,12 +41,12 @@ from mc2.models.jiles_atherton import (
     GRUWithJA,
     LFRWithGRUJA,
 )
-from mc2.models.linear import LinearStatic
-from mc2.models.dummy_model import DummyModel
+from rhmag.models.linear import LinearStatic
+from rhmag.models.dummy_model import DummyModel
 
 # Interfaces
-from mc2.model_interfaces.model_interface import ModelInterface
-from mc2.model_interfaces.rnn_interfaces import (
+from rhmag.model_interfaces.model_interface import ModelInterface
+from rhmag.model_interfaces.rnn_interfaces import (
     NODEwInterface,
     RNNwInterface,
     GRUwLinearModelInterface,
@@ -54,7 +54,7 @@ from mc2.model_interfaces.rnn_interfaces import (
     VectorfieldGRUInterface,
     GRUaroundLinearModelInterface,
 )
-from mc2.model_interfaces.ja_interfaces import (
+from rhmag.model_interfaces.ja_interfaces import (
     JAwInterface,
     JAParamMLPwInterface,
     JAWithGRUwInterface,
@@ -62,8 +62,8 @@ from mc2.model_interfaces.ja_interfaces import (
     GRUWithJAwInterface,
     LFRWithGRUJAwInterface,
 )
-from mc2.model_interfaces.linear_interfaces import LinearInterface
-from mc2.model_interfaces.dummy_model_interface import DummyModelInterface
+from rhmag.model_interfaces.linear_interfaces import LinearInterface
+from rhmag.model_interfaces.dummy_model_interface import DummyModelInterface
 
 SUPPORTED_MODELS = ["GRU{hidden-size}", "HNODE", "JA"]
 SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]

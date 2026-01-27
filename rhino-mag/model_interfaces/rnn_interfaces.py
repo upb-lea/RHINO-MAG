@@ -1,7 +1,7 @@
 """Interfaces between data-driven models in 'mc2.models.RNN' (and 'mc2.models.NODE') and the data format for MC2."""
 
 from typing import Callable, Type
-from mc2.data_management import Normalizer
+from rhmag.data_management import Normalizer
 
 import numpy as np
 import numpy.typing as npt
@@ -10,9 +10,9 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.model_interfaces.model_interface import ModelInterface
-from mc2.models.NODE import HiddenStateNeuralEulerODE
-from mc2.models.RNN import GRU, VectorfieldGRU, GRUwLinear, GRUwLinearModel, GRUaroundLinearModel
+from rhmag.model_interfaces.model_interface import ModelInterface
+from rhmag.models.NODE import HiddenStateNeuralEulerODE
+from rhmag.models.RNN import GRU, VectorfieldGRU, GRUwLinear, GRUwLinearModel, GRUaroundLinearModel
 
 MU_0 = 4 * jnp.pi * 1e-7
 

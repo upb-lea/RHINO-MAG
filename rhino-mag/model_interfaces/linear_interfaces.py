@@ -1,11 +1,11 @@
 from typing import Callable, Type
-from mc2.data_management import Normalizer
+from rhmag.data_management import Normalizer
 
 import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.model_interfaces.model_interface import ModelInterface
+from rhmag.model_interfaces.model_interface import ModelInterface
 
 
 class LinearInterface(ModelInterface):

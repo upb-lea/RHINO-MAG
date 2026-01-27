@@ -8,14 +8,14 @@ from tqdm import trange
 from joblib import Parallel, delayed
 from typing import Dict
 from torchinfo import summary
-from mc2.data_management import (
+from rhmag.data_management import (
     AVAILABLE_MATERIALS,
     book_keeping,
     get_train_val_test_pandas_dicts,
     setup_package_logging,
 )
-from mc2.features.features_torch import Featurizer, MC2Loss
-from mc2.models.topologies_torch import DifferenceEqLayer, ExplEulerCell
+from rhmag.features.features_torch import Featurizer, MC2Loss
+from rhmag.models.topologies_torch import DifferenceEqLayer, ExplEulerCell
 
 SUPPORTED_ARCHS = ["gru", "expleuler"]
 DO_TRANSFORM_H = False

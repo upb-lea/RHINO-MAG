@@ -7,10 +7,10 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.data_management import PRETEST_CACHE_ROOT, PRETEST_DATA_ROOT
-from mc2.model_interfaces.model_interface import ModelInterface
+from rhmag.data_management import PRETEST_CACHE_ROOT, PRETEST_DATA_ROOT
+from rhmag.model_interfaces.model_interface import ModelInterface
 
-from mc2.metrics import sre, nere
+from rhmag.metrics import sre, nere
 
 SCENARIO_LABELS = [
     "90% unknown",

@@ -9,13 +9,13 @@ import optax
 
 # from tqdm.notebook import trange  #
 from tqdm import trange
-from mc2.data_management import (
+from rhmag.data_management import (
     load_data_into_pandas_df,
     MaterialSet,
     FrequencySet,
 )
-from mc2.training.data_sampling import draw_data_uniformly, load_batches, load_batches_material_set
-from mc2.model_interfaces.model_interface import ModelInterface
+from rhmag.training.data_sampling import draw_data_uniformly, load_batches, load_batches_material_set
+from rhmag.model_interfaces.model_interface import ModelInterface
 
 # import orbax.checkpoint as ocp
 

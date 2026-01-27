@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import jax.numpy as jnp
 
-from mc2.utils.model_evaluation import get_mixed_frequency_arrays
+from rhmag.utils.model_evaluation import get_mixed_frequency_arrays
 
 def plot_single_sequence(B, H, T, t=None, fig=None, axs=None):
     if fig is None or axs is None:

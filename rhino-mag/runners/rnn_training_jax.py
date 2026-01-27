@@ -60,12 +60,12 @@ import json
 import optax
 from uuid import uuid4
 
-from mc2.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
-from mc2.training.jax_routine import train_model
-from mc2.model_setup import setup_experiment, SUPPORTED_MODELS, SUPPORTED_LOSSES
-from mc2.metrics import evaluate_model_on_test_set
-from mc2.model_interfaces.model_interface import save_model
-from mc2.utils.model_evaluation import store_model_to_file
+from rhmag.data_management import AVAILABLE_MATERIALS, MODEL_DUMP_ROOT, EXPERIMENT_LOGS_ROOT, book_keeping
+from rhmag.training.jax_routine import train_model
+from rhmag.model_setup import setup_experiment, SUPPORTED_MODELS, SUPPORTED_LOSSES
+from rhmag.metrics import evaluate_model_on_test_set
+from rhmag.model_interfaces.model_interface import save_model
+from rhmag.utils.model_evaluation import store_model_to_file
 
 
 def parse_args() -> argparse.Namespace:

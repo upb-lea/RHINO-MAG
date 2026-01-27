@@ -3,7 +3,7 @@ import torch
 import logging as log
 import pandas as pd
 from typing import List
-from mc2.data_management import CACHE_ROOT, NORMALIZATION_ROOT
+from rhmag.data_management import CACHE_ROOT, NORMALIZATION_ROOT
 
 
 # single features

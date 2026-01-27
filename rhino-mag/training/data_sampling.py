@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.data_management import FrequencySet, MaterialSet
+from rhmag.data_management import FrequencySet, MaterialSet
 
 
 @eqx.filter_jit

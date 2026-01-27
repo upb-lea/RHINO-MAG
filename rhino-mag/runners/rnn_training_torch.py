@@ -1,7 +1,7 @@
 import argparse
 import jax
 
-from mc2.training.routine import train_recursive_nn, SUPPORTED_ARCHS
+from rhmag.training.routine import train_recursive_nn, SUPPORTED_ARCHS
 
 jax.config.update("jax_platform_name", "cpu")
 

@@ -1,7 +1,7 @@
-from mc2.runners.rnn_training_jax import train_model_jax
+from rhmag.runners.rnn_training_jax import train_model_jax
 
 import argparse
-from mc2.data_management import AVAILABLE_MATERIALS
+from rhmag.data_management import AVAILABLE_MATERIALS
 
 
 def parse_args() -> argparse.Namespace:

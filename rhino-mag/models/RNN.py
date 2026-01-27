@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.models.linear import LinearDynamicParameters, LinearStatic
+from rhmag.models.linear import LinearDynamicParameters, LinearStatic
 
 
 class GRU(eqx.Module):
@@ -313,7 +313,7 @@ class GRUaroundLinearModel(eqx.Module):
 
         self.cell = eqx.nn.GRUCell(in_size, hidden_size, key=gru_key)
         # linear_dummy = LinearStatic(linear_in_size, out_size=1, key=l_key)
-        from mc2.utils.model_evaluation import reconstruct_model_from_exp_id
+        from rhmag.utils.model_evaluation import reconstruct_model_from_exp_id
 
         self.linear = reconstruct_model_from_exp_id("3C90_Linear_a3943263-1c37-48").model
         assert self.linear.in_size == linear_in_size

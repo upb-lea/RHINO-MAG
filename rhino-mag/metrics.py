@@ -4,8 +4,8 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from mc2.data_management import MaterialSet
-from mc2.model_interfaces.model_interface import ModelInterface
+from rhmag.data_management import MaterialSet
+from rhmag.model_interfaces.model_interface import ModelInterface
 
 
 def sre(h_est: jax.Array, h_true: jax.Array) -> jax.Array:

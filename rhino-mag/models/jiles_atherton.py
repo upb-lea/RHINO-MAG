@@ -3,9 +3,9 @@ import jax.numpy as jnp
 import equinox as eqx
 import optax
 
-from mc2.data_management import MODEL_DUMP_ROOT, Normalizer
-from mc2.models.RNN import GRU, GRUwLinear
-from mc2.model_interfaces.model_interface import load_model
+from rhmag.data_management import MODEL_DUMP_ROOT, Normalizer
+from rhmag.models.RNN import GRU, GRUwLinear
+from rhmag.model_interfaces.model_interface import load_model
 
 # Adjoint method for estimating Jiles-Atherton hysteresis
 # model parameters

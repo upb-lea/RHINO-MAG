@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.model_interfaces.model_interface import ModelInterface
+from rhmag.model_interfaces.model_interface import ModelInterface
 
 
 def MSE_loss(

@@ -10,11 +10,11 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.data_management import DATA_ROOT, EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT, MaterialSet, Normalizer
-from mc2.training.data_sampling import draw_data_uniformly
-from mc2.model_setup import setup_model, setup_experiment, setup_featurize
-from mc2.model_interfaces.model_interface import load_model, ModelInterface, save_model
-from mc2.metrics import sre, nere
+from rhmag.data_management import DATA_ROOT, EXPERIMENT_LOGS_ROOT, MODEL_DUMP_ROOT, MaterialSet, Normalizer
+from rhmag.training.data_sampling import draw_data_uniformly
+from rhmag.model_setup import setup_model, setup_experiment, setup_featurize
+from rhmag.model_interfaces.model_interface import load_model, ModelInterface, save_model
+from rhmag.metrics import sre, nere
 
 from functools import partial
 
@@ -80,7 +80,7 @@ def get_exp_ids(
 
 
 from functools import partial
-from mc2.model_interfaces.model_interface import filter_spec
+from rhmag.model_interfaces.model_interface import filter_spec
 
 
 def load_parameterization(exp_id):

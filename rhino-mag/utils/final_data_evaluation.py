@@ -6,10 +6,10 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.metrics import sre, nere
-from mc2.data_management import DATA_ROOT, FINAL_MATERIALS, load_data_into_pandas_based_on_path, MaterialSet
-from mc2.model_interfaces.model_interface import ModelInterface, count_model_parameters
-from mc2.utils.model_evaluation import reconstruct_model_from_file, get_exp_ids, evaluate_cross_validation
+from rhmag.metrics import sre, nere
+from rhmag.data_management import DATA_ROOT, FINAL_MATERIALS, load_data_into_pandas_based_on_path, MaterialSet
+from rhmag.model_interfaces.model_interface import ModelInterface, count_model_parameters
+from rhmag.utils.model_evaluation import reconstruct_model_from_file, get_exp_ids, evaluate_cross_validation
 
 SIEGEN_PB_HOST_PROVIDED_RESULTS = {
     "A": {

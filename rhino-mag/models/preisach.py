@@ -12,7 +12,7 @@ import jax.nn as jnn
 import jax.numpy as jnp
 import equinox as eqx
 
-from mc2.models.preisach_utils import (
+from rhmag.models.preisach_utils import (
     analyticalPreisachFunction2,
     preisachIntegration,
     filter_function,
