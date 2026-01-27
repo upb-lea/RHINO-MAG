@@ -52,7 +52,7 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)
 |   |   ├── model_inspection.ipynb          # Loading, evaluation, and visualization
 |   |   ├── model_training.ipynb            # Model training walkthrough
 │   │   ├── final_test_data_eval.ipynb      # Testing on MC2 host data
-│   ├── └── overview_all_mats_models.ipynb  # Overview over all material data and the model files pushed to the repository
+│   │   └── overview_all_mats_models.ipynb  # Overview over all material data and the model files pushed to the repository
 │   └── advanced/
 |       └── adding_your_own_models.ipynb    # Small guide on how to add your own models to the repo
 └── mc2/                                    # Core source code
