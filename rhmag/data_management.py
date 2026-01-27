@@ -13,7 +13,6 @@ from sklearn.model_selection import train_test_split
 
 import jax
 import jax.numpy as jnp
-import torch
 import numpy as np
 import equinox as eqx
 
@@ -812,10 +811,6 @@ def book_keeping(logs_d: Dict, exp_id: str = None):
         np.column_stack([logs_d["loss_trends_train"], logs_d["loss_trends_val"]]), columns=["train", "val"]
     ).to_parquet(logs_root / f"seed_{logs_d['seed']}_loss_trends.parquet", index=False)
 
-    # store model state_dict (pytorch)
-    if "model_state_dict" in logs_d:
-        torch_save_path = logs_root / f"{mat}_{exp_id}.pt"
-        torch.save(logs_d["model_state_dict"], torch_save_path)
 
 
 def get_train_val_test_pandas_dicts(
