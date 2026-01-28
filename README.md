@@ -17,7 +17,7 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)
 
 ### With pip
 - use `python3.11` (specifically python3.11.11, should not make a difference though)
-- `git clone git@github.com:upb-lea/magnet-challenge-2.git` the repo to your PC or workstation
+- `git clone git@github.com:upb-lea/RHINO-MAG.git` the repo to your PC or workstation
 - create a fresh virtual enviornment (e.g., `python -m venv rhino-mag-venv`)
 - activate it (e.g., `source path/to/venv/rhino-mag-venv/bin/activate` (linux) or `.\path\to\venv\rhino-mag-venv\bin\activate.sh` (windows))
 - navigate to the downloaded repo
@@ -26,7 +26,7 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)
 
 ### With uv
 - go [install uv](https://docs.astral.sh/uv/getting-started/installation/)
-- `git clone git@github.com:upb-lea/magnet-challenge-2.git` the repo to your PC or workstation 
+- `git clone git@github.com:upb-lea/RHINO-MAG.git` the repo to your PC or workstation 
 - execute `uv sync` with the repo as current working directory
 - run any script with `uv run python [...]`
 
