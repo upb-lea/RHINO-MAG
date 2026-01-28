@@ -83,7 +83,7 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)
 ## Exemplary Usage:
 
 ### Training:
-```
+```py
 import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"  # disable preallocation of memory
 
@@ -113,7 +113,7 @@ train_model_jax(
 ```
 
 ### Loading & inference:
-```
+```py
 import os
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"]="false"  # disable preallocation of memory
 
