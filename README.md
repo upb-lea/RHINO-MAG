@@ -13,7 +13,9 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)
 
 ![Exemplary Prediction Task](fig/B_H_prediction_example.png)
 
-## Installation:
+## Installation
+
+### With pip
 - use `python3.11` (specifically python3.11.11, should not make a difference though)
 - `git clone git@github.com:upb-lea/magnet-challenge-2.git` the repo to your PC or workstation
 - create a fresh virtual enviornment (e.g., `python -m venv rhino-mag-venv`)
@@ -21,6 +23,12 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)
 - navigate to the downloaded repo
 - install it with `pip install -e .` (this is to have installed as an editable site package)
 - now you should be able to import `rhmag` from within your venv
+
+### With uv
+- go [install uv](https://docs.astral.sh/uv/getting-started/installation/)
+- `git clone git@github.com:upb-lea/magnet-challenge-2.git` the repo to your PC or workstation 
+- execute `uv sync` with the repo as current working directory
+- run any script with `uv run python [...]`
 
 ## Sort data in:
 - additionally to the installation, you will need to add the raw material data to `data/raw/` (e.g., `data/raw/A/A_1_B.csv`, `data/raw/C/C_3_B.csv`).
