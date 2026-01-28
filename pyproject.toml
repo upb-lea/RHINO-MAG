@@ -6,8 +6,12 @@ build-backend = "setuptools.build_meta"
 name = "rhmag"
 version = "0.1.1"
 authors = [
-  { name="Hendrik Vater", email="vater@lea.uni-paderborn.de"},
-  { name="Wilhelm Kirchgässner", email="kirchgaessner@lea.uni-paderborn.de"},
+  { name="Hendrik Vater", email="hendrik.vater@uni-siegen.de"},
+  { name="Oliver Schweins", email="oliverjs@mail.uni-paderborn.de"},
+  { name="Lukas Hölsch", email="lukas.hoelsch@uni-siegen.de"},
+  { name="Wilhelm Kirchgässner", email="W.Kirchgaessner@beckhoff.com"},
+  { name="Till Piepenbrock", email="piepenbrock@lea.uni-paderborn.de"},
+  { name="Oliver Wallscheid", email="oliver.wallscheid@uni-siegen.de"},
 ]
 description = "Drafts for magnet-challenge-2"
 readme = "README.md"
