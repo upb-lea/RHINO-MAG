@@ -1,4 +1,4 @@
-#RHINO-MAG: Recursive H-Field Inference based on Observed Magnetic Flux
+# RHINO-MAG: Recursive H-Field Inference based on Observed Magnetic Flux
 
 <p align="center">
     <img src="fig/rhino_mag.png" width=33% />
