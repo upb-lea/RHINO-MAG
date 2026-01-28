@@ -126,8 +126,7 @@ class LSTM(eqx.Module):
 
         def f(carry, inp):
             (hidden_state, cell_state) = self.cell(inp, carry)
-            hidden_state = jnp.atleast_2d(hidden_state)
-            out = hidden_state[..., 0]
+            out = hidden_state[0]
             return (hidden_state, cell_state), out
 
         _, out = jax.lax.scan(f, hidden, input)
@@ -151,8 +150,7 @@ class LSTM(eqx.Module):
             inp_t, out_true_t = inp
             (hidden_state, cell_state) = self.cell(inp_t, carry)
             hidden_state = hidden_state.at[0].set(out_true_t)
-            hidden_state = jnp.atleast_2d(hidden_state)
-            out = hidden_state[..., 0]
+            out = hidden_state[0]
             return (hidden_state, cell_state), out
 
         final_hidden, out = jax.lax.scan(f, hidden, (input, out_true))
