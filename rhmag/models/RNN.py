@@ -88,6 +88,84 @@ class GRU(eqx.Module):
         return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])
 
 
+class LSTM(eqx.Module):
+    """Basic long short-term memory network (LSTM)."""
+
+    hidden_size: int = eqx.field(static=True)
+    cell: eqx.nn.LSTMCell
+
+    def __init__(self, in_size: int, hidden_size: int, *, key):
+        """Construct a basic long short-term memory network (LSTM) based on the `equinox.nn.LSTMCell`.
+
+        Args:
+            in_size (int): Number of input elements
+            hidden_size (int): Number of hidden state elements
+            key (jax.random.PRNGkey): Pseudo random number generation key for initialization of the
+                model parameters
+        """
+        self.hidden_size = hidden_size
+        self.cell = eqx.nn.LSTMCell(in_size, hidden_size, key=key)
+
+    def __call__(self, input: jax.Array, init_hidden: tuple[jax.Array, jax.Array]) -> jax.Array:
+        """Use the LSTM to roll over an input sequence.
+
+        The first element of the hidden state is interpreted as the output of the GRU in each.
+
+        NOTE: This function is not expecting a batch dimension. It is intended to vmapped over for
+            batch-wise predictions!
+
+        Args:
+            input (jax.Array): Input sequence with shape (sequence_length, in_size)
+            init_hidden (jax.Array): Initial vector for the hidden state with shape (hidden_size,)
+
+        Returns:
+            The output sequence as a jax.Array with shape (sequence_length, 1)
+        """
+
+        hidden = init_hidden
+
+        def f(carry, inp):
+            (hidden_state, cell_state) = self.cell(inp, carry)
+            hidden_state = jnp.atleast_2d(hidden_state)
+            out = hidden_state[..., 0]
+            return (hidden_state, cell_state), out
+
+        _, out = jax.lax.scan(f, hidden, input)
+        return out
+
+    def warmup_call(self, input: jax.Array, init_hidden: tuple[jax.Array, jax.Array], out_true: jax.Array) -> jax.Array:
+        """Warm up the hidden state of the LSTM with an input sequence where the true outputs are known.
+
+        Args:
+            input (jax.Array): Input sequence with shape (sequence_length, in_size)
+            init_hidden (jax.Array): Initial vector for the hidden state with shape (hidden_size,)
+            out_true (jax.Array): The true output values with shape (sequence_length,)
+
+        Returns:
+            The outputs as jax.Array with shape (sequence_length,) (these will be the same as out_true) and
+                the final warmed up hidden_state
+        """
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_t, out_true_t = inp
+            (hidden_state, cell_state) = self.cell(inp_t, carry)
+            hidden_state = hidden_state.at[0].set(out_true_t)
+            hidden_state = jnp.atleast_2d(hidden_state)
+            out = hidden_state[..., 0]
+            return (hidden_state, cell_state), out
+
+        final_hidden, out = jax.lax.scan(f, hidden, (input, out_true))
+        return out, final_hidden
+
+    def construct_init_hidden(self, out_true: jax.Array, batch_size: int) -> jax.Array:
+        """Put together the very first initial state. Concatenates the given true value with zeros."""
+        return (
+            jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))]),
+            jnp.zeros((batch_size, self.hidden_size)),
+        )
+
+
 class GRU2(eqx.Module):
     """Basic gated recurrent unit (GRU) model. All init hidden states set to gt."""
 

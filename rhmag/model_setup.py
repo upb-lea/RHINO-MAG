@@ -25,7 +25,7 @@ from rhmag.model_interfaces.rnn_interfaces import (
     RNNwInterface,
 )
 from rhmag.models.NODE import HiddenStateNeuralEulerODE
-from rhmag.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU, GRUaroundLinearModel, ExpGRU
+from rhmag.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU, GRUaroundLinearModel, ExpGRU, LSTM
 from rhmag.models.jiles_atherton import (
     JAStatic,
     JAStatic2,
@@ -223,6 +223,11 @@ def setup_model(
             hidden_size = int(label[3:])
             model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
+            mdl_interface_cls = RNNwInterface
+        case label if label.startswith("LSTM") and label[4:].isdigit():
+            hidden_size = int(label[4:])
+            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
+            model = LSTM(**model_params_d)
             mdl_interface_cls = RNNwInterface
         case label if label.startswith("ExpGRU") and label[6:].isdigit():
             hidden_size = int(label[6:])
