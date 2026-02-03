@@ -196,3 +196,5 @@ dev/**/lightning_logs
 pre_eval_test/
 dev/documentation/**/*.pdf
 dev/documentation/**/*.csv
+
+*.pkl

@@ -164,7 +164,7 @@ class TestSet(eqx.Module):
             B=jnp.array(data_dict["B"]),
             T=jnp.array(data_dict["T"]),
             H_gt=jnp.array(data_dict["H_gt"]),
-            core_loss_gt=jnp.array(data_dict["core_loss_gt"])
+            core_loss_gt=jnp.array(data_dict["core_loss_gt"]),
         )
 
     @classmethod
@@ -173,11 +173,11 @@ class TestSet(eqx.Module):
         return cls.from_dict(
             data_dict={
                 "material_name": material_name,
-                "H": data_dict[f"{material_name}_Padded_H_seq"],
-                "B": data_dict[f"{material_name}_True_B_seq"],
-                "T": data_dict[f"{material_name}_True_T"],
-                "H_gt": data_dict[f"{material_name}_True_H_seq"],
-                "core_loss_gt": data_dict[f"{material_name}_True_Loss"],
+                "H": data_dict[f"{material_name}_Testing_Padded_H_seq"],
+                "B": data_dict[f"{material_name}_Testing_True_B_seq"],
+                "T": data_dict[f"{material_name}_Testing_True_T"],
+                "H_gt": data_dict[f"{material_name}_Testing_True_H_seq"],
+                "core_loss_gt": data_dict[f"{material_name}_Testing_True_Loss"],
             }
         )
 
@@ -264,7 +264,7 @@ def predict_test_scenarios(
 
 
 def reduce_metrics(
-        metrics_per_sequence: dict,
+    metrics_per_sequence: dict,
 ):
     metrics_reduced = {}
 
@@ -312,9 +312,7 @@ def evaluate_test_scenarios(
     metrics_per_sequence = {}
 
     for scenario in test_set.scenarios:
-        print(
-            f"Running scenario with a warmup of {scenario.N_known} steps and {scenario.N_unknown} unknown elements."
-        )
+        print(f"Running scenario with a warmup of {scenario.N_known} steps and {scenario.N_unknown} unknown elements.")
         H_pred = model(
             B_past=scenario.B_past,
             H_past=scenario.H_past,
@@ -349,21 +347,20 @@ def average_over_scenarios(metrics_per_material: dict):
     avg_per_material = {}
 
     for material_name, material_metrics in metrics_per_material.items():
-        avg_per_material[material_name] = {
-            metric_name : [] for metric_name in list(material_metrics.values())[0].keys()
-        }
-        for scenario_name, scenario_metrics in material_metrics.items():       
+        avg_per_material[material_name] = {metric_name: [] for metric_name in list(material_metrics.values())[0].keys()}
+        for scenario_name, scenario_metrics in material_metrics.items():
             for metric_name, metric_value in scenario_metrics.items():
                 avg_per_material[material_name][metric_name].append(metric_value)
         for metric_name in avg_per_material[material_name]:
-            avg_per_material[material_name][metric_name] = jnp.average(jnp.array(avg_per_material[material_name][metric_name])).item()
-        
+            avg_per_material[material_name][metric_name] = jnp.average(
+                jnp.array(avg_per_material[material_name][metric_name])
+            ).item()
+
     return avg_per_material
 
+
 def complete_average(metrics_per_material: dict):
-    avg_metrics = {
-        metric_name : [] for metric_name in list(list(metrics_per_material.values())[0].values())[0].keys()
-    }
+    avg_metrics = {metric_name: [] for metric_name in list(list(metrics_per_material.values())[0].values())[0].keys()}
     for material_name, material_metrics in metrics_per_material.items():
         for scenario_name, scenario_metrics in material_metrics.items():
             for metric_name, metric_value in scenario_metrics.items():
