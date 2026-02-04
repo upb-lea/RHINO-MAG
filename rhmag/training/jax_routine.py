@@ -1,3 +1,4 @@
+import sys
 from typing import Callable, Tuple
 import pandas as pd
 import logging as log
@@ -8,7 +9,7 @@ import equinox as eqx
 import optax
 
 # from tqdm.notebook import trange  #
-from tqdm import trange
+from tqdm.auto import trange
 from rhmag.data_management import (
     load_data_into_pandas_df,
     MaterialSet,
@@ -361,7 +362,6 @@ def train_model(
     }
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
-
     best_val_loss = float("inf")
     best_model = jax.tree.map(lambda x: x, model)
 
@@ -370,10 +370,10 @@ def train_model(
     if (n_steps > 0 and n_epochs > 0) or (n_steps == 0 and n_epochs == 0):
         raise ValueError("Please set either `n_steps` or `n_epochs` to a value greater than 0.")
     if n_steps > 0:
-        pbar = trange(n_steps, desc=f"Seed {seed}", position=seed, unit="step")
+        pbar = trange(n_steps, desc=f"Seed {seed}", position=0, unit="step")
         train_func = train_step
     elif n_epochs > 0:
-        pbar = trange(n_epochs, desc=f"Seed {seed}", position=seed, unit="epoch")
+        pbar = trange(n_epochs, desc=f"Seed {seed}", position=0, unit="epoch")
         train_func = train_epoch
 
     for step_epoch in pbar:
