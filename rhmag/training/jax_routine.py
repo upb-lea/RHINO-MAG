@@ -359,6 +359,7 @@ def train_model(
         "loss_trends_train": [],
         "loss_trends_val": [],
         "start_time": str(pd.Timestamp.now().round(freq="s")),
+        "learning_rate": [],
     }
     opt_state = optimizer.init(eqx.filter(model, eqx.is_inexact_array))
 
@@ -409,6 +410,7 @@ def train_model(
                 best_model = jax.tree.map(lambda x: x, model)
         pbar_str += f"| val loss {val_loss:.2e}"
         logs["loss_trends_train"].append(train_loss.item())
+        logs["learning_rate"].append(opt_state.hyperparams["learning_rate"])
         pbar.set_postfix_str(pbar_str)
 
     pbar.close()
