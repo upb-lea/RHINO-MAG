@@ -483,7 +483,9 @@ def setup_experiment(
         params["lr_params"] = lr_params
 
     lr_schedule = optax.schedules.exponential_decay(**params["lr_params"])
-    optimizer = optax.adam(lr_schedule)
+
+    optimizer = optax.inject_hyperparams(optax.adam)(learning_rate=lr_schedule)
+    # optimizer = optax.adam(lr_schedule)
 
     params["model_params"] = model_params_d  # defined from outside
     params["model_params"]["key"] = params["model_params"]["key"].tolist()
