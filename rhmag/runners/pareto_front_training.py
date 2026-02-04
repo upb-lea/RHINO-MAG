@@ -29,8 +29,9 @@ if __name__ == "__main__":
     accuracy_tag = "-f32" if args.disable_f64 else "-f64"
 
     if args.material == "A":
-        epochs = 10_000
-        model_types = ["GRU2", "GRU4", "GRU6", "GRU8", "GRU10", "GRU12", "GRU16", "GRU24", "GRU32", "GRU48", "GRU64"]
+        epochs = 25_000
+        # model_types = ["GRU2", "GRU4", "GRU6", "GRU8", "GRU10", "GRU12", "GRU16", "GRU24", "GRU32", "GRU48", "GRU64"]
+        model_types = ["GRU24", "GRU32", "GRU48", "GRU64"]
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "B":
