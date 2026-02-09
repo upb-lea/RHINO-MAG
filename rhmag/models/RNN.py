@@ -130,7 +130,7 @@ class LSTM(eqx.Module):
             return (hidden_state, cell_state), out
 
         _, out = jax.lax.scan(f, hidden, input)
-        return out
+        return out[..., None]
 
     def warmup_call(self, input: jax.Array, init_hidden: tuple[jax.Array, jax.Array], out_true: jax.Array) -> jax.Array:
         """Warm up the hidden state of the LSTM with an input sequence where the true outputs are known.
