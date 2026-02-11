@@ -175,7 +175,6 @@ class RNNwInterface(ModelInterface):
 
         batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
         batch_H_pred = jax.vmap(self.model)(batch_x, init_hidden)
-        print(batch_H_pred.shape)
         return batch_H_pred[:, :, 0]
 
 

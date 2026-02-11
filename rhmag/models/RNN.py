@@ -318,11 +318,15 @@ class GRUwLinear(eqx.Module):
         return out
 
     def warmup_call(self, input, init_hidden, out_true):
-        print(
-            f"No warmup call implemented for model of class {self.__class__}. "
-            + "Returning 'out_true' and 'init_hidden'."
-        )
-        return out_true, init_hidden
+        hidden = init_hidden
+
+        def f(carry, inp):
+            rnn_out = self.cell(inp, carry)
+            out = self.linear(rnn_out) + self.bias
+            return rnn_out, out
+
+        final_hidden, out = jax.lax.scan(f, hidden, input)
+        return out_true, final_hidden
 
     def construct_init_hidden(self, out_true, batch_size):
         return jnp.zeros((batch_size, self.hidden_size))
