@@ -808,9 +808,9 @@ def book_keeping(logs_d: Dict, exp_id: str = None):
             )
     # store trends
     pd.DataFrame(
-        np.column_stack([logs_d["loss_trends_train"], logs_d["loss_trends_val"]]), columns=["train", "val"]
+        np.column_stack([logs_d["loss_trends_train"], logs_d["loss_trends_val"], logs_d["learning_rate"]]),
+        columns=["train", "val", "lr"],
     ).to_parquet(logs_root / f"seed_{logs_d['seed']}_loss_trends.parquet", index=False)
-
 
 
 def get_train_val_test_pandas_dicts(

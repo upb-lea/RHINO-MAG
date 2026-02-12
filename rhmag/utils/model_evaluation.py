@@ -50,14 +50,14 @@ def get_exp_ids(
         for exp_id in exp_ids:
             if len(exp_id.split("_")) < 2:
                 continue
-            elif exp_id.split("_")[1] == model_type:
+            elif model_type in exp_id.split("_")[1]:
                 relevant_exp_ids.append(exp_id)
     elif isinstance(model_type, list):
         relevant_exp_ids = []
         for exp_id in exp_ids:
             if len(exp_id.split("_")) < 2:
                 continue
-            elif exp_id.split("_")[1] in model_type:
+            elif model_type in exp_id.split("_")[1]:
                 relevant_exp_ids.append(exp_id)
     else:
         raise ValueError("'model_type' needs to be a string, list of strings, or None.")

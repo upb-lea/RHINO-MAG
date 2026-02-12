@@ -36,29 +36,114 @@ if __name__ == "__main__":
     elif args.gpu_id == -1:
         default_device = jax.devices("cpu")[0]
 
+    # model_types = [
+    #     "GRU2",
+    #     "GRU4",
+    #     "GRU6",
+    #     "GRU8",
+    #     "GRU10",
+    #     "GRU12",
+    #     "GRU16",
+    #     "GRU24",
+    #     "GRU32",
+    #     "GRU48",
+    #     "GRU64",
+    # ]
+    # model_types = [
+    #     "LSTM2",
+    #     "LSTM4",
+    #     "LSTM6",
+    #     "LSTM8",
+    #     "LSTM10",
+    #     "LSTM12",
+    #     "LSTM16",
+    #     "LSTM24",
+    #     "LSTM32",
+    #     "LSTM48",
+    #     "LSTM64",
+    # ]
     if args.material == "A":
         epochs = 25_000
-        model_types = ["GRU32", "GRU48", "GRU64"]
+        model_types = [
+            "GRU16",
+            "GRU24",
+            "GRU32",
+            "GRU48",
+            "GRU64",
+        ]
+        loss_type = "adapted_RMS"
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "B":
         epochs = 1500
-        model_types = ["GRU2", "GRU4", "GRU6", "GRU8", "GRU10", "GRU12", "GRU16", "GRU24", "GRU32", "GRU48", "GRU64"]
+        model_types = [
+            "LSTM2",
+            "LSTM4",
+            "LSTM6",
+            "LSTM8",
+            "LSTM10",
+            "LSTM12",
+            "LSTM16",
+            "LSTM24",
+            "LSTM32",
+            "LSTM48",
+            "LSTM64",
+        ]
+        loss_type = "adapted_RMS"
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "C":
         epochs = 1500
-        model_types = ["GRU2", "GRU4", "GRU6", "GRU8", "GRU10", "GRU12", "GRU16", "GRU24", "GRU32", "GRU48", "GRU64"]
+        model_types = [
+            "LSTM2",
+            "LSTM4",
+            "LSTM6",
+            "LSTM8",
+            "LSTM10",
+            "LSTM12",
+            "LSTM16",
+            "LSTM24",
+            "LSTM32",
+            "LSTM48",
+            "LSTM64",
+        ]
+        loss_type = "adapted_RMS"
         dyn_avg_kernel_size = 11
         past_size = 1
     elif args.material == "D":
         epochs = 1500
-        model_types = ["GRU2", "GRU4", "GRU6", "GRU8", "GRU10", "GRU12", "GRU16", "GRU24", "GRU32", "GRU48", "GRU64"]
+        model_types = [
+            "LSTM2",
+            "LSTM4",
+            "LSTM6",
+            "LSTM8",
+            "LSTM10",
+            "LSTM12",
+            "LSTM16",
+            "LSTM24",
+            "LSTM32",
+            "LSTM48",
+            "LSTM64",
+        ]
+        loss_type = "adapted_RMS"
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "E":
         epochs = 2500
-        model_types = ["GRU2", "GRU4", "GRU6", "GRU8", "GRU10", "GRU12", "GRU16", "GRU24", "GRU32", "GRU48", "GRU64"]
+        model_types = [
+            "LSTM2",
+            "LSTM4",
+            "LSTM6",
+            "LSTM8",
+            "LSTM10",
+            "LSTM12",
+            "LSTM16",
+            "LSTM24",
+            "LSTM32",
+            "LSTM48",
+            "LSTM64",
+        ]
+        loss_type = "adapted_RMS"
         dyn_avg_kernel_size = 11
         past_size = 28
     else:

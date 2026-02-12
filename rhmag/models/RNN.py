@@ -130,7 +130,7 @@ class LSTM(eqx.Module):
             return (hidden_state, cell_state), out
 
         _, out = jax.lax.scan(f, hidden, input)
-        return out
+        return out[..., None]
 
     def warmup_call(self, input: jax.Array, init_hidden: tuple[jax.Array, jax.Array], out_true: jax.Array) -> jax.Array:
         """Warm up the hidden state of the LSTM with an input sequence where the true outputs are known.
@@ -316,6 +316,20 @@ class GRUwLinear(eqx.Module):
 
         _, out = jax.lax.scan(f, hidden, input)
         return out
+
+    def warmup_call(self, input, init_hidden, out_true):
+        hidden = init_hidden
+
+        def f(carry, inp):
+            rnn_out = self.cell(inp, carry)
+            out = self.linear(rnn_out) + self.bias
+            return rnn_out, out
+
+        final_hidden, out = jax.lax.scan(f, hidden, input)
+        return out_true, final_hidden
+
+    def construct_init_hidden(self, out_true, batch_size):
+        return jnp.zeros((batch_size, self.hidden_size))
 
 
 class GRUwLinearModel(eqx.Module):

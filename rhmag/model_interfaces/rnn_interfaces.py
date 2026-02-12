@@ -12,7 +12,7 @@ import equinox as eqx
 
 from rhmag.model_interfaces.model_interface import ModelInterface
 from rhmag.models.NODE import HiddenStateNeuralEulerODE
-from rhmag.models.RNN import GRU, VectorfieldGRU, GRUwLinear, GRUwLinearModel, GRUaroundLinearModel
+from rhmag.models.RNN import GRU, VectorfieldGRU, GRUwLinear, GRUwLinearModel, GRUaroundLinearModel, LSTM
 
 MU_0 = 4 * jnp.pi * 1e-7
 
@@ -28,7 +28,7 @@ class RNNwInterface(ModelInterface):
         featurize (Callable): The featurization function to add further features to the material data.
     """
 
-    model: GRU | GRUwLinear
+    model: GRU | GRUwLinear | LSTM
     normalizer: Normalizer
     featurize: Callable = eqx.field(static=True)
 
