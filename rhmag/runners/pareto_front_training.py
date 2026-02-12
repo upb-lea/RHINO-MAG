@@ -56,18 +56,13 @@ if __name__ == "__main__":
     if args.material == "A":
         epochs = 25_000
         model_types = [
-            "LSTM2",
-            "LSTM4",
-            "LSTM6",
-            "LSTM8",
-            "LSTM10",
-            "LSTM12",
-            "LSTM16",
-            "LSTM24",
-            "LSTM32",
-            "LSTM48",
-            "LSTM64",
+            "GRU16",
+            "GRU24",
+            "GRU32",
+            "GRU48",
+            "GRU64",
         ]
+        loss_type = "MSE"
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "B":
@@ -85,6 +80,7 @@ if __name__ == "__main__":
             "LSTM48",
             "LSTM64",
         ]
+        loss_type = "adapted_RMS"
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "C":
@@ -102,6 +98,7 @@ if __name__ == "__main__":
             "LSTM48",
             "LSTM64",
         ]
+        loss_type = "adapted_RMS"
         dyn_avg_kernel_size = 11
         past_size = 1
     elif args.material == "D":
@@ -119,6 +116,7 @@ if __name__ == "__main__":
             "LSTM48",
             "LSTM64",
         ]
+        loss_type = "adapted_RMS"
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "E":
@@ -136,6 +134,7 @@ if __name__ == "__main__":
             "LSTM48",
             "LSTM64",
         ]
+        loss_type = "adapted_RMS"
         dyn_avg_kernel_size = 11
         past_size = 28
     else:
@@ -147,7 +146,7 @@ if __name__ == "__main__":
         model_types=model_types,
         seeds=[201, 202, 345, 567, 899],
         exp_name=f"pareto-front{accuracy_tag}",
-        loss_type="adapted_RMS",
+        loss_type=loss_type,
         gpu_id=args.gpu_id,
         epochs=epochs,
         batch_size=512,
