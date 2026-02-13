@@ -1,6 +1,8 @@
 from rhmag.runners.rnn_training_jax import train_model_jax
 
 import argparse
+import jax
+
 from rhmag.data_management import AVAILABLE_MATERIALS
 
 
@@ -27,6 +29,13 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
     accuracy_tag = "-f32" if args.disable_f64 else "-f64"
+
+    if args.gpu_id != -1:
+        gpus = jax.devices()
+        default_device = gpus[args.gpu_id]
+    elif args.gpu_id == -1:
+        default_device = jax.devices("cpu")[0]
+
     # model_types = [
     #     "GRU2",
     #     "GRU4",
@@ -62,7 +71,7 @@ if __name__ == "__main__":
             "GRU48",
             "GRU64",
         ]
-        loss_type = "MSE"
+        loss_type = "adapted_RMS"
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "B":
@@ -140,24 +149,24 @@ if __name__ == "__main__":
     else:
         raise ValueError(f"Material '{args.material} is unknown.")
 
-    ## Default setup
-    train_model_jax(
-        material_name=args.material,
-        model_types=model_types,
-        seeds=[201, 202, 345, 567, 899],
-        exp_name=f"pareto-front{accuracy_tag}",
-        loss_type=loss_type,
-        gpu_id=args.gpu_id,
-        epochs=epochs,
-        batch_size=512,
-        tbptt_size=156,
-        past_size=past_size,
-        time_shift=0,
-        noise_on_data=0.0,
-        tbptt_size_start=None,
-        dyn_avg_kernel_size=dyn_avg_kernel_size,
-        disable_f64=args.disable_f64,
-        disable_features="reduce",
-        transform_H=False,
-        use_all_data=True,
-    )
+    with jax.default_device(default_device):
+        train_model_jax(
+            material_name=args.material,
+            model_types=model_types,
+            seeds=[201, 202, 345, 567, 899],
+            exp_name=f"pareto-front{accuracy_tag}",
+            loss_type="adapted_RMS",
+            gpu_id=args.gpu_id,
+            epochs=epochs,
+            batch_size=512,
+            tbptt_size=156,
+            past_size=past_size,
+            time_shift=0,
+            noise_on_data=0.0,
+            tbptt_size_start=None,
+            dyn_avg_kernel_size=dyn_avg_kernel_size,
+            disable_f64=args.disable_f64,
+            disable_features="reduce",
+            transform_H=False,
+            use_all_data=True,
+        )

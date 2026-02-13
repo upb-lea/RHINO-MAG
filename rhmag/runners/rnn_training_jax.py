@@ -181,11 +181,11 @@ def run_experiment_for_seed(
     use_all_data: bool,
 ):
 
-    if gpu_id != -1:
-        gpus = jax.devices()
-        jax.config.update("jax_default_device", gpus[gpu_id])
-    elif gpu_id == -1:
-        jax.config.update("jax_platform_name", "cpu")
+    # if gpu_id != -1:
+    #     gpus = jax.devices()
+    #     jax.config.update("jax_default_device", gpus[gpu_id])
+    # elif gpu_id == -1:
+    #     jax.config.update("jax_platform_name", "cpu")
 
     # setup
     # seed = 0
