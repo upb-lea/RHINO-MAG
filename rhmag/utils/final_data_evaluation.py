@@ -1,3 +1,4 @@
+import pathlib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -527,3 +528,70 @@ def visualize_df(df, scenarios, metrics, x_label=None, scale_log: bool = False):
                 ax.legend()
     fig.tight_layout()
     return fig, axs
+
+
+def update_pareto_df(
+    pareto_results_path: pathlib.Path,
+    exp_ids_per_material: dict[str, list[pathlib.Path | str]],
+    test_data_per_material: TestSet,
+):
+
+    pareto_results_path = pathlib.Path(pareto_results_path)
+
+    # get current state of the file
+    if pareto_results_path.is_file():
+        loaded_df = pd.read_parquet(pareto_results_path)
+        available_results_exp_ids = loaded_df["exp_id"].tolist()
+    else:
+        loaded_df = None
+        available_results_exp_ids = []
+
+    # check for new results
+    new_exp_ids = []
+    for material_name, exp_ids in exp_ids_per_material.items():
+        for exp_id in exp_ids:
+            if not exp_id in available_results_exp_ids:
+                new_exp_ids.append(exp_id)
+
+    print(f"{len(new_exp_ids)} new models have been found.")
+    all_new_results = []
+
+    # gather new
+    for exp_id in new_exp_ids:
+        model = reconstruct_model_from_file(exp_id)
+        model_params = model.n_params
+        seed = exp_id.split("seed")[-1]
+        material_name = exp_id.split("_")[0]
+        model_type = exp_id.split("_")[1]
+        exp_name = exp_id.split("_")[2]
+        num_id = exp_id.split("_")[-2]
+
+        test_set = test_data_per_material[material_name]
+
+        metrics_per_sequence = evaluate_test_scenarios(model, test_set)
+        metrics = ["sre_avg", "sre_95th", "nere_avg", "nere_95th"]
+        averages = {m: sum(d[m] for d in metrics_per_sequence.values()) / len(metrics_per_sequence) for m in metrics}
+        all_new_results.append(
+            {
+                "exp_id_without_seed": exp_id.rpartition("_")[0],
+                "exp_id": exp_id,
+                "exp_name": exp_name,
+                "num_id": num_id,
+                "material": material_name,
+                "model_type": model_type,
+                "seed": seed,
+                "n_params": model_params,
+                "sre_avg": averages["sre_avg"],
+                "sre_95th": averages["sre_95th"],
+                "nere_avg": averages["nere_avg"],
+                "nere_95th": averages["nere_95th"],
+            }
+        )
+    new_results_df = pd.DataFrame(all_new_results)
+
+    if loaded_df is None:
+        df_results = new_results_df
+    else:
+        df_results = pd.concat([loaded_df, new_results_df], ignore_index=True)
+
+    return df_results
