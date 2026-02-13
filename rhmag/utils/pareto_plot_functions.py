@@ -42,6 +42,14 @@ def visualize_pareto_cross_model(
         # Start own results
         for color, group_df in df.groupby("color"):
             current_color = color
+            if show_median:
+                alpha = 0.1
+            else:
+                alpha = 0.8
+
+            if np.all(group_df["model_type"] == "JA"):
+                alpha = 0.8
+
             sns.scatterplot(
                 data=group_df,
                 x=target_col,
@@ -49,7 +57,7 @@ def visualize_pareto_cross_model(
                 color=current_color,
                 marker="o",
                 s=20,
-                alpha=0.8 if not show_median else 0.1,
+                alpha=alpha,
                 ax=ax,
                 zorder=3,
             )
