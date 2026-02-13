@@ -2,6 +2,7 @@ from rhmag.runners.rnn_training_jax import train_model_jax
 from rhmag.data_management import AVAILABLE_MATERIALS
 import argparse
 
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train recursive NNs")
     parser.add_argument(
