@@ -300,13 +300,12 @@ def reduce_metrics(
 
 
 def evaluate_test_scenarios(
-    models: ModelInterface,
+    model: ModelInterface,
     test_set: TestSet,
+    reduce: bool = True,
 ):
     material_name = test_set.material_name
     print("Evaluate test data for material: ", material_name)
-    test_set = test_set
-    model = models
 
     print(f"The model has {model.n_params} parameters.")
 
@@ -341,7 +340,10 @@ def evaluate_test_scenarios(
             "sre": jnp.array(sre_per_sequence),
             "nere": jnp.array(nere_per_sequence),
         }
-    return reduce_metrics(metrics_per_sequence)
+    if reduce:
+        return reduce_metrics(metrics_per_sequence)
+    else:
+        return metrics_per_sequence
 
 
 def average_over_scenarios(metrics_per_material: dict):
