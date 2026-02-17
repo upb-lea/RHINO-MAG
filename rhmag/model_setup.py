@@ -65,7 +65,7 @@ from rhmag.model_interfaces.ja_interfaces import (
 from rhmag.model_interfaces.linear_interfaces import LinearInterface
 from rhmag.model_interfaces.dummy_model_interface import DummyModelInterface
 
-SUPPORTED_MODELS = ["GRU{hidden-size}", "HNODE", "JA"]
+SUPPORTED_MODELS = ["GRU{hidden_size}", "HNODE", "JA"]
 SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
 
 
@@ -239,12 +239,15 @@ def setup_model(
             model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
             model = ExpGRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
-        case "MagnetizationGRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+        case label if label.startswith("MagnetizationGRU") and label[16:].isdigit():
+            hidden_size = int(label[16:])
+            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = MagnetizationRNNwInterface
-        case "VectorfieldGRU":
-            model_params_d = dict(n_locs=9, in_size=model_in_size, key=model_key)
+        case label if label.startswith("VectorfieldGRU") and label[14:].isdigit():
+            hidden_size = int(label[14:])
+            assert hidden_size % 2 == 0
+            model_params_d = dict(n_locs=hidden_size * 2, in_size=model_in_size, key=model_key)
             model = VectorfieldGRU(**model_params_d)
             mdl_interface_cls = VectorfieldGRUInterface
         case "JAWithExternGRU":
@@ -313,9 +316,10 @@ def setup_model(
             model_params_d = dict(in_size=in_size, out_size=1, key=model_key)
             model = LinearStatic(**model_params_d)
             mdl_interface_cls = LinearInterface
-        case "GRUwLinearModel":
+        case label if label.startswith("GRUwLinearModel") and label[15:].isdigit():
+            hidden_size = int(label[15:])
             # model_params_d = dict(in_size=7, hidden_size=8, linear_in_size=7, key=model_key)
-            model_params_d = dict(in_size=model_in_size, hidden_size=8, linear_in_size=1, key=model_key)
+            model_params_d = dict(in_size=model_in_size, hidden_size=hidden_size, linear_in_size=1, key=model_key)
             model = GRUwLinearModel(**model_params_d)
             mdl_interface_cls = GRUwLinearModelInterface
         case "GRUaroundLinearModel":
