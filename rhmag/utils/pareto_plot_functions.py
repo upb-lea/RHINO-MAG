@@ -23,6 +23,7 @@ def visualize_pareto_cross_model(
     show_median,
     scale_log_metric=True,
     scale_log_size=True,
+    figsize=(7.167, 7.167 / 2),
 ):
     df = df.copy()
     df_external = df_external.copy()
@@ -31,9 +32,7 @@ def visualize_pareto_cross_model(
 
     df_external["color"] = color_others
 
-    fig, axs = plt.subplots(
-        nrows=1, ncols=len(metrics), sharex=sharex, sharey=sharey, figsize=(7.167, 7.167 / 2), squeeze=False
-    )
+    fig, axs = plt.subplots(nrows=1, ncols=len(metrics), sharex=sharex, sharey=sharey, figsize=figsize, squeeze=False)
 
     for i, metric in enumerate(metrics):
         ax = axs[0, i]
@@ -102,11 +101,11 @@ def visualize_pareto_cross_model(
             ax.set_yscale("log")
 
         unique_params = sorted(df["n_params"].unique().astype(int))
-        ax.set_yticks(unique_params)
+        # ax.set_yticks(unique_params)
         ax.yaxis.set_major_formatter(plt.ScalarFormatter())
         ax.xaxis.set_major_formatter(plt.ScalarFormatter())
 
-        ax.set_yticklabels(unique_params, rotation=0, fontsize=9)  # ha='right')
+        # ax.set_yticklabels(unique_params, rotation=0, fontsize=9)  # ha='right')
         ax.tick_params(which="major", axis="y", direction="in")
         ax.tick_params(which="both", axis="x", direction="in")
         ax.yaxis.minorticks_off()
@@ -145,6 +144,15 @@ def visualize_pareto_cross_model(
         Line2D([0], [0], marker="s", color="w", markerfacecolor=color_others, label="External", markersize=5)
     )
 
-    fig.legend(handles=legend_elements)
+    fig.legend(
+        prop={"size": 8},
+        handles=legend_elements,
+        framealpha=0.5,
+        loc="center",
+        fancybox=True,
+        shadow=False,
+        bbox_to_anchor=(0.525, 0.0),
+        ncol=len(legend_elements),
+    )
     fig.tight_layout()
     return fig, axs
