@@ -350,7 +350,7 @@ class GRUwLinearModel(eqx.Module):
         gru_key, l_key = jax.random.split(key, 2)
 
         self.cell = eqx.nn.GRUCell(in_size, hidden_size, key=gru_key)
-        self.linear = LinearDynamicParameters(in_size, out_size=1, key=l_key)
+        self.linear = LinearDynamicParameters(linear_in_size, out_size=1, key=l_key)
 
     def __call__(self, input_gru, input_linear, init_hidden):
         hidden = init_hidden

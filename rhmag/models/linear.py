@@ -41,4 +41,4 @@ class LinearDynamicParameters(eqx.Module):
         self.out_size = out_size
 
     def predict(self, input, theta):
-        return jax.nn.tanh(theta @ input)
+        return theta @ input

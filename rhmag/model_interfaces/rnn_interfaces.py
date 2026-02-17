@@ -465,7 +465,7 @@ class GRUwLinearModelInterface(ModelInterface):
         gru_in = gru_in[:, 1:]
 
         init_hidden = self.model.construct_init_hidden(
-            out_true=jnp.arctanh(H_past_norm[:, 0, None]) / B_past_norm[:, 0, None],
+            out_true=H_past_norm[:, 0, None] / B_past_norm[:, 0, None],
             batch_size=H_past_norm.shape[0],
         )
         linear_in = self._prepare_linear_input(B_past_norm[:, :1], B_past_norm[:, 1:])
@@ -473,7 +473,7 @@ class GRUwLinearModelInterface(ModelInterface):
             gru_in,
             linear_in,
             init_hidden,
-            jnp.arctanh(H_past_norm[:, 1:]) / B_past_norm[:, 1:],
+            H_past_norm[:, 1:] / B_past_norm[:, 1:],
         )
         return final_hidden_warmup
 
@@ -507,7 +507,7 @@ class GRUwLinearModelInterface(ModelInterface):
             init_hidden = self._warmup(B_past_norm, H_past_norm, B_future_norm, T_norm)
         else:
             init_hidden = self.model.construct_init_hidden(
-                out_true=jnp.arctanh(H_past_norm[:, -1, None]) / B_past_norm[:, -1, None],
+                out_true=H_past_norm[:, -1, None] / B_past_norm[:, -1, None],
                 batch_size=H_past_norm.shape[0],
             )
 
