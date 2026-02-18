@@ -7,7 +7,8 @@ import numpy as np
 def color_helper(model_type, colors, color_others):
     for key, color in colors.items():
         if key in model_type:
-            return color
+            if model_type.split(key)[-1].isdigit() or model_type.split(key)[-1] == "":
+                return color
     return color_others
 
 
