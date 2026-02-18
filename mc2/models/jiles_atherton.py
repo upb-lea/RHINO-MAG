@@ -419,13 +419,13 @@ class JAWithExternGRU(eqx.Module):
         2. Apply a GRU across the full trajectory to correct residual errors.
     """
 
-    ja: JAStatic = eqx.field(static=True)
+    ja: JAStatic #= eqx.field(static=True)
     gru: GRU
 
     def __init__(self, key, in_size, hidden_size=8, **kwargs):
         ja_key, gru_key = jax.random.split(key, 2)
-        # self.ja = JAStatic(ja_key, **kwargs)
-        self.ja = load_model(MODEL_DUMP_ROOT / "4ec8f810-298b-49.eqx", JAStatic)
+        self.ja = JAStatic(ja_key, **kwargs)
+        #self.ja = load_model(MODEL_DUMP_ROOT / "4ec8f810-298b-49.eqx", JAStatic)
         self.gru = GRU(in_size, hidden_size=hidden_size, key=gru_key)
 
 
@@ -510,10 +510,10 @@ class JAWithGRU(eqx.Module):
 
     def __init__(self, normalizer, key, in_size, hidden_size=8, **kwargs):
         ja_key, gru_key = jax.random.split(key, 2)
-        self.ja = load_model(
-            MODEL_DUMP_ROOT / "4ec8f810-298b-49.eqx", JAStatic
-        )  # using pretrained ja model # b8d1fe17-2f6f-40,
-        # self.ja = JAStatic(ja_key, **kwargs)
+        # self.ja = load_model(
+        #     MODEL_DUMP_ROOT / "4ec8f810-298b-49.eqx", JAStatic
+        # )  # using pretrained ja model # b8d1fe17-2f6f-40,
+        self.ja = JAStatic(ja_key, **kwargs)
         self.gru = GRU(in_size=in_size, hidden_size=hidden_size, key=gru_key)
         self.normalizer = normalizer
 
@@ -907,7 +907,7 @@ class JADirectParamGRU(eqx.Module):
             H_prev_norm = self.normalizer.normalize_H(H_prev)
             B_next_norm = B_next / self.normalizer.B_max
 
-            inp = jnp.concatenate([H_prev_norm[None], B_next_norm[None], feat_next], axis=-1)
+            inp = jnp.concatenate([H_prev_norm[None], feat_next], axis=-1)
             new_hidden = self.gru(inp, hidden)
             ja_params = new_hidden[: self.n_ja_params]
             ja_model = set_parameters(self.ja, ja_params)
@@ -920,6 +920,24 @@ class JADirectParamGRU(eqx.Module):
         inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:])
         (_), H_seq = jax.lax.scan(body_fun, (H0, hidden), inputs)
         return H_seq
+    
+    def warmup_call(self, H0, B_seq, features_seq, init_hidden, H_true):
+        def body_fun(carry, inputs):
+            H_prev, hidden = carry
+            B_prev, B_next, feat_next, h_true = inputs
+            H_prev_norm = self.normalizer.normalize_H(H_prev)
+
+            inp = jnp.concatenate([H_prev_norm[None], feat_next], axis=-1)
+            new_hidden = self.gru(inp, hidden)
+            H_next= h_true
+
+            return (H_next, new_hidden), H_next
+
+        B_pairs = jnp.stack([B_seq[:-1], B_seq[1:]], axis=1)
+        inputs = (B_pairs[:, 0], B_pairs[:, 1], features_seq[:], H_true)  # features_seq[:-1] # 1:]
+
+        (_, final_hidden), H_seq = jax.lax.scan(body_fun, (H0, init_hidden), inputs)
+        return H_seq, final_hidden
 
 
 from functools import partial

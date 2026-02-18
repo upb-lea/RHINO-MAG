@@ -237,8 +237,9 @@ def setup_model(
             model_params_d = dict(n_locs=9, in_size=model_in_size, key=model_key)
             model = VectorfieldGRU(**model_params_d)
             mdl_interface_cls = VectorfieldGRUInterface
-        case "JAWithExternGRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+        case label if label.startswith("JAWithExternGRU") and label[15:].isdigit():
+            hidden_size = int(label[15:])
+            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size+1, key=model_key) #+1 due to H_hat_ja
             model = JAWithExternGRU(**model_params_d)
             mdl_interface_cls = JAWithExternGRUwInterface
         case "JAWithGRUlin":
@@ -249,8 +250,9 @@ def setup_model(
             model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAWithGRUlinFinal(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
-        case "JAWithGRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+        case label if label.startswith("JAWithGRU") and label[9:].isdigit():
+            hidden_size = int(label[9:])
+            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size+1, key=model_key) #+1 due to H_hat_ja
             model = JAWithGRU(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
         case "GRUWithJA":
@@ -312,8 +314,9 @@ def setup_model(
             model_params_d = dict(in_size=model_in_size, hidden_size=3, linear_in_size=3, key=model_key)
             model = GRUaroundLinearModel(**model_params_d)
             mdl_interface_cls = GRUaroundLinearModelInterface
-        case "JADirectParamGRU":
-            model_params_d = dict(in_size=model_in_size + 1, hidden_size=8, key=model_key)
+        case label if label.startswith("JADirectParamGRU") and label[16:].isdigit():
+            hidden_size = int(label[16:])
+            model_params_d = dict(in_size=model_in_size + 1, hidden_size=hidden_size, key=model_key)
             model = JADirectParamGRU(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
         case "DummyModel":
