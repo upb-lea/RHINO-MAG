@@ -504,7 +504,7 @@ class JAWithGRU(eqx.Module):
         - Normalized H-field values are used as input to the GRU.
     """
 
-    ja: JAStatic = eqx.field(static=True)
+    ja: JAStatic #= eqx.field(static=True)
     gru: GRU
     normalizer: eqx.Module = eqx.field(static=True)
 
