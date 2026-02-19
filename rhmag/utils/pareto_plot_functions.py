@@ -1,3 +1,5 @@
+import re
+
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import seaborn as sns
@@ -5,10 +7,19 @@ import numpy as np
 
 
 def color_helper(model_type, colors, color_others):
+
+    match = re.match(r"^(.*?)(\d*)$", model_type)
+
+    if match:
+        model_name = match.group(1)
+        hidden_size = match.group(2)
+    else:
+        model_name = model_type
+        hidden_size = ""
+
     for key, color in colors.items():
-        if key in model_type:
-            if model_type.split(key)[-1].isdigit() or model_type.split(key)[-1] == "":
-                return color
+        if key == model_name:
+            return color
     return color_others
 
 
