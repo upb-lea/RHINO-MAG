@@ -21,12 +21,12 @@ class JAPinnWithGRU(eqx.Module):
         self.physics_weight_lambda = physics_weight_lambda
         self.net = eqx.nn.GRUCell(input_size=input_size, hidden_size=hidden_size, key=init_key)
 
+        # params JA initial guesses
         self.Ms = jnp.array([1.6e6])
         self.a = jnp.array([110.0])
         self.alpha = jnp.array([1.6e-3])
         self.c = jnp.array([0.2])
         self.k = jnp.array([400.01])
-        # self.out_layer = eqx.nn.Linear(in_features=1,out_features=1,key=init_key)
 
     def __call__(self, inp, init_hidden):
         hidden = init_hidden
@@ -38,12 +38,10 @@ class JAPinnWithGRU(eqx.Module):
             return gru_out, out
 
         _, out = jax.lax.scan(scan_fn, hidden, inp)
-        # out_o = self.out_layer(out)
         return out
 
     def warmup_call(self, input, init_hidden, out_true):
         hidden = init_hidden
-        # TODO: move construct hidden here?
 
         def f(carry, inp):
             inp_t, out_true_t = inp
