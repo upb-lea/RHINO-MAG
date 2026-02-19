@@ -21,11 +21,11 @@ class JAPinnWithGRU(eqx.Module):
         self.physics_weight_lambda = physics_weight_lambda
         self.net = eqx.nn.GRUCell(input_size=input_size, hidden_size=hidden_size, key=init_key)
 
-        self.Ms = jnp.array([1.6e6], dtype=jnp.float32)
-        self.a = jnp.array([110], dtype=jnp.float32)
-        self.alpha = jnp.array([1.6e-3], dtype=jnp.float32)
-        self.c = jnp.array([0.2], dtype=jnp.float32)
-        self.k = jnp.array([400.01], dtype=jnp.float32)
+        self.Ms = jnp.array([1.6e6])
+        self.a = jnp.array([110.0])
+        self.alpha = jnp.array([1.6e-3])
+        self.c = jnp.array([0.2])
+        self.k = jnp.array([400.01])
         # self.out_layer = eqx.nn.Linear(in_features=1,out_features=1,key=init_key)
 
     def __call__(self, inp, init_hidden):

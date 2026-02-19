@@ -73,7 +73,7 @@ def parse_args() -> argparse.Namespace:
     # parser.add_argument("-t", "--tag", default=None, required=False, help="an identifier/tag/comment for the trials")
     parser.add_argument(
         "--materials",
-        #default=None,
+        # default=None,
         nargs="+",
         required=True,
         help=f"Material label to train on. One of {AVAILABLE_MATERIALS}",
@@ -157,11 +157,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--disable_f64", action="store_true", default=False)
     # parser.add_argument("--disable_features", action="store_true", default=False)
-    parser.add_argument(
-        "--disable_features",
-        choices=[True, "reduce", False],
-        default=False
-    )
+    parser.add_argument("--disable_features", choices=[True, "reduce", False], default=False)
     parser.add_argument("--transform_H", action="store_true", default=False)
     # parser.add_argument("-d", "--debug", action="store_true", default=False, help="Run in debug mode with reduced data")
     args = parser.parse_args()
@@ -199,9 +195,7 @@ def run_experiment_for_seed(
     key = jax.random.PRNGKey(seed)
     key, training_key, model_key = jax.random.split(key, 3)
 
-    assert (
-        material in AVAILABLE_MATERIALS
-    ), f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
+    assert material in AVAILABLE_MATERIALS, f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
     assert material in AVAILABLE_MATERIALS, f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
 
     wrapped_model, optimizer, loss_function, params, data_tuple = setup_experiment(
@@ -336,7 +330,9 @@ def train_model_jax(
     else:
         seeds_to_run = seeds
 
-    log.info(f"Starting experiments for material(s) {len(material_names)} for {len(model_types)} model type(s) and {len(seeds_to_run)} seeds: {model_types}, {seeds_to_run}")
+    log.info(
+        f"Starting experiments for material(s) {len(material_names)} for {len(model_types)} model type(s) and {len(seeds_to_run)} seeds: {model_types}, {seeds_to_run}"
+    )
     for material_name in material_names:
         log.info(f"=== Starting experiments for Material: {material_name} ===")
         for model_type in model_types:

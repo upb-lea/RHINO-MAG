@@ -157,7 +157,10 @@ def reconstruct_model_from_file(filename: pathlib.Path) -> ModelInterface:
 
         loading_params = deepcopy(params["model_params"])
         loading_params["key"] = jnp.array(loading_params["key"], dtype=jnp.uint32)
-        model = type(fresh_wrapped_model.model)(**loading_params)
+        try:
+            model = type(fresh_wrapped_model.model)(**loading_params)
+        except TypeError:
+            model = type(fresh_wrapped_model.model)(normalizer=normalizer, **loading_params)
         model = eqx.tree_deserialise_leaves(f, model, partial(filter_spec, f64_enabled=jax.config.x64_enabled))
         wrapped_model = eqx.tree_at(lambda t: t.model, fresh_wrapped_model, model)
 
