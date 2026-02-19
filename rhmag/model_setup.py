@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import equinox as eqx
 import optax
 
-from rhmag.losses import MSE_loss, adapted_RMS_loss
+from rhmag.losses import MSE_loss, adapted_RMS_loss, ja_pinn_gru_loss
 from rhmag.features.features_jax import compute_fe_single, db_dt, d2b_dt2
 from rhmag.data_management import MaterialSet, Normalizer
 
@@ -41,6 +41,7 @@ from rhmag.models.jiles_atherton import (
     GRUWithJA,
     LFRWithGRUJA,
 )
+from rhmag.models.pinn import JAPinnWithGRU
 from rhmag.models.linear import LinearStatic
 from rhmag.models.dummy_model import DummyModel
 
@@ -53,6 +54,7 @@ from rhmag.model_interfaces.rnn_interfaces import (
     MagnetizationRNNwInterface,
     VectorfieldGRUInterface,
     GRUaroundLinearModelInterface,
+    GRUWithPINNInterface,
 )
 from rhmag.model_interfaces.ja_interfaces import (
     JAwInterface,
@@ -65,8 +67,8 @@ from rhmag.model_interfaces.ja_interfaces import (
 from rhmag.model_interfaces.linear_interfaces import LinearInterface
 from rhmag.model_interfaces.dummy_model_interface import DummyModelInterface
 
-SUPPORTED_MODELS = ["GRU{hidden_size}", "HNODE", "JA"]
-SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
+SUPPORTED_MODELS = ["GRU{hidden_size}", "LSTM{hidden_size}", "HNODE", "JA", "JAPinnWithGRU"]
+SUPPORTED_LOSSES = ["MSE", "adapted_RMS", "ja_pinn_gru_loss"]
 
 
 def setup_dataset(
@@ -252,7 +254,9 @@ def setup_model(
             mdl_interface_cls = VectorfieldGRUInterface
         case label if label.startswith("JAWithExternGRU") and label[15:].isdigit():
             hidden_size = int(label[15:])
-            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size+1, key=model_key) #+1 due to H_hat_ja
+            model_params_d = dict(
+                hidden_size=hidden_size, in_size=model_in_size + 1, key=model_key
+            )  # +1 due to H_hat_ja
             model = JAWithExternGRU(**model_params_d)
             mdl_interface_cls = JAWithExternGRUwInterface
         case "JAWithGRUlin":
@@ -265,7 +269,9 @@ def setup_model(
             mdl_interface_cls = JAWithGRUwInterface
         case label if label.startswith("JAWithGRU") and label[9:].isdigit():
             hidden_size = int(label[9:])
-            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size+1, key=model_key) #+1 due to H_hat_ja
+            model_params_d = dict(
+                hidden_size=hidden_size, in_size=model_in_size + 1, key=model_key
+            )  # +1 due to H_hat_ja
             model = JAWithGRU(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
         case "GRUWithJA":
@@ -337,6 +343,15 @@ def setup_model(
             model_params_d = dict(key=model_key)
             model = DummyModel(key=model_key)
             mdl_interface_cls = DummyModelInterface
+        case "JAPinnWithGRU":
+            model_params_d = dict(
+                input_size=model_in_size,
+                hidden_size=8,
+                physics_weight_lambda=1e-6,
+                key=model_key,
+            )
+            model = JAPinnWithGRU(**model_params_d)
+            mdl_interface_cls = GRUWithPINNInterface
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
 
@@ -357,6 +372,8 @@ def setup_loss(loss_label: str) -> Callable:
             loss_function = MSE_loss
         case "adapted_RMS":
             loss_function = adapted_RMS_loss
+        case "JA_pinn":
+            loss_function = ja_pinn_gru_loss
         case _:
             raise ValueError(f"Unknown loss type: {loss_label}. Choose on of {SUPPORTED_LOSSES}")
 

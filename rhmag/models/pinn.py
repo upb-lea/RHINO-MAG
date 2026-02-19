@@ -5,7 +5,7 @@ import equinox as eqx
 import optax
 
 
-class PinnWithGRU(eqx.Module):
+class JAPinnWithGRU(eqx.Module):
     net: eqx.Module
     Ms: jnp.ndarray  # skalare Größen, die wir lernen wollen
     a: jnp.ndarray
