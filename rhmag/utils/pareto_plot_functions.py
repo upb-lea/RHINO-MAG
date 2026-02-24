@@ -163,8 +163,8 @@ def visualize_pareto_cross_model(
         loc="center",
         fancybox=True,
         shadow=False,
-        bbox_to_anchor=(0.525, 0.0),
-        ncol=len(legend_elements),
+        bbox_to_anchor=(0.525, -0.025),
+        ncols=5,
     )
     fig.tight_layout()
     return fig, axs

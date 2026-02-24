@@ -6,14 +6,14 @@ from rhmag.runners.rnn_training_jax import train_model_jax
 
 
 train_model_jax(
-    material_name="B",
-    model_types=["LSTM7"],
+    material_name="E",
+    model_types=["GRUwLinearModel32"],
     seeds=[
         1,
     ],
     exp_name="demonstration",
     loss_type="adapted_RMS",
-    gpu_id=0,
+    gpu_id=1,
     epochs=1000,
     batch_size=512,
     tbptt_size=156,
@@ -23,7 +23,7 @@ train_model_jax(
     tbptt_size_start=None,
     dyn_avg_kernel_size=11,
     disable_f64=True,
-    disable_features="reduce",
+    disable_features=False,
     transform_H=False,
     use_all_data=False,
 )
