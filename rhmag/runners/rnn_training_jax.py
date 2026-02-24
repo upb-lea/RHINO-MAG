@@ -195,8 +195,9 @@ def run_experiment_for_seed(
     key = jax.random.PRNGKey(seed)
     key, training_key, model_key = jax.random.split(key, 3)
 
-    assert material in AVAILABLE_MATERIALS, f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
-    assert material in AVAILABLE_MATERIALS, f"Material {material} is not available. Choose on of {AVAILABLE_MATERIALS}."
+    assert (
+        material in AVAILABLE_MATERIALS
+    ), f"Material '{material}' is not available. Choose on of {AVAILABLE_MATERIALS}."
 
     wrapped_model, optimizer, loss_function, params, data_tuple = setup_experiment(
         model_type,
