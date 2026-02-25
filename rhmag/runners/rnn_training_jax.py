@@ -65,7 +65,7 @@ from rhmag.training.jax_routine import train_model
 from rhmag.model_setup import setup_experiment, SUPPORTED_MODELS, SUPPORTED_LOSSES
 from rhmag.metrics import evaluate_model_on_test_set
 from rhmag.model_interfaces.model_interface import save_model
-from rhmag.utils.model_evaluation import store_model_to_file
+from rhmag.utils.model_evaluation import store_model_to_file, reconstruct_model_from_file
 
 
 def parse_args() -> argparse.Namespace:
@@ -182,6 +182,7 @@ def run_experiment_for_seed(
     dyn_avg_kernel_size: int,
     transform_H: bool,
     use_all_data: bool,
+    pretrained_model_id: dict[str, str] | None,
 ):
 
     # if gpu_id != -1:
@@ -216,6 +217,17 @@ def run_experiment_for_seed(
         dyn_avg_kernel_size=dyn_avg_kernel_size,
         use_all_data=use_all_data,
     )
+
+    if pretrained_model_id is not None:
+        pretrained_model = reconstruct_model_from_file(pretrained_model_id[model_type])
+
+        assert jax.tree.structure(pretrained_model.model) == jax.tree.structure(wrapped_model.model)
+
+        wrapped_model = wrapped_model.__class__(
+            model=pretrained_model.model,
+            normalizer=wrapped_model.normalizer,
+            featurize=wrapped_model.featurize,
+        )
 
     exp_id = f"{base_id}_seed{seed}"
     log.info(f"Training starting. Experiment ID is '{exp_id}'.")
@@ -289,6 +301,7 @@ def train_model_jax(
     disable_features: bool | str = False,
     transform_H: bool = False,
     use_all_data: bool = False,
+    pretrained_model_id: dict[str | str] | None = None,
 ):
     """Train a model based on the specified parameterization.
 
@@ -343,28 +356,29 @@ def train_model_jax(
             else:
                 base_id = f"{material_name}_{model_type}_{exp_name}_{str(uuid4())[:8]}"
             for seed in seeds_to_run:
-                try:
-                    run_experiment_for_seed(
-                        seed=seed,
-                        base_id=base_id,
-                        material=material_name,
-                        model_type=model_type,
-                        loss_type=loss_type,
-                        gpu_id=gpu_id,
-                        epochs=epochs,
-                        batch_size=batch_size,
-                        tbptt_size=tbptt_size,
-                        past_size=past_size,
-                        time_shift=time_shift,
-                        noise_on_data=noise_on_data,
-                        dyn_avg_kernel_size=dyn_avg_kernel_size,
-                        tbptt_size_start=tbptt_size_start,
-                        disable_features=disable_features,
-                        transform_H=transform_H,
-                        use_all_data=use_all_data,
-                    )
-                except Exception as e:
-                    log.error(f"Experiment for model {model_type} and seed {seed} failed with error: {e}")
+                # try:
+                run_experiment_for_seed(
+                    seed=seed,
+                    base_id=base_id,
+                    material=material_name,
+                    model_type=model_type,
+                    loss_type=loss_type,
+                    gpu_id=gpu_id,
+                    epochs=epochs,
+                    batch_size=batch_size,
+                    tbptt_size=tbptt_size,
+                    past_size=past_size,
+                    time_shift=time_shift,
+                    noise_on_data=noise_on_data,
+                    dyn_avg_kernel_size=dyn_avg_kernel_size,
+                    tbptt_size_start=tbptt_size_start,
+                    disable_features=disable_features,
+                    transform_H=transform_H,
+                    use_all_data=use_all_data,
+                    pretrained_model_id=pretrained_model_id,
+                )
+                # except Exception as e:
+                #     log.error(f"Experiment for model {model_type} and seed {seed} failed with error: {e}")
                 jax.clear_caches()
 
     log.info("All scheduled experiments completed.")
