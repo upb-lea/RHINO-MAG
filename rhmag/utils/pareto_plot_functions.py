@@ -28,6 +28,7 @@ def visualize_pareto_cross_model(
     df_external,
     metrics,
     colors,
+    labels,
     color_others,
     sharex,
     sharey,
@@ -150,7 +151,7 @@ def visualize_pareto_cross_model(
         ax.grid(True, which="both", ls="--", alpha=0.3)
 
     legend_elements = [
-        Line2D([0], [0], color=color, label=model_label, markersize=5) for model_label, color in colors.items()
+        Line2D([0], [0], color=color, label=labels[model_label], markersize=5) for model_label, color in colors.items()
     ]
     legend_elements.append(
         Line2D([0], [0], marker="s", color="w", markerfacecolor=color_others, label="External", markersize=5)
