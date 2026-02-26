@@ -6,7 +6,7 @@ from rhmag.runners.rnn_training_jax import train_model_jax
 
 
 train_model_jax(
-    material_names=["X"],
+    material_names=["C"],
     model_types=["GRU8", "GRU16", "GRU32"],
     seeds=[
         42,
@@ -26,4 +26,5 @@ train_model_jax(
     disable_features="reduce",
     transform_H=False,
     use_all_data=True,
+    pretrained_model_id=None,
 )

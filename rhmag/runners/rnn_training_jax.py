@@ -225,7 +225,7 @@ def run_experiment_for_seed(
 
         wrapped_model = wrapped_model.__class__(
             model=pretrained_model.model,
-            normalizer=wrapped_model.normalizer,
+            normalizer=wrapped_model.normalizer,  # keep the pretrained normalizer? Should be fine at least?
             featurize=wrapped_model.featurize,
         )
 
