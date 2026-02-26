@@ -19,7 +19,7 @@ from rhmag.data_management import MaterialSet, Normalizer
 
 # Models
 from rhmag.features.features_jax import compute_fe_single
-from rhmag.data_management import MaterialSet
+from rhmag.data_management import FrequencySet, MaterialSet, DataSet, FINAL_MATERIALS
 from rhmag.model_interfaces.rnn_interfaces import (
     NODEwInterface,
     RNNwInterface,
@@ -71,6 +71,36 @@ SUPPORTED_MODELS = ["GRU{hidden_size}", "LSTM{hidden_size}", "HNODE", "JA", "JAP
 SUPPORTED_LOSSES = ["MSE", "adapted_RMS", "ja_pinn_gru_loss"]
 
 
+def combine_material_sets(data_set) -> MaterialSet:
+    combined_frequency_sets_dict = {int(freq): [] for freq in data_set.at_material("A").frequencies.tolist()}
+
+    for material_set in data_set:
+        for frequency_set in material_set:
+            combined_frequency_sets_dict[int(frequency_set.frequency)].append(frequency_set)
+
+    combined_frequency_sets = []
+    for freq, frequency_set_list in combined_frequency_sets_dict.items():
+        out_frequency_set = frequency_set_list[0]
+        for frequency_set in frequency_set_list[1:]:
+            out_frequency_set = FrequencySet(
+                material_name="X",
+                frequency=freq,
+                H=jnp.concatenate([out_frequency_set.H, frequency_set.H], axis=0),
+                B=jnp.concatenate([out_frequency_set.B, frequency_set.B], axis=0),
+                T=jnp.concatenate([out_frequency_set.T, frequency_set.T], axis=0),
+                H_RMS=jnp.concatenate([out_frequency_set.H_RMS, frequency_set.H_RMS], axis=0),
+            )
+        combined_frequency_sets.append(out_frequency_set)
+
+    combined_material_set = MaterialSet(
+        material_name="X",
+        frequency_sets=combined_frequency_sets,
+        frequencies=data_set.at_material("A").frequencies,
+    )
+
+    return combined_material_set
+
+
 def setup_dataset(
     material_name: str,
     subsampling_freq: int,
@@ -89,7 +119,12 @@ def setup_dataset(
         The data tuple of `(training_set, eval_set, test_set)`
     """
 
-    mat_set = MaterialSet.from_material_name(material_name)
+    if material_name == "X":
+        data_set = DataSet.from_material_names(FINAL_MATERIALS)
+        mat_set = combine_material_sets(data_set)
+    else:
+        mat_set = MaterialSet.from_material_name(material_name)
+
     mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
     if use_all_data:
         train_set = deepcopy(mat_set)
