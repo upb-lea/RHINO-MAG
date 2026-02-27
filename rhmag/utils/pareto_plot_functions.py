@@ -2,6 +2,7 @@ import re
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+import matplotlib.ticker as ticker
 import seaborn as sns
 import numpy as np
 
@@ -37,6 +38,7 @@ def visualize_pareto_cross_model(
     scale_log_metric=True,
     scale_log_size=True,
     figsize=(7.167, 7.167 / 2),
+    show_legend=True,
 ):
     df = df.copy()
     df_external = df_external.copy()
@@ -150,22 +152,191 @@ def visualize_pareto_cross_model(
 
         ax.grid(True, which="both", ls="--", alpha=0.3)
 
-    legend_elements = [
-        Line2D([0], [0], color=color, label=labels[model_label], markersize=5) for model_label, color in colors.items()
-    ]
-    legend_elements.append(
-        Line2D([0], [0], marker="s", color="w", markerfacecolor=color_others, label="External", markersize=5)
+    if show_legend:
+        legend_elements = [
+            Line2D([0], [0], color=color, label=labels[model_label], markersize=5)
+            for model_label, color in colors.items()
+        ]
+        legend_elements.append(
+            Line2D([0], [0], marker="s", color="w", markerfacecolor=color_others, label="External", markersize=5)
+        )
+
+        fig.legend(
+            prop={"size": 8},
+            handles=legend_elements,
+            framealpha=0.5,
+            loc="center",
+            fancybox=True,
+            shadow=False,
+            bbox_to_anchor=(0.525, -0.025),
+            ncols=5,
+        )
+    fig.tight_layout()
+    return fig, axs
+
+
+def visualize_pareto_single_plot(
+    dfs_per_material,
+    external_df_per_material,
+    metrics,
+    colors,
+    labels,
+    color_others,
+    sharex,
+    sharey,
+    xlim,
+    show_median,
+    figsize,
+    scale_log_metric=True,
+    scale_log_size=True,
+    show_legend=True,
+):
+    n_materials = len(dfs_per_material.keys())
+
+    fig, axs = plt.subplots(
+        nrows=n_materials, ncols=len(metrics), sharex=sharex, sharey=sharey, figsize=figsize, squeeze=False
     )
 
-    fig.legend(
-        prop={"size": 8},
-        handles=legend_elements,
-        framealpha=0.5,
-        loc="center",
-        fancybox=True,
-        shadow=False,
-        bbox_to_anchor=(0.525, -0.025),
-        ncols=5,
-    )
-    fig.tight_layout()
+    for mat_idx, (material_name, df_material) in enumerate(dfs_per_material.items()):
+        df_external = external_df_per_material[material_name].copy()
+        df = df_material.copy()
+
+        df["color"] = df["model_type"].apply(lambda x: color_helper(x, colors, color_others))
+
+        df_external["color"] = color_others
+
+        for i, metric in enumerate(metrics):
+            ax = axs[mat_idx, i]
+            target_col = f"{metric}_95th"
+
+            # Start own results
+            for color, group_df in df.groupby("color"):
+                current_color = color
+                if show_median:
+                    alpha = 0.1
+                else:
+                    alpha = 0.8
+
+                if np.all(group_df["model_type"] == "JA"):
+                    alpha = 0.8
+
+                sns.scatterplot(
+                    data=group_df,
+                    x=target_col,
+                    y="n_params",
+                    color=current_color,
+                    marker="o",
+                    s=20,
+                    alpha=alpha,
+                    ax=ax,
+                    zorder=3,
+                )
+
+                if show_median:
+                    med_df = group_df.groupby("model_type").median(numeric_only=True)
+                    sorted_indices = np.argsort(med_df.n_params)
+                    med_df = med_df.iloc[sorted_indices]
+
+                    median = med_df[f"{metric}_95th"]
+                    ax.plot(median, med_df["n_params"], c=current_color, alpha=0.8)
+            # End own results
+
+            # Start external results:
+            sns.scatterplot(
+                data=df_external,
+                x=target_col,
+                y="n_params",
+                color=color_others,
+                marker="s",
+                s=20,
+                alpha=0.8,
+                ax=ax,
+                zorder=3,
+            )
+            for _, row in df_external.iterrows():
+                ax.text(
+                    row[target_col] * 1.05,
+                    row["n_params"],
+                    str(row["model_type"]),
+                    fontsize=10,
+                    alpha=1,
+                    va="center",
+                    color=color_others,
+                    fontweight="normal",
+                )
+            # End external results
+
+            if scale_log_metric:
+                ax.set_xscale("log")
+            if scale_log_size:
+                ax.set_yscale("log")
+
+            unique_params = sorted(df["n_params"].unique().astype(int))
+            # ax.set_yticks(unique_params)
+            ax.yaxis.set_major_formatter(plt.ScalarFormatter())
+            ax.xaxis.set_major_formatter(plt.ScalarFormatter())
+
+            # ax.set_yticklabels(unique_params, rotation=0, fontsize=9)  # ha='right')
+            ax.tick_params(which="major", axis="y", direction="in")
+            ax.tick_params(which="both", axis="x", direction="in")
+            ax.yaxis.minorticks_off()
+            # ax.xaxis.minorticks_off()
+
+            if i == 0:
+                if mat_idx == 1 or mat_idx == 3:
+                    ax.set_xticks([0.05, 0.25, 0.5], minor=True)
+                else:
+                    ax.set_xticks([0.25, 0.5], minor=True)
+                ax.set_xticks([0.1, 1.0], minor=False)
+
+                ax.xaxis.set_minor_formatter(plt.ScalarFormatter())
+
+            if i == 1:
+                ax.set_xticks([0.02, 0.05, 0.2], minor=True)
+                ax.xaxis.set_minor_formatter(plt.ScalarFormatter())
+
+            if i == 0:
+                ax.set_ylabel("\# Model params.", fontsize=9)
+                ax.text(
+                    -0.3,
+                    0.5,
+                    f"Mat.'{material_name}'",
+                    transform=ax.transAxes,
+                    rotation=90,
+                    fontsize=12,
+                    fontweight="bold",
+                    ha="center",
+                    va="center",
+                )
+
+            label_map = {"sre": "95-th percentile SRE", "nere": "95-th percentile NERE"}
+            if mat_idx == n_materials - 1:
+                ax.set_xlabel(label_map.get(metric, metric), fontsize=9)
+            else:
+                ax.set(xlabel=None)
+
+            ax.grid(True, which="both", ls="--", alpha=0.3)
+
+            # ax.set_title(f"Pareto investigation for material '{material_name}'")
+
+        if show_legend:
+            legend_elements = [
+                Line2D([0], [0], color=color, label=labels[model_label], markersize=5)
+                for model_label, color in colors.items()
+            ]
+            legend_elements.append(
+                Line2D([0], [0], marker="s", color="w", markerfacecolor=color_others, label="External", markersize=5)
+            )
+
+            fig.legend(
+                prop={"size": 8},
+                handles=legend_elements,
+                framealpha=0.5,
+                loc="center",
+                fancybox=True,
+                shadow=False,
+                bbox_to_anchor=(0.525, -0.025),
+                ncols=5,
+            )
+    fig.tight_layout(w_pad=0.4, h_pad=0.1)
     return fig, axs
