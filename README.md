@@ -8,8 +8,12 @@
 </p>
 
 This is the contribution of Team "Siegen and Paderborn" to the MagNet Challenge 2 (MC2).
+With only $325$ parameters and an average SRE score of $8.02 \\%$ and an average NERE score of $1.07 \\%$ on unseen test data averaged over five different materials, the proposed GRU-based model won the first place in the performance track in the MC2, showing an excellent accuracy-per-parameter efficiency.
 
 Official site for the second magnet challenge https://github.com/minjiechen/magnetchallenge-2
+
+
+
 
 ## The task:
 Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right)$ based on the previously observed magnetic field $H_t$ with $t \in \left[t_0, t_1\right)$, the magnetic flux density $B_t$ with $t \in \left[t_0, t_2\right)$, and the temperature $\vartheta$.
