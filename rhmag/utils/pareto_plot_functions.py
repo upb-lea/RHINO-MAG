@@ -184,12 +184,14 @@ def visualize_pareto_single_plot(
     color_others,
     sharex,
     sharey,
-    xlim,
+    xlims,
     show_median,
     figsize,
+    material_name_map,
     scale_log_metric=True,
     scale_log_size=True,
     show_legend=True,
+    show_external_names=True,
 ):
     n_materials = len(dfs_per_material.keys())
 
@@ -206,6 +208,7 @@ def visualize_pareto_single_plot(
         df_external["color"] = color_others
 
         for i, metric in enumerate(metrics):
+            xlim = xlims[mat_idx][i]
             ax = axs[mat_idx, i]
             target_col = f"{metric}_95th"
 
@@ -253,17 +256,18 @@ def visualize_pareto_single_plot(
                 ax=ax,
                 zorder=3,
             )
-            for _, row in df_external.iterrows():
-                ax.text(
-                    row[target_col] * 1.05,
-                    row["n_params"],
-                    str(row["model_type"]),
-                    fontsize=10,
-                    alpha=1,
-                    va="center",
-                    color=color_others,
-                    fontweight="normal",
-                )
+            if show_external_names:
+                for _, row in df_external.iterrows():
+                    ax.text(
+                        row[target_col] * 1.05,
+                        row["n_params"],
+                        str(row["model_type"]),
+                        fontsize=10,
+                        alpha=1,
+                        va="center",
+                        color=color_others,
+                        fontweight="normal",
+                    )
             # End external results
 
             if scale_log_metric:
@@ -300,7 +304,7 @@ def visualize_pareto_single_plot(
                 ax.text(
                     -0.3,
                     0.5,
-                    f"Mat.'{material_name}'",
+                    f"{material_name_map[material_name]}",
                     transform=ax.transAxes,
                     rotation=90,
                     fontsize=12,
@@ -316,6 +320,8 @@ def visualize_pareto_single_plot(
                 ax.set(xlabel=None)
 
             ax.grid(True, which="both", ls="--", alpha=0.3)
+
+            ax.set_xlim(xlim)
 
             # ax.set_title(f"Pareto investigation for material '{material_name}'")
 
@@ -336,7 +342,7 @@ def visualize_pareto_single_plot(
                 fancybox=True,
                 shadow=False,
                 bbox_to_anchor=(0.525, -0.025),
-                ncols=5,
+                ncols=4,
             )
     fig.tight_layout(w_pad=0.4, h_pad=0.1)
     return fig, axs
