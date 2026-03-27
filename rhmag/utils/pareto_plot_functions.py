@@ -187,6 +187,7 @@ def visualize_pareto_single_plot(
     xlims,
     show_median,
     figsize,
+    label_placement_external,
     material_name_map,
     scale_log_metric=True,
     scale_log_size=True,
@@ -211,6 +212,71 @@ def visualize_pareto_single_plot(
             xlim = xlims[mat_idx][i]
             ax = axs[mat_idx, i]
             target_col = f"{metric}_95th"
+
+            ax.set_xlim(xlim)
+            ax.set_ylim(5, 100_000)
+
+            x_min, x_max = ax.get_xlim()
+            y_min, y_max = ax.get_ylim()
+
+            # Start external results:
+            sns.scatterplot(
+                data=df_external,
+                x=target_col,
+                y="n_params",
+                color=color_others,
+                marker="s",
+                s=20,
+                alpha=0.7,
+                ax=ax,
+                zorder=3,
+                clip_on=True,
+            )
+            if show_external_names:
+                texts = []
+                for _, row in df_external.iterrows():
+
+                    try:
+                        ha, va = label_placement_external[material_name][target_col][row["model_type"]]
+                    except KeyError:
+                        ha = "left"
+                        va = "center"
+
+                    offset_base_value = 4
+
+                    if ha == "left":
+                        offset_x = offset_base_value
+                    elif ha == "right":
+                        offset_x = -offset_base_value
+                    elif ha == "center":
+                        offset_x = 0
+
+                    if va == "top":
+                        offset_y = -offset_base_value + 0.5
+                    elif va == "bottom":
+                        offset_y = +offset_base_value - 0.5
+                    elif va == "center":
+                        offset_y = -0.5
+
+                    x = row[target_col]
+                    y = row["n_params"]
+
+                    # Only annotate if data point is within bounds
+                    if x_min <= x <= x_max and y_min <= y <= y_max:
+                        ax.annotate(
+                            text=str(row["model_type"]),
+                            xy=(x, y),
+                            xytext=(offset_x, offset_y),
+                            textcoords="offset points",
+                            fontsize=8,
+                            alpha=1,
+                            ha=ha,
+                            va=va,
+                            color=color_others,
+                            fontweight="normal",
+                            clip_on=True,
+                        )
+            # End external results
 
             # Start own results
             for color, group_df in df.groupby("color"):
@@ -243,32 +309,6 @@ def visualize_pareto_single_plot(
                     median = med_df[f"{metric}_95th"]
                     ax.plot(median, med_df["n_params"], c=current_color, alpha=0.8)
             # End own results
-
-            # Start external results:
-            sns.scatterplot(
-                data=df_external,
-                x=target_col,
-                y="n_params",
-                color=color_others,
-                marker="s",
-                s=20,
-                alpha=0.8,
-                ax=ax,
-                zorder=3,
-            )
-            if show_external_names:
-                for _, row in df_external.iterrows():
-                    ax.text(
-                        row[target_col] * 1.05,
-                        row["n_params"],
-                        str(row["model_type"]),
-                        fontsize=10,
-                        alpha=1,
-                        va="center",
-                        color=color_others,
-                        fontweight="normal",
-                    )
-            # End external results
 
             if scale_log_metric:
                 ax.set_xscale("log")
@@ -320,8 +360,6 @@ def visualize_pareto_single_plot(
                 ax.set(xlabel=None)
 
             ax.grid(True, which="both", ls="--", alpha=0.3)
-
-            ax.set_xlim(xlim)
 
             # ax.set_title(f"Pareto investigation for material '{material_name}'")
 
