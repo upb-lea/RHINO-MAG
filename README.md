@@ -1,6 +1,6 @@
 <div align="center"> 
 <h1> RHINO-MAG </h1>
-<h2> Recursive H-Field Inference based on Observed Magnetic Flux </h2>
+<h2> Recursive H-Field Inference based on Observed Magnetic Flux under Dynamic Excitation </h2>
 </div>
 
 <p align="center">
