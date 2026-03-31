@@ -98,7 +98,7 @@ from rhmag.runners.rnn_training_jax import train_model_jax
 
 
 train_model_jax(
-    material_name="A",
+    material_names=["A"],
     model_types=["GRU4", "JA"],
     seeds=[1, 2, 3],
     exp_name="demonstration",
