@@ -40,7 +40,6 @@ for root_dir in (
 
 
 AVAILABLE_MATERIALS = [
-    "X",
     "3C90",
     "3C94",
     "3E6",
