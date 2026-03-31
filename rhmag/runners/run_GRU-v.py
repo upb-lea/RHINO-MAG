@@ -41,22 +41,22 @@ if __name__ == "__main__":
         past_size = 28
     elif args.material == "B":
         epochs = 1500
-        model_types = ["VectorfieldGRU"]
+        model_types = ["VectorfieldGRU8", "VectorfieldGRU16", "VectorfieldGRU32"]
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "C":
         epochs = 1500
-        model_types = ["VectorfieldGRU"]
+        model_types = ["VectorfieldGRU8", "VectorfieldGRU16", "VectorfieldGRU32"]
         dyn_avg_kernel_size = 11
         past_size = 1
     elif args.material == "D":
         epochs = 1500
-        model_types = ["VectorfieldGRU"]
+        model_types = ["VectorfieldGRU8", "VectorfieldGRU16", "VectorfieldGRU32"]
         dyn_avg_kernel_size = 11
         past_size = 28
     elif args.material == "E":
         epochs = 2500
-        model_types = ["VectorfieldGRU"]
+        model_types = ["VectorfieldGRU8", "VectorfieldGRU16", "VectorfieldGRU32"]
         dyn_avg_kernel_size = 11
         past_size = 28
     else:
