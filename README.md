@@ -16,7 +16,7 @@ Official site for the second magnet challenge https://github.com/minjiechen/magn
 
 
 ## The task:
-Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right]$ based on the previously observed magnetic field $H_t$ with $t \in \left[t_0, t_1\right)$, the magnetic flux density $B_t$ with $t \in \left[t_0, t_2\right)$, and the temperature $\vartheta$.
+Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right]$ based on the previously observed magnetic field $H_t$ with $t \in \left[t_0, t_1\right)$, the magnetic flux density $B_t$ with $t \in \left[t_0, t_2\right]$, and the temperature $\vartheta$.
 
 ![Exemplary Prediction Task](fig/B_H_prediction_example.png)
 
