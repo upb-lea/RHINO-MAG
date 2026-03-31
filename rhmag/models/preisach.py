@@ -130,20 +130,23 @@ class DifferentiablePreisach(eqx.Module):
                 T=T,
             )
 
-            last_H = H
+            last_H = H[None]
             last_operator_values = operator_values
 
-            return (
+            out_carry = (
                 positive_direction,
                 initial_field,
                 last_H,
                 initial_operator_values,
                 last_operator_values,
-            ), B_est_single
+            )
+            return out_carry, B_est_single
+
+        inputs = (positive_direction, initial_field, last_H, initial_operator_values, last_operator_values)
 
         _, B_est = jax.lax.scan(
             body,
-            (positive_direction, initial_field, last_H, initial_operator_values, last_operator_values),
+            inputs,
             H_trajectory,
         )
         return B_est

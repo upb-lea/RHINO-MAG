@@ -1,6 +1,7 @@
 import json
 from copy import deepcopy
 import pathlib
+from functools import partial
 
 import pandas as pd
 import numpy as np
@@ -15,8 +16,7 @@ from rhmag.training.data_sampling import draw_data_uniformly
 from rhmag.model_setup import setup_model, setup_experiment, setup_featurize
 from rhmag.model_interfaces.model_interface import load_model, ModelInterface, save_model
 from rhmag.metrics import sre, nere
-
-from functools import partial
+from rhmag.model_interfaces.model_interface import filter_spec
 
 
 def get_exp_ids(
@@ -24,7 +24,7 @@ def get_exp_ids(
     model_type: str | list[str] | None = None,
     exp_name: str | None = None,
     legacy_mode: bool = False,
-):
+) -> list[str]:
     if legacy_mode:
         model_paths = list((DATA_ROOT / "legacy_model_dump").glob("*.eqx"))
     else:
@@ -50,14 +50,14 @@ def get_exp_ids(
         for exp_id in exp_ids:
             if len(exp_id.split("_")) < 2:
                 continue
-            elif exp_id.split("_")[1] == model_type:
+            elif model_type in exp_id.split("_")[1]:
                 relevant_exp_ids.append(exp_id)
     elif isinstance(model_type, list):
         relevant_exp_ids = []
         for exp_id in exp_ids:
             if len(exp_id.split("_")) < 2:
                 continue
-            elif exp_id.split("_")[1] in model_type:
+            elif model_type in exp_id.split("_")[1]:
                 relevant_exp_ids.append(exp_id)
     else:
         raise ValueError("'model_type' needs to be a string, list of strings, or None.")
@@ -79,8 +79,14 @@ def get_exp_ids(
     return relevant_exp_ids
 
 
-from functools import partial
-from rhmag.model_interfaces.model_interface import filter_spec
+def get_exp_ids_without_seed(
+    material_name: str | list[str] | None = None,
+    model_type: str | list[str] | None = None,
+    exp_name: str | None = None,
+    legacy_mode: bool = False,
+) -> list[str]:
+    full_exp_ids = get_exp_ids(material_name, model_type, exp_name, legacy_mode)
+    return np.unique(["_".join(exp_id.split("_")[:-1]) for exp_id in full_exp_ids]).tolist()
 
 
 def load_parameterization(exp_id):
@@ -151,7 +157,10 @@ def reconstruct_model_from_file(filename: pathlib.Path) -> ModelInterface:
 
         loading_params = deepcopy(params["model_params"])
         loading_params["key"] = jnp.array(loading_params["key"], dtype=jnp.uint32)
-        model = type(fresh_wrapped_model.model)(**loading_params)
+        try:
+            model = type(fresh_wrapped_model.model)(**loading_params)
+        except TypeError:
+            model = type(fresh_wrapped_model.model)(normalizer=normalizer, **loading_params)
         model = eqx.tree_deserialise_leaves(f, model, partial(filter_spec, f64_enabled=jax.config.x64_enabled))
         wrapped_model = eqx.tree_at(lambda t: t.model, fresh_wrapped_model, model)
 
@@ -516,7 +525,7 @@ def plot_model_frequency_sweep(wrapped_model, test_set, loader_key, past_size, f
         axs[0, freq_idx].plot(B_future[freq_idx])
         axs[1, freq_idx].plot(H_future[freq_idx])
         axs[1, freq_idx].plot(H_pred[freq_idx])
-        #axs[1, freq_idx].plot(H_future[freq_idx] - H_pred[freq_idx], color="tab:red", linestyle="--")
+        # axs[1, freq_idx].plot(H_future[freq_idx] - H_pred[freq_idx], color="tab:red", linestyle="--")
 
         axs[2, freq_idx].plot(H_future[freq_idx], B_future[freq_idx])
         axs[2, freq_idx].plot(H_pred[freq_idx], B_future[freq_idx])

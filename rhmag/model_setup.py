@@ -13,19 +13,19 @@ import jax.numpy as jnp
 import equinox as eqx
 import optax
 
-from rhmag.losses import MSE_loss, adapted_RMS_loss
+from rhmag.losses import MSE_loss, adapted_RMS_loss, ja_pinn_gru_loss
 from rhmag.features.features_jax import compute_fe_single, db_dt, d2b_dt2
 from rhmag.data_management import MaterialSet, Normalizer
 
 # Models
 from rhmag.features.features_jax import compute_fe_single
-from rhmag.data_management import MaterialSet
+from rhmag.data_management import FrequencySet, MaterialSet, DataSet, FINAL_MATERIALS
 from rhmag.model_interfaces.rnn_interfaces import (
     NODEwInterface,
     RNNwInterface,
 )
 from rhmag.models.NODE import HiddenStateNeuralEulerODE
-from rhmag.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU, GRUaroundLinearModel, ExpGRU
+from rhmag.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU, GRUaroundLinearModel, ExpGRU, LSTM, GRUwLinear
 from rhmag.models.jiles_atherton import (
     JAStatic,
     JAStatic2,
@@ -41,6 +41,7 @@ from rhmag.models.jiles_atherton import (
     GRUWithJA,
     LFRWithGRUJA,
 )
+from rhmag.models.pinn import JAPinnWithGRU
 from rhmag.models.linear import LinearStatic
 from rhmag.models.dummy_model import DummyModel
 
@@ -53,6 +54,7 @@ from rhmag.model_interfaces.rnn_interfaces import (
     MagnetizationRNNwInterface,
     VectorfieldGRUInterface,
     GRUaroundLinearModelInterface,
+    GRUWithPINNInterface,
 )
 from rhmag.model_interfaces.ja_interfaces import (
     JAwInterface,
@@ -65,8 +67,38 @@ from rhmag.model_interfaces.ja_interfaces import (
 from rhmag.model_interfaces.linear_interfaces import LinearInterface
 from rhmag.model_interfaces.dummy_model_interface import DummyModelInterface
 
-SUPPORTED_MODELS = ["GRU{hidden-size}", "HNODE", "JA"]
-SUPPORTED_LOSSES = ["MSE", "adapted_RMS"]
+SUPPORTED_MODELS = ["GRU{hidden_size}", "LSTM{hidden_size}", "HNODE", "JA", "JAPinnWithGRU"]
+SUPPORTED_LOSSES = ["MSE", "adapted_RMS", "ja_pinn_gru_loss"]
+
+
+def combine_material_sets(data_set) -> MaterialSet:
+    combined_frequency_sets_dict = {int(freq): [] for freq in data_set.at_material("A").frequencies.tolist()}
+
+    for material_set in data_set:
+        for frequency_set in material_set:
+            combined_frequency_sets_dict[int(frequency_set.frequency)].append(frequency_set)
+
+    combined_frequency_sets = []
+    for freq, frequency_set_list in combined_frequency_sets_dict.items():
+        out_frequency_set = frequency_set_list[0]
+        for frequency_set in frequency_set_list[1:]:
+            out_frequency_set = FrequencySet(
+                material_name="X",
+                frequency=freq,
+                H=jnp.concatenate([out_frequency_set.H, frequency_set.H], axis=0),
+                B=jnp.concatenate([out_frequency_set.B, frequency_set.B], axis=0),
+                T=jnp.concatenate([out_frequency_set.T, frequency_set.T], axis=0),
+                H_RMS=jnp.concatenate([out_frequency_set.H_RMS, frequency_set.H_RMS], axis=0),
+            )
+        combined_frequency_sets.append(out_frequency_set)
+
+    combined_material_set = MaterialSet(
+        material_name="X",
+        frequency_sets=combined_frequency_sets,
+        frequencies=data_set.at_material("A").frequencies,
+    )
+
+    return combined_material_set
 
 
 def setup_dataset(
@@ -87,7 +119,12 @@ def setup_dataset(
         The data tuple of `(training_set, eval_set, test_set)`
     """
 
-    mat_set = MaterialSet.from_material_name(material_name)
+    if material_name == "X":
+        data_set = DataSet.from_material_names(FINAL_MATERIALS)
+        mat_set = combine_material_sets(data_set)
+    else:
+        mat_set = MaterialSet.from_material_name(material_name)
+
     mat_set = mat_set.subsample(sampling_freq=subsampling_freq)
     if use_all_data:
         train_set = deepcopy(mat_set)
@@ -224,21 +261,37 @@ def setup_model(
             model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
+        case label if label.startswith("GRULinearOut") and label[12:].isdigit():
+            hidden_size = int(label[12:])
+            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, out_size=1, key=model_key)
+            model = GRUwLinear(**model_params_d)
+            mdl_interface_cls = RNNwInterface
+        case label if label.startswith("LSTM") and label[4:].isdigit():
+            hidden_size = int(label[4:])
+            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
+            model = LSTM(**model_params_d)
+            mdl_interface_cls = RNNwInterface
         case label if label.startswith("ExpGRU") and label[6:].isdigit():
             hidden_size = int(label[6:])
             model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
             model = ExpGRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
-        case "MagnetizationGRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+        case label if label.startswith("MagnetizationGRU") and label[16:].isdigit():
+            hidden_size = int(label[16:])
+            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = MagnetizationRNNwInterface
-        case "VectorfieldGRU":
-            model_params_d = dict(n_locs=9, in_size=model_in_size, key=model_key)
+        case label if label.startswith("VectorfieldGRU") and label[14:].isdigit():
+            hidden_size = int(label[14:])
+            assert hidden_size % 2 == 0
+            model_params_d = dict(n_locs=hidden_size * 2, in_size=model_in_size, key=model_key)
             model = VectorfieldGRU(**model_params_d)
             mdl_interface_cls = VectorfieldGRUInterface
-        case "JAWithExternGRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+        case label if label.startswith("JAWithExternGRU") and label[15:].isdigit():
+            hidden_size = int(label[15:])
+            model_params_d = dict(
+                hidden_size=hidden_size, in_size=model_in_size + 1, key=model_key
+            )  # +1 due to H_hat_ja
             model = JAWithExternGRU(**model_params_d)
             mdl_interface_cls = JAWithExternGRUwInterface
         case "JAWithGRUlin":
@@ -249,8 +302,11 @@ def setup_model(
             model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
             model = JAWithGRUlinFinal(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
-        case "JAWithGRU":
-            model_params_d = dict(hidden_size=8, in_size=model_in_size, key=model_key)
+        case label if label.startswith("JAWithGRU") and label[9:].isdigit():
+            hidden_size = int(label[9:])
+            model_params_d = dict(
+                hidden_size=hidden_size, in_size=model_in_size + 1, key=model_key
+            )  # +1 due to H_hat_ja
             model = JAWithGRU(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
         case "GRUWithJA":
@@ -303,23 +359,34 @@ def setup_model(
             model_params_d = dict(in_size=in_size, out_size=1, key=model_key)
             model = LinearStatic(**model_params_d)
             mdl_interface_cls = LinearInterface
-        case "GRUwLinearModel":
+        case label if label.startswith("GRUwLinearModel") and label[15:].isdigit():
+            hidden_size = int(label[15:])
             # model_params_d = dict(in_size=7, hidden_size=8, linear_in_size=7, key=model_key)
-            model_params_d = dict(in_size=model_in_size, hidden_size=8, linear_in_size=1, key=model_key)
+            model_params_d = dict(in_size=model_in_size, hidden_size=hidden_size, linear_in_size=1, key=model_key)
             model = GRUwLinearModel(**model_params_d)
             mdl_interface_cls = GRUwLinearModelInterface
         case "GRUaroundLinearModel":
             model_params_d = dict(in_size=model_in_size, hidden_size=3, linear_in_size=3, key=model_key)
             model = GRUaroundLinearModel(**model_params_d)
             mdl_interface_cls = GRUaroundLinearModelInterface
-        case "JADirectParamGRU":
-            model_params_d = dict(in_size=model_in_size + 1, hidden_size=8, key=model_key)
+        case label if label.startswith("JADirectParamGRU") and label[16:].isdigit():
+            hidden_size = int(label[16:])
+            model_params_d = dict(in_size=model_in_size + 1, hidden_size=hidden_size, key=model_key)
             model = JADirectParamGRU(normalizer=normalizer, **model_params_d)
             mdl_interface_cls = JAWithGRUwInterface
         case "DummyModel":
             model_params_d = dict(key=model_key)
             model = DummyModel(key=model_key)
             mdl_interface_cls = DummyModelInterface
+        case "JAPinnWithGRU":
+            model_params_d = dict(
+                input_size=model_in_size,
+                hidden_size=8,
+                physics_weight_lambda=1e-6,
+                key=model_key,
+            )
+            model = JAPinnWithGRU(**model_params_d)
+            mdl_interface_cls = GRUWithPINNInterface
         case _:
             raise ValueError(f"Unknown model type: {model_label}. Choose on of {SUPPORTED_MODELS}")
 
@@ -340,6 +407,8 @@ def setup_loss(loss_label: str) -> Callable:
             loss_function = MSE_loss
         case "adapted_RMS":
             loss_function = adapted_RMS_loss
+        case "JA_pinn":
+            loss_function = ja_pinn_gru_loss
         case _:
             raise ValueError(f"Unknown loss type: {loss_label}. Choose on of {SUPPORTED_LOSSES}")
 
@@ -478,7 +547,9 @@ def setup_experiment(
         params["lr_params"] = lr_params
 
     lr_schedule = optax.schedules.exponential_decay(**params["lr_params"])
-    optimizer = optax.adam(lr_schedule)
+
+    optimizer = optax.inject_hyperparams(optax.adam)(learning_rate=lr_schedule)
+    # optimizer = optax.adam(lr_schedule)
 
     params["model_params"] = model_params_d  # defined from outside
     params["model_params"]["key"] = params["model_params"]["key"].tolist()

@@ -108,6 +108,65 @@ def compute_fe_single(data_single: jax.Array, n_s: int, time_shift: int = 3) -> 
     else:
         return jnp.stack((dyn, db, d2b, pwm), axis=-1)
 
+def compute_fe_single2(data_single: jax.Array, n_s: int, time_shift: int = 3) -> jax.Array:
+    dyn = dyn_avg(data_single, n_s)
+    db = db_dt(data_single)
+    d2b = d2b_dt2(data_single)
+    #pwm = pwm_of_b(data_single)
+
+    if time_shift != 0:
+        shifted_data_single = shift_signal(data_single, k_0=time_shift)
+        return jnp.stack((shifted_data_single, dyn, db, d2b), axis=-1) #, pwm
+    else:
+        return jnp.stack((dyn, db, d2b), axis=-1) #, pwm
+    
+def compute_fe_single3(data_single: jax.Array, n_s: int, time_shift: int = 3) -> jax.Array:
+    #dyn = dyn_avg(data_single, n_s)
+    db = db_dt(data_single)
+    d2b = d2b_dt2(data_single)
+    pwm = pwm_of_b(data_single)
+
+    if time_shift != 0:
+        shifted_data_single = shift_signal(data_single, k_0=time_shift)
+        return jnp.stack((shifted_data_single, db, d2b, pwm), axis=-1)
+    else:
+        return jnp.stack((db, d2b, pwm), axis=-1)
+    
+def compute_fe_single4(data_single: jax.Array, n_s: int, time_shift: int = 3) -> jax.Array:
+    dyn = dyn_avg(data_single, n_s)
+    #db = db_dt(data_single)
+    d2b = d2b_dt2(data_single)
+    pwm = pwm_of_b(data_single)
+
+    if time_shift != 0:
+        shifted_data_single = shift_signal(data_single, k_0=time_shift)
+        return jnp.stack((shifted_data_single, dyn, d2b, pwm), axis=-1)
+    else:
+        return jnp.stack((dyn, d2b, pwm), axis=-1)
+
+def compute_fe_single5(data_single: jax.Array, n_s: int, time_shift: int = 3) -> jax.Array:
+    dyn = dyn_avg(data_single, n_s)
+    db = db_dt(data_single)
+    #d2b = d2b_dt2(data_single)
+    pwm = pwm_of_b(data_single)
+
+    if time_shift != 0:
+        shifted_data_single = shift_signal(data_single, k_0=time_shift)
+        return jnp.stack((shifted_data_single, dyn, db, pwm), axis=-1)
+    else:
+        return jnp.stack((dyn, db, pwm), axis=-1)
+    
+def compute_fe_single6(data_single: jax.Array, n_s: int, time_shift: int = 3) -> jax.Array:
+    #dyn = dyn_avg(data_single, n_s)
+    db = db_dt(data_single)
+    d2b = d2b_dt2(data_single)
+    #pwm = pwm_of_b(data_single)
+
+    if time_shift != 0:
+        shifted_data_single = shift_signal(data_single, k_0=time_shift)
+        return jnp.stack((shifted_data_single, db, d2b), axis=-1)
+    else:
+        return jnp.stack((db, d2b), axis=-1)
 
 @eqx.filter_jit
 def add_fe(data: jax.Array, n_s: int) -> jax.Array:

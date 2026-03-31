@@ -1,3 +1,4 @@
+import pathlib
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -164,7 +165,7 @@ class TestSet(eqx.Module):
             B=jnp.array(data_dict["B"]),
             T=jnp.array(data_dict["T"]),
             H_gt=jnp.array(data_dict["H_gt"]),
-            core_loss_gt=jnp.array(data_dict["core_loss_gt"])
+            core_loss_gt=jnp.array(data_dict["core_loss_gt"]),
         )
 
     @classmethod
@@ -173,11 +174,11 @@ class TestSet(eqx.Module):
         return cls.from_dict(
             data_dict={
                 "material_name": material_name,
-                "H": data_dict[f"{material_name}_Padded_H_seq"],
-                "B": data_dict[f"{material_name}_True_B_seq"],
-                "T": data_dict[f"{material_name}_True_T"],
-                "H_gt": data_dict[f"{material_name}_True_H_seq"],
-                "core_loss_gt": data_dict[f"{material_name}_True_Loss"],
+                "H": data_dict[f"{material_name}_Testing_Padded_H_seq"],
+                "B": data_dict[f"{material_name}_Testing_True_B_seq"],
+                "T": data_dict[f"{material_name}_Testing_True_T"],
+                "H_gt": data_dict[f"{material_name}_Testing_True_H_seq"],
+                "core_loss_gt": data_dict[f"{material_name}_Testing_True_Loss"],
             }
         )
 
@@ -264,7 +265,7 @@ def predict_test_scenarios(
 
 
 def reduce_metrics(
-        metrics_per_sequence: dict,
+    metrics_per_sequence: dict,
 ):
     metrics_reduced = {}
 
@@ -299,22 +300,19 @@ def reduce_metrics(
 
 
 def evaluate_test_scenarios(
-    models: ModelInterface,
+    model: ModelInterface,
     test_set: TestSet,
+    reduce: bool = True,
 ):
     material_name = test_set.material_name
     print("Evaluate test data for material: ", material_name)
-    test_set = test_set
-    model = models
 
     print(f"The model has {model.n_params} parameters.")
 
     metrics_per_sequence = {}
 
     for scenario in test_set.scenarios:
-        print(
-            f"Running scenario with a warmup of {scenario.N_known} steps and {scenario.N_unknown} unknown elements."
-        )
+        print(f"Running scenario with a warmup of {scenario.N_known} steps and {scenario.N_unknown} unknown elements.")
         H_pred = model(
             B_past=scenario.B_past,
             H_past=scenario.H_past,
@@ -342,28 +340,30 @@ def evaluate_test_scenarios(
             "sre": jnp.array(sre_per_sequence),
             "nere": jnp.array(nere_per_sequence),
         }
-    return reduce_metrics(metrics_per_sequence)
+    if reduce:
+        return reduce_metrics(metrics_per_sequence)
+    else:
+        return metrics_per_sequence
 
 
 def average_over_scenarios(metrics_per_material: dict):
     avg_per_material = {}
 
     for material_name, material_metrics in metrics_per_material.items():
-        avg_per_material[material_name] = {
-            metric_name : [] for metric_name in list(material_metrics.values())[0].keys()
-        }
-        for scenario_name, scenario_metrics in material_metrics.items():       
+        avg_per_material[material_name] = {metric_name: [] for metric_name in list(material_metrics.values())[0].keys()}
+        for scenario_name, scenario_metrics in material_metrics.items():
             for metric_name, metric_value in scenario_metrics.items():
                 avg_per_material[material_name][metric_name].append(metric_value)
         for metric_name in avg_per_material[material_name]:
-            avg_per_material[material_name][metric_name] = jnp.average(jnp.array(avg_per_material[material_name][metric_name])).item()
-        
+            avg_per_material[material_name][metric_name] = jnp.average(
+                jnp.array(avg_per_material[material_name][metric_name])
+            ).item()
+
     return avg_per_material
 
+
 def complete_average(metrics_per_material: dict):
-    avg_metrics = {
-        metric_name : [] for metric_name in list(list(metrics_per_material.values())[0].values())[0].keys()
-    }
+    avg_metrics = {metric_name: [] for metric_name in list(list(metrics_per_material.values())[0].values())[0].keys()}
     for material_name, material_metrics in metrics_per_material.items():
         for scenario_name, scenario_metrics in material_metrics.items():
             for metric_name, metric_value in scenario_metrics.items():
@@ -530,3 +530,70 @@ def visualize_df(df, scenarios, metrics, x_label=None, scale_log: bool = False):
                 ax.legend()
     fig.tight_layout()
     return fig, axs
+
+
+def update_pareto_df(
+    pareto_results_path: pathlib.Path,
+    exp_ids_per_material: dict[str, list[pathlib.Path | str]],
+    test_data_per_material: TestSet,
+):
+
+    pareto_results_path = pathlib.Path(pareto_results_path)
+
+    # get current state of the file
+    if pareto_results_path.is_file():
+        loaded_df = pd.read_parquet(pareto_results_path)
+        available_results_exp_ids = loaded_df["exp_id"].tolist()
+    else:
+        loaded_df = None
+        available_results_exp_ids = []
+
+    # check for new results
+    new_exp_ids = []
+    for material_name, exp_ids in exp_ids_per_material.items():
+        for exp_id in exp_ids:
+            if not exp_id in available_results_exp_ids:
+                new_exp_ids.append(exp_id)
+
+    print(f"{len(new_exp_ids)} new models have been found.")
+    all_new_results = []
+
+    # gather new
+    for exp_id in new_exp_ids:
+        model = reconstruct_model_from_file(exp_id)
+        model_params = model.n_params
+        seed = exp_id.split("seed")[-1]
+        material_name = exp_id.split("_")[0]
+        model_type = exp_id.split("_")[1]
+        exp_name = exp_id.split("_")[2]
+        num_id = exp_id.split("_")[-2]
+
+        test_set = test_data_per_material[material_name]
+
+        metrics_per_sequence = evaluate_test_scenarios(model, test_set)
+        metrics = ["sre_avg", "sre_95th", "nere_avg", "nere_95th"]
+        averages = {m: sum(d[m] for d in metrics_per_sequence.values()) / len(metrics_per_sequence) for m in metrics}
+        all_new_results.append(
+            {
+                "exp_id_without_seed": exp_id.rpartition("_")[0],
+                "exp_id": exp_id,
+                "exp_name": exp_name,
+                "num_id": num_id,
+                "material": material_name,
+                "model_type": model_type,
+                "seed": seed,
+                "n_params": model_params,
+                "sre_avg": averages["sre_avg"],
+                "sre_95th": averages["sre_95th"],
+                "nere_avg": averages["nere_avg"],
+                "nere_95th": averages["nere_95th"],
+            }
+        )
+    new_results_df = pd.DataFrame(all_new_results)
+
+    if loaded_df is None:
+        df_results = new_results_df
+    else:
+        df_results = pd.concat([loaded_df, new_results_df], ignore_index=True)
+
+    return df_results
