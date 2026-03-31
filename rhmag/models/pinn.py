@@ -12,8 +12,8 @@ class JAPinnWithGRU(eqx.Module):
     alpha: jnp.ndarray
     c: jnp.ndarray
     k: jnp.ndarray
-    hidden_size: int = eqx.static_field()
-    physics_weight_lambda: float = eqx.static_field()
+    hidden_size: int = eqx.field(static=True)
+    physics_weight_lambda: float = eqx.field(static=True)
 
     def __init__(self, input_size, hidden_size, physics_weight_lambda, *, key):
         init_key, key = jr.split(key)
