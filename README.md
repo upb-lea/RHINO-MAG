@@ -12,8 +12,20 @@ With only $325$ parameters and an average SRE score of $8.02 \\%$ and an average
 
 Official site for the second magnet challenge https://github.com/minjiechen/magnetchallenge-2
 
+## Citation
 
+If you found this useful in your research please cite the corresponding preprint, e.g., as:
 
+```
+@article{arXiv:2603.29745
+    author    = {Vater, Hendrik and Schweins, Oliver and H{\"o}lsch, Lukas and Kirchg{\"a}ssner, Wilhelm and Piepenbrock, Till and Wallscheid, Oliver},
+    title     = {RHINO-MAG: Recursive H-Field Inference based on Observed Magnetic Flux under Dynamic Excitation},
+    journal   = {arXiv preprint arXiv:2603.29745},
+    year      = {2026},
+    doi       = {10.48550/arXiv.2603.29745}, 
+}
+```
+Within, you will also find detailed information about most of the supported model types and a comparison of their accuracy.
 
 ## The task:
 Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right]$ based on the previously observed magnetic field $H_t$ with $t \in \left[t_0, t_1\right)$, the magnetic flux density $B_t$ with $t \in \left[t_0, t_2\right]$, and the temperature $\vartheta$.
