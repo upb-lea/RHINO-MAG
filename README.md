@@ -14,7 +14,7 @@ Official site for the second magnet challenge https://github.com/minjiechen/magn
 
 ## Citation
 
-If you found this useful in your research please cite the corresponding preprint, e.g., as:
+If you found this useful in your research please cite the [corresponding preprint](https://arxiv.org/pdf/2603.29745), e.g., as:
 
 ```
 @article{arXiv:2603.29745
