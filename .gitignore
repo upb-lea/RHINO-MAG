@@ -194,7 +194,10 @@ data/experiment_logs/**/*.json
 dev/**/lightning_logs
 
 pre_eval_test/
-dev/documentation/**/*.pdf
-dev/documentation/**/*.csv
+dev/**/*.pdf
+dev/**/*.svg
+dev/**/*.csv
+dev/**/*.xlsx
+dev/**/*.parquet
 
 *.pkl
