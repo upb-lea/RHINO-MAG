@@ -1,3 +1,5 @@
+import jax
+
 from rhmag.runners.rnn_training_jax import train_model_jax
 from rhmag.data_management import FINAL_MATERIALS
 
@@ -8,7 +10,13 @@ def run_ablation_experiment(gpu_id, tag, loss_function, init_type):
 
     accuracy_tag = "-f32" if disable_f64 else "-f64"
 
-    for material in FINAL_MATERIALS:
+    if gpu_id != -1:
+        gpus = jax.devices()
+        default_device = gpus[gpu_id]
+    elif gpu_id == -1:
+        default_device = jax.devices("cpu")[0]
+
+    for material in ["C", "D", "E"]:
 
         if material == "A":
             epochs = 10_000
@@ -44,23 +52,23 @@ def run_ablation_experiment(gpu_id, tag, loss_function, init_type):
             past_size = 1
 
         ## Default setup
-        train_model_jax(
-            material_names=[material],
-            model_types=model_types,
-            seeds=[12, 53, 66, 105, 6],
-            exp_name=f"{tag}{accuracy_tag}",
-            loss_type=loss_function,
-            gpu_id=gpu_id,
-            epochs=epochs,
-            batch_size=512,
-            tbptt_size=156,
-            past_size=past_size,
-            time_shift=0,
-            noise_on_data=0.0,
-            tbptt_size_start=None,
-            dyn_avg_kernel_size=dyn_avg_kernel_size,
-            disable_f64=disable_f64,
-            disable_features="reduce",
-            transform_H=False,
-            use_all_data=True,
-        )
+        with jax.default_device(default_device):
+            train_model_jax(
+                material_names=[material],
+                model_types=model_types,
+                seeds=[12, 53, 66, 105, 6],
+                exp_name=f"{tag}{accuracy_tag}",
+                loss_type=loss_function,
+                epochs=epochs,
+                batch_size=512,
+                tbptt_size=156,
+                past_size=past_size,
+                time_shift=0,
+                noise_on_data=0.0,
+                tbptt_size_start=None,
+                dyn_avg_kernel_size=dyn_avg_kernel_size,
+                disable_f64=disable_f64,
+                disable_features="reduce",
+                transform_H=False,
+                use_all_data=True,
+            )

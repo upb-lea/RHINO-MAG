@@ -15,7 +15,6 @@ train_model_jax(
     seeds=[1, 2, 3],
     exp_name="demonstration",
     loss_type="adapted_RMS",
-    gpu_id=0,
     epochs=10,
     batch_size=512,
     tbptt_size=156,
@@ -170,7 +169,6 @@ def run_experiment_for_seed(
     material: str,
     model_type: str,
     loss_type: str,
-    gpu_id: int,
     epochs: int,
     batch_size: int,
     tbptt_size: int,
@@ -184,12 +182,6 @@ def run_experiment_for_seed(
     use_all_data: bool,
     pretrained_model_id: dict[str, str] | None,
 ):
-
-    # if gpu_id != -1:
-    #     gpus = jax.devices()
-    #     jax.config.update("jax_default_device", gpus[gpu_id])
-    # elif gpu_id == -1:
-    #     jax.config.update("jax_platform_name", "cpu")
 
     # setup
     # seed = 0
@@ -288,7 +280,6 @@ def train_model_jax(
     seeds: list[int],
     exp_name: str | None = None,
     loss_type: str = "adapted_RMS",
-    gpu_id: int = -1,
     epochs: int = 100,
     batch_size: int = 256,
     tbptt_size: int = 1024,
@@ -315,7 +306,6 @@ def train_model_jax(
         exp_name (str): Additional identifier for the experiment (There is a randomly generated identifer for each
             experiment, but this can still be useful for sorting/finding experiments after training)
         loss_type (str): Identifier for the loss to use in training. See `mc2.runners.model_setup.SUPPORTED_LOSSES`.
-        gpu_id (int): The index of the CUDA device / GPU to use. Specifying "-1" uses the CPU instead.
         epochs (int): The number of epochs to train for.
         batch_size (int): Number of parallel sequences to process per parameter update (i.e., per gradient calculation).
         tbptt_size (int): Length of the sequences to process per parameter update (i.e., per gradient calculation).
@@ -363,7 +353,6 @@ def train_model_jax(
                     material=material_name,
                     model_type=model_type,
                     loss_type=loss_type,
-                    gpu_id=gpu_id,
                     epochs=epochs,
                     batch_size=batch_size,
                     tbptt_size=tbptt_size,
@@ -386,21 +375,30 @@ def train_model_jax(
 
 if __name__ == "__main__":
     args = parse_args()
-    train_model_jax(
-        material_names=args.materials,
-        model_types=args.model_types,
-        seeds=args.seeds,
-        exp_name=args.exp_name,
-        loss_type=args.loss_type,
-        gpu_id=args.gpu_id,
-        epochs=args.epochs,
-        batch_size=args.batch_size,
-        tbptt_size=args.tbptt_size,
-        past_size=args.past_size,
-        time_shift=args.time_shift,
-        noise_on_data=args.noise_on_data,
-        tbptt_size_start=args.tbptt_size_start,
-        disable_f64=args.disable_f64,
-        disable_features=args.disable_features,
-        transform_H=args.transform_H,
-    )
+
+    gpu_id = args.gpu_id
+
+    if gpu_id != -1:
+        gpus = jax.devices()
+        default_device = gpus[gpu_id]
+    elif gpu_id == -1:
+        default_device = jax.devices("cpu")[0]
+
+    with jax.default_device(default_device):
+        train_model_jax(
+            material_names=args.materials,
+            model_types=args.model_types,
+            seeds=args.seeds,
+            exp_name=args.exp_name,
+            loss_type=args.loss_type,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            tbptt_size=args.tbptt_size,
+            past_size=args.past_size,
+            time_shift=args.time_shift,
+            noise_on_data=args.noise_on_data,
+            tbptt_size_start=args.tbptt_size_start,
+            disable_f64=args.disable_f64,
+            disable_features=args.disable_features,
+            transform_H=args.transform_H,
+        )

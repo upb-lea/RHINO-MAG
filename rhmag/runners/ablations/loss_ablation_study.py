@@ -4,6 +4,10 @@ Runs trainings for all materials for the submission model style except that the
 MSE loss instead of the adapted_RMS loss is used.
 """
 
+import os
+
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
 import argparse
 from rhmag.runners.ablations.runner_structure import run_ablation_experiment
 

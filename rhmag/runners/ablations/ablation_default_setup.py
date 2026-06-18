@@ -5,6 +5,10 @@ hidden state is initialized with zeros instead of inserting the true H value
 at the first hidden state index.
 """
 
+import os
+
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
 import argparse
 from rhmag.runners.ablations.runner_structure import run_ablation_experiment
 
