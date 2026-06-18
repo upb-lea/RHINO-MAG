@@ -16,7 +16,7 @@ def run_ablation_experiment(gpu_id, tag, loss_function, init_type):
     elif gpu_id == -1:
         default_device = jax.devices("cpu")[0]
 
-    for material in ["C", "D", "E"]:
+    for material in FINAL_MATERIALS:
 
         if material == "A":
             epochs = 10_000
