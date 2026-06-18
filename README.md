@@ -64,9 +64,9 @@ Estimate the scalar magnetic field $\hat{H}_t$ with $t \in \left[t_1, t_2\right]
         ├── (optional further folders, e.g., 3C90, N49, ...)
         ├── ...
         ├── ...
-        └── sort_raw_data.py
+        └── sort_data_in.py
     ```
-- run the script `python data/raw/sort_raw_data.py`
+- run the script `python data/raw/sort_data_in.py`
 
 
 
