@@ -12,7 +12,7 @@ Assumes the following folder setup:
         ├── (optional further folders, e.g., 3C90, N49, ...)
         ├── ...
         ├── ...
-        └── sort_raw_data.py
+        └── sort_data_in.py
     ```
 
 """
