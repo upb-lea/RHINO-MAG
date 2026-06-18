@@ -532,21 +532,39 @@ def visualize_df(df, scenarios, metrics, x_label=None, scale_log: bool = False):
     return fig, axs
 
 
+def get_exp_ids_per_material(model_type, exp_name, verbose=False):
+    exp_ids_all_seeds = {}
+
+    for material_name in FINAL_MATERIALS:
+        if verbose:
+            print("MATERIAL:", material_name)
+        mat_ids = sorted(get_exp_ids(material_name=material_name, model_type=model_type, exp_name=exp_name))
+        mat_ids_unique = list(set(mat_ids))
+
+        if verbose:
+            [print("    " + f"'{element}'") for element in mat_ids_unique]
+            print()
+
+        exp_ids_all_seeds[material_name] = mat_ids_unique
+
+    return exp_ids_all_seeds
+
+
 def update_pareto_df(
-    pareto_results_path: pathlib.Path,
+    pareto_results_path: pathlib.Path | None,
     exp_ids_per_material: dict[str, list[pathlib.Path | str]],
     test_data_per_material: TestSet,
 ):
 
-    pareto_results_path = pathlib.Path(pareto_results_path)
-
-    # get current state of the file
-    if pareto_results_path.is_file():
-        loaded_df = pd.read_parquet(pareto_results_path)
-        available_results_exp_ids = loaded_df["exp_id"].tolist()
-    else:
+    if pareto_results_path is None:
         loaded_df = None
         available_results_exp_ids = []
+    else:
+        pareto_results_path = pathlib.Path(pareto_results_path)
+        # get current state of the file
+        assert pareto_results_path.is_file(), "Specified pareto file could not be found"
+        loaded_df = pd.read_parquet(pareto_results_path)
+        available_results_exp_ids = loaded_df["exp_id"].tolist()
 
     # check for new results
     new_exp_ids = []
