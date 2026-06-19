@@ -31,8 +31,8 @@ if __name__ == "__main__":
 
     run_ablation_experiment(
         gpu_id=args.gpu_id,
-        tag="ablation-default",
+        tag="ablation-features-full",
         loss_function="adapted_RMS",
         init_type="default",
-        feature_type="reduce",
+        feature_type="full",
     )

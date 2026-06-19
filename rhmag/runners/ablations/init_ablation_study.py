@@ -34,4 +34,5 @@ if __name__ == "__main__":
         tag="ablation-init-zeros",
         loss_function="adapted_RMS",
         init_type="ignore_warmup",
+        feature_type="reduce",
     )

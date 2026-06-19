@@ -221,6 +221,32 @@ class ResultSet(eqx.Module):
     exp_id: str
 
 
+def predict_test_scenarios_single_material(
+    model: ModelInterface,
+    test_set: TestSet,
+    exp_id: str,
+    material_name: str,
+):
+    filled_H_trajectories = []
+    for scenario in test_set.scenarios:
+        print(f"Running scenario with a warmup of {scenario.N_known} steps and {scenario.N_unknown} unknown elements.")
+        H_pred = model(
+            B_past=scenario.B_past,
+            H_past=scenario.H_past,
+            B_future=scenario.B_future,
+            T=jnp.squeeze(scenario.T),
+        )
+        filled_H_trajectories.append(jnp.concatenate([scenario.H_past, H_pred], axis=1))
+
+    return ResultSet(
+        material_name=material_name,
+        H=jnp.concatenate(filled_H_trajectories),
+        B=test_set.B,
+        T=test_set.T,
+        exp_id=exp_id,
+    )
+
+
 def predict_test_scenarios(
     models: dict[str, ModelInterface],
     test_data: dict[str, TestSet],
@@ -238,25 +264,11 @@ def predict_test_scenarios(
 
         print(f"The model has {model.n_params} parameters.")
 
-        filled_H_trajectories = []
-        for scenario in test_set.scenarios:
-            print(
-                f"Running scenario with a warmup of {scenario.N_known} steps and {scenario.N_unknown} unknown elements."
-            )
-            H_pred = model(
-                B_past=scenario.B_past,
-                H_past=scenario.H_past,
-                B_future=scenario.B_future,
-                T=jnp.squeeze(scenario.T),
-            )
-            filled_H_trajectories.append(jnp.concatenate([scenario.H_past, H_pred], axis=1))
-
-        material_result_set = ResultSet(
-            material_name=material_name,
-            H=jnp.concatenate(filled_H_trajectories),
-            B=test_set.B,
-            T=test_set.T,
-            exp_id=exp_id,
+        material_result_set = predict_test_scenarios_single_material(
+            model,
+            test_set,
+            exp_id,
+            material_name,
         )
 
         result_sets[material_name] = material_result_set
@@ -303,6 +315,7 @@ def evaluate_test_scenarios(
     model: ModelInterface,
     test_set: TestSet,
     reduce: bool = True,
+    warmup: bool = True,
 ):
     material_name = test_set.material_name
     print("Evaluate test data for material: ", material_name)
@@ -318,6 +331,7 @@ def evaluate_test_scenarios(
             H_past=scenario.H_past,
             B_future=scenario.B_future,
             T=jnp.squeeze(scenario.T),
+            warmup=warmup,
         )
 
         # ---- metrics ----
@@ -554,6 +568,7 @@ def update_pareto_df(
     pareto_results_path: pathlib.Path | None,
     exp_ids_per_material: dict[str, list[pathlib.Path | str]],
     test_data_per_material: TestSet,
+    force_warmup: bool = True,
 ):
 
     if pareto_results_path is None:
@@ -588,7 +603,7 @@ def update_pareto_df(
 
         test_set = test_data_per_material[material_name]
 
-        metrics_per_sequence = evaluate_test_scenarios(model, test_set)
+        metrics_per_sequence = evaluate_test_scenarios(model, test_set, warmup=force_warmup)
         metrics = ["sre_avg", "sre_95th", "nere_avg", "nere_95th"]
         averages = {m: sum(d[m] for d in metrics_per_sequence.values()) / len(metrics_per_sequence) for m in metrics}
         all_new_results.append(

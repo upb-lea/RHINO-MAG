@@ -33,4 +33,5 @@ if __name__ == "__main__":
         tag="ablation-loss-function",
         loss_function="MSE",
         init_type="default",
+        feature_type="reduce",
     )

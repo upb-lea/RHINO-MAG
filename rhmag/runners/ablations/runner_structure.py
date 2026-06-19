@@ -4,7 +4,7 @@ from rhmag.runners.rnn_training_jax import train_model_jax
 from rhmag.data_management import FINAL_MATERIALS
 
 
-def run_ablation_experiment(gpu_id, tag, loss_function, init_type):
+def run_ablation_experiment(gpu_id, tag, loss_function, init_type, feature_type):
 
     disable_f64 = True
 
@@ -51,6 +51,13 @@ def run_ablation_experiment(gpu_id, tag, loss_function, init_type):
         elif init_type == "ignore_warmup":
             past_size = 1
 
+        if feature_type == "full":
+            disable_features = False
+        elif feature_type == "reduce":
+            disable_features = "reduce"
+        elif feature_type == "No_features":
+            disable_features = True
+
         ## Default setup
         with jax.default_device(default_device):
             train_model_jax(
@@ -68,7 +75,7 @@ def run_ablation_experiment(gpu_id, tag, loss_function, init_type):
                 tbptt_size_start=None,
                 dyn_avg_kernel_size=dyn_avg_kernel_size,
                 disable_f64=disable_f64,
-                disable_features="reduce",
+                disable_features=disable_features,
                 transform_H=False,
                 use_all_data=True,
             )
