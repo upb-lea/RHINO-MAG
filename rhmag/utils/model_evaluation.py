@@ -24,6 +24,7 @@ def get_exp_ids(
     model_type: str | list[str] | None = None,
     exp_name: str | None = None,
     legacy_mode: bool = False,
+    enforce_identical_exp_name: bool = True,
 ) -> list[str]:
     if legacy_mode:
         model_paths = list((DATA_ROOT / "legacy_model_dump").glob("*.eqx"))
@@ -71,8 +72,13 @@ def get_exp_ids(
         for exp_id in exp_ids:
             if len(exp_id.split("_")) < 3:
                 continue
-            elif exp_id.split("_")[2] == exp_name:
-                relevant_exp_ids.append(exp_id)
+            else:
+                if enforce_identical_exp_name:
+                    if exp_name == exp_id.split("_")[2]:
+                        relevant_exp_ids.append(exp_id)
+                else:
+                    if exp_name in exp_id.split("_")[2]:
+                        relevant_exp_ids.append(exp_id)
     else:
         raise ValueError("'exp_name' needs to be a string or None.")
 
