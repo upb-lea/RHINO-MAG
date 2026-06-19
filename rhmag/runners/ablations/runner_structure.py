@@ -50,6 +50,10 @@ def run_ablation_experiment(gpu_id, tag, loss_function, init_type, feature_type)
             pass
         elif init_type == "ignore_warmup":
             past_size = 1
+        elif init_type == "force_zero_start_warmup":
+            model_types = ["GRUZeroStart8"]
+        elif init_type == "force_zero_start_warmup_linear_out":
+            model_types = ["GRULinearOut8"]
 
         if feature_type == "full":
             disable_features = False

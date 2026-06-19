@@ -29,10 +29,26 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
 
+    # run_ablation_experiment(
+    #     gpu_id=args.gpu_id,
+    #     tag="ablation-init-zeros",
+    #     loss_function="adapted_RMS",
+    #     init_type="ignore_warmup",
+    #     feature_type="reduce",
+    # )
+
     run_ablation_experiment(
         gpu_id=args.gpu_id,
-        tag="ablation-init-zeros",
+        tag="ablation-actual-init-zeros",
         loss_function="adapted_RMS",
-        init_type="ignore_warmup",
+        init_type="force_zero_start_warmup",
+        feature_type="reduce",
+    )
+
+    run_ablation_experiment(
+        gpu_id=args.gpu_id,
+        tag="ablation-actual-init-zeros-lin-out",
+        loss_function="adapted_RMS",
+        init_type="force_zero_start_warmup_linear_out",
         feature_type="reduce",
     )

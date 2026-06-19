@@ -88,6 +88,26 @@ class GRU(eqx.Module):
         return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])
 
 
+class GRUwZeroInit(GRU):
+
+    def warmup_call(self, input: jax.Array, init_hidden: jax.Array, out_true: jax.Array) -> jax.Array:
+
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_t = inp
+            rnn_out = self.cell(inp_t, carry)
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+            out = rnn_out_o[..., 0]
+            return rnn_out, out
+
+        final_hidden, out = jax.lax.scan(f, hidden, input)
+        return out, final_hidden
+
+    def construct_init_hidden(self, out_true, batch_size):
+        return jnp.zeros((batch_size, self.hidden_size))
+
+
 class LSTM(eqx.Module):
     """Basic long short-term memory network (LSTM)."""
 
