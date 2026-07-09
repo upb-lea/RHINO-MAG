@@ -35,3 +35,19 @@ if __name__ == "__main__":
         init_type="default",
         feature_type="reduce",
     )
+
+    run_ablation_experiment(
+        gpu_id=args.gpu_id,
+        tag="ablation-loss-function-only-delta-B",
+        loss_function="adapted_RMS_only_delta_B",
+        init_type="default",
+        feature_type="reduce",
+    )
+
+    run_ablation_experiment(
+        gpu_id=args.gpu_id,
+        tag="ablation-loss-function-only-seq-weighting",
+        loss_function="adapted_RMS_only_seq_weighting",
+        init_type="default",
+        feature_type="reduce",
+    )

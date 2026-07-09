@@ -13,7 +13,13 @@ import jax.numpy as jnp
 import equinox as eqx
 import optax
 
-from rhmag.losses import MSE_loss, adapted_RMS_loss, ja_pinn_gru_loss
+from rhmag.losses import (
+    MSE_loss,
+    adapted_RMS_loss,
+    ja_pinn_gru_loss,
+    adapted_RMS_only_delta_B,
+    adapted_RMS_only_seq_weighting,
+)
 from rhmag.features.features_jax import compute_fe_single, db_dt, d2b_dt2
 from rhmag.data_management import MaterialSet, Normalizer
 
@@ -421,6 +427,10 @@ def setup_loss(loss_label: str) -> Callable:
             loss_function = MSE_loss
         case "adapted_RMS":
             loss_function = adapted_RMS_loss
+        case "adapted_RMS_only_delta_B":
+            loss_function = adapted_RMS_only_delta_B
+        case "adapted_RMS_only_seq_weighting":
+            loss_function = adapted_RMS_only_seq_weighting
         case "JA_pinn":
             loss_function = ja_pinn_gru_loss
         case _:
