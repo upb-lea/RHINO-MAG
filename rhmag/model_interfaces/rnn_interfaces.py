@@ -40,6 +40,7 @@ class RNNwInterface(ModelInterface):
         B_future: jax.Array,
         T: jax.Array,
         warmup: bool = True,
+        debug: bool = False,
     ) -> jax.Array:
         """Main function to be called for this model object.
 
@@ -67,11 +68,17 @@ class RNNwInterface(ModelInterface):
 
         B_past_norm = B_all_norm[:, : B_past.shape[1]]
         B_future_norm = B_all_norm[:, B_past.shape[1] :]
-
-        batch_H_pred = self.normalized_call(B_past_norm, H_past_norm, B_future_norm, T_norm, warmup)
-        batch_H_pred_denorm = jax.vmap(jax.vmap(self.normalizer.denormalize_H))(batch_H_pred)
-
-        return batch_H_pred_denorm
+        if debug:
+            batch_H_pred, warmup_out = self.normalized_call(
+                B_past_norm, H_past_norm, B_future_norm, T_norm, warmup, debug
+            )
+            batch_H_pred_denorm = jax.vmap(jax.vmap(self.normalizer.denormalize_H))(batch_H_pred)
+            warmup_out_denorm = jax.vmap(jax.vmap(self.normalizer.denormalize_H))(warmup_out)
+            return batch_H_pred_denorm, warmup_out_denorm
+        else:
+            batch_H_pred = self.normalized_call(B_past_norm, H_past_norm, B_future_norm, T_norm, warmup, debug)
+            batch_H_pred_denorm = jax.vmap(jax.vmap(self.normalizer.denormalize_H))(batch_H_pred)
+            return batch_H_pred_denorm
 
     def _prepare_model_input(
         self,
@@ -139,8 +146,8 @@ class RNNwInterface(ModelInterface):
             out_true=H_past_norm[:, 0, None],
             batch_size=H_past_norm.shape[0],
         )
-        _, final_hidden_warmup = jax.vmap(self.model.warmup_call)(batch_x, init_hidden, H_past_norm[:, 1:])
-        return final_hidden_warmup
+        warmup_out, final_hidden_warmup = jax.vmap(self.model.warmup_call)(batch_x, init_hidden, H_past_norm[:, 1:])
+        return warmup_out, final_hidden_warmup
 
     def normalized_call(
         self,
@@ -149,6 +156,7 @@ class RNNwInterface(ModelInterface):
         B_future_norm: jax.Array,
         T_norm: jax.Array,
         warmup: bool = True,
+        debug: bool = False,
     ) -> jax.Array:
         """Performs the warmup and the prediction on the normalized data.
 
@@ -167,8 +175,9 @@ class RNNwInterface(ModelInterface):
             The normalized field prediction as a jax.Array with shape (n_batches, future_sequence_length)
         """
         if warmup and H_past_norm.shape[1] > 1:
-            init_hidden = self._warmup(B_past_norm, H_past_norm, B_future_norm, T_norm)
+            warmup_out, init_hidden = self._warmup(B_past_norm, H_past_norm, B_future_norm, T_norm)
         else:
+            warmup_out = None
             init_hidden = self.model.construct_init_hidden(
                 out_true=H_past_norm[:, -1, None],
                 batch_size=H_past_norm.shape[0],
@@ -176,6 +185,10 @@ class RNNwInterface(ModelInterface):
 
         batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
         batch_H_pred = jax.vmap(self.model)(batch_x, init_hidden)
+
+        if debug:
+            return batch_H_pred[:, :, 0], warmup_out[:, :, 0]
+
         return batch_H_pred[:, :, 0]
 
 
