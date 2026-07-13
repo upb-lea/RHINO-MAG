@@ -54,6 +54,8 @@ def run_ablation_experiment(gpu_id, tag, loss_function, init_type, feature_type)
             model_types = ["GRUZeroStart8"]
         elif init_type == "force_zero_start_warmup_linear_out":
             model_types = ["GRULinearOut8"]
+        elif init_type == "H_as_input":
+            model_types = ["GRUwInputH8"]
 
         if feature_type == "full":
             disable_features = False

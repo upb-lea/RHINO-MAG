@@ -88,6 +88,46 @@ class GRU(eqx.Module):
         return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])
 
 
+class GRUwInputH(eqx.Module):
+    hidden_size: int = eqx.field(static=True)
+    cell: eqx.Module
+
+    def __init__(self, in_size: int, hidden_size: int, *, key):
+        self.hidden_size = hidden_size
+        self.cell = eqx.nn.GRUCell(in_size, hidden_size, key=key)
+
+    def __call__(self, input: jax.Array, init_hidden: jax.Array) -> jax.Array:
+
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_adapt = jnp.hstack([carry[0], inp])
+            rnn_out = self.cell(inp_adapt, carry)
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+            out = rnn_out_o[..., 0]
+            return rnn_out, out
+
+        _, out = jax.lax.scan(f, hidden, input)
+        return out
+
+    def warmup_call(self, input: jax.Array, init_hidden: jax.Array, out_true: jax.Array) -> jax.Array:
+        hidden = init_hidden
+
+        def f(carry, inp):
+            inp_t, out_true_t = inp
+            inp_t_adapt = jnp.hstack([out_true_t, inp_t])
+            rnn_out = self.cell(inp_t_adapt, carry)
+            rnn_out_o = jnp.atleast_2d(rnn_out)
+            out = rnn_out_o[..., 0]
+            return rnn_out, out
+
+        final_hidden, out = jax.lax.scan(f, hidden, (input, out_true))
+        return out, final_hidden
+
+    def construct_init_hidden(self, out_true: jax.Array, batch_size: int) -> jax.Array:
+        return jnp.hstack([out_true, jnp.zeros((batch_size, self.hidden_size - 1))])
+
+
 class GRUwZeroInit(GRU):
 
     def warmup_call(self, input: jax.Array, init_hidden: jax.Array, out_true: jax.Array) -> jax.Array:

@@ -34,6 +34,7 @@ from rhmag.models.NODE import HiddenStateNeuralEulerODE
 from rhmag.models.RNN import (
     GRU,
     GRUwLinearModel,
+    GRUwInputH,
     VectorfieldGRU,
     GRUaroundLinearModel,
     ExpGRU,
@@ -70,6 +71,7 @@ from rhmag.model_interfaces.rnn_interfaces import (
     VectorfieldGRUInterface,
     GRUaroundLinearModelInterface,
     GRUWithPINNInterface,
+    RNNwInterfaceInputH,
 )
 from rhmag.model_interfaces.ja_interfaces import (
     JAwInterface,
@@ -286,6 +288,15 @@ def setup_model(
             model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, out_size=1, key=model_key)
             model = GRUwLinear(**model_params_d)
             mdl_interface_cls = RNNwInterface
+        case label if label.startswith("GRUwInputH") and label[10:].isdigit():
+            hidden_size = int(label[10:])
+            model_params_d = dict(
+                hidden_size=hidden_size,
+                in_size=model_in_size + 1,  # H is also an input for this model type
+                key=model_key,
+            )
+            model = GRUwInputH(**model_params_d)
+            mdl_interface_cls = RNNwInterfaceInputH
         case label if label.startswith("LSTM") and label[4:].isdigit():
             hidden_size = int(label[4:])
             model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)

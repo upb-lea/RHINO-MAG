@@ -33,7 +33,7 @@ train_model_jax(
 or, e.g.:
 
 ```
-python mc2/runners/rnn_training_jax.py --material "A" --model_types "GRU4" "JA" --seeds 1 2 3 --exp_name "demonstration"
+python rhmag/runners/rnn_training_jax.py --material "A" --model_types "GRU4" "JA" --seeds 1 2 3 --exp_name "demonstration"
 
 """
 

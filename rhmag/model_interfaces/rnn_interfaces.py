@@ -12,7 +12,7 @@ import equinox as eqx
 
 from rhmag.model_interfaces.model_interface import ModelInterface
 from rhmag.models.NODE import HiddenStateNeuralEulerODE
-from rhmag.models.RNN import GRU, VectorfieldGRU, GRUwLinear, GRUwLinearModel, GRUaroundLinearModel, LSTM
+from rhmag.models.RNN import GRU, VectorfieldGRU, GRUwLinear, GRUwLinearModel, GRUaroundLinearModel, LSTM, GRUwInputH
 from rhmag.models.pinn import JAPinnWithGRU
 
 MU_0 = 4 * jnp.pi * 1e-7
@@ -531,6 +531,150 @@ class GRUwLinearModelInterface(ModelInterface):
         batch_H_pred_norm = eqx.filter_vmap(self.model)(gru_in, linear_in, init_hidden)
 
         return jnp.squeeze(batch_H_pred_norm)
+
+
+class RNNwInterfaceInputH(eqx.Module):
+    model: GRUwInputH
+    normalizer: Normalizer
+    featurize: Callable = eqx.field(static=True)
+
+    def __call__(
+        self,
+        B_past: jax.Array,
+        H_past: jax.Array,
+        B_future: jax.Array,
+        T: jax.Array,
+        warmup: bool = True,
+        debug: bool = False,
+    ) -> jax.Array:
+
+        B_all = jnp.concatenate([B_past, B_future], axis=1)
+        B_all_norm, H_past_norm, T_norm = self.normalizer.normalize(B_all, H_past, T)
+
+        B_past_norm = B_all_norm[:, : B_past.shape[1]]
+        B_future_norm = B_all_norm[:, B_past.shape[1] :]
+        if debug:
+            batch_H_pred, warmup_out = self.normalized_call(
+                B_past_norm, H_past_norm, B_future_norm, T_norm, warmup, debug
+            )
+            batch_H_pred_denorm = jax.vmap(jax.vmap(self.normalizer.denormalize_H))(batch_H_pred)
+            warmup_out_denorm = jax.vmap(jax.vmap(self.normalizer.denormalize_H))(warmup_out)
+            return batch_H_pred_denorm, warmup_out_denorm
+        else:
+            batch_H_pred = self.normalized_call(B_past_norm, H_past_norm, B_future_norm, T_norm, warmup, debug)
+            batch_H_pred_denorm = jax.vmap(jax.vmap(self.normalizer.denormalize_H))(batch_H_pred)
+            return batch_H_pred_denorm
+
+    def _prepare_model_input(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+    ) -> jax.Array:
+        """Prepare the input vector for the model based on the provided material data.
+
+        Args:
+            B_past_norm (jax.Array): The normalized flux density values from time step k0
+                to k1 with shape (n_batches, past_sequence_length)
+            H_past_norm (jax.Array): The normalized field values from time step k0 to k1
+                with shape (n_batches, past_sequence_length)
+            B_future_norm (jax.Array): The physical normalized flux density values from
+                time step k1 to k2 with shape (n_batches, future_sequence_length)
+            T_norm (float): The normalized temperature of the material with shape (n_batches,)
+
+        Returns:
+            batch_x (jax.Array): The input to the RNN with shape (n_batches, future_sequence_length, gru_in_size)
+
+        """
+        features = jax.vmap(self.featurize, in_axes=(0, 0, 0, 0))(B_past_norm, H_past_norm, B_future_norm, T_norm)
+        features_norm = jax.vmap(jax.vmap(self.normalizer.normalize_fe))(features)
+
+        T_norm_broad = jnp.broadcast_to(T_norm[:, None], B_future_norm.shape)
+
+        batch_x = jnp.concatenate([B_future_norm[..., None], T_norm_broad[..., None], features_norm], axis=-1)
+        return batch_x
+
+    def _warmup(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+    ) -> jax.Array:
+        """Warm-up the hidden state of the RNN based on the previous trajectory data.
+
+        The warmup process is essentially a prediction process where the first element of H_past
+        is used to initialize the first hidden state and where the first element of the hidden state
+        is corrected with the other true H_past value after each step.
+
+        NOTE: The future values of B are actually not used here but only passed for alignment with the
+        other interfaces.
+
+        Args:
+            B_past_norm (jax.Array): The normalized flux density values from time step k0
+                to k1 with shape (n_batches, past_sequence_length)
+            H_past_norm (jax.Array): The normalized field values from time step k0 to k1
+                with shape (n_batches, past_sequence_length)
+            B_future_norm (jax.Array): The physical normalized flux density values from
+                time step k1 to k2 with shape (n_batches, future_sequence_length)
+            T_norm (float): The normalized temperature of the material with shape (n_batches,)
+
+        Returns:
+            final_hidden_warmup (jax.Array): The warmed up hidden state.
+        """
+
+        batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_past_norm, T_norm)
+        batch_x = batch_x[:, 1:]
+
+        init_hidden = self.model.construct_init_hidden(
+            out_true=H_past_norm[:, 0, None],
+            batch_size=H_past_norm.shape[0],
+        )
+        warmup_out, final_hidden_warmup = jax.vmap(self.model.warmup_call)(batch_x, init_hidden, H_past_norm[:, 1:])
+        return warmup_out, final_hidden_warmup
+
+    def normalized_call(
+        self,
+        B_past_norm: jax.Array,
+        H_past_norm: jax.Array,
+        B_future_norm: jax.Array,
+        T_norm: jax.Array,
+        warmup: bool = True,
+        debug: bool = False,
+    ) -> jax.Array:
+        """Performs the warmup and the prediction on the normalized data.
+
+        Args:
+            B_past_norm (jax.Array): The normalized flux density values from time step k0
+                to k1 with shape (n_batches, past_sequence_length)
+            H_past_norm (jax.Array): The normalized field values from time step k0 to k1
+                with shape (n_batches, past_sequence_length)
+            B_future_norm (jax.Array): The physical normalized flux density values from
+                time step k1 to k2 with shape (n_batches, future_sequence_length)
+            T_norm (float): The normalized temperature of the material with shape (n_batches,)
+            warmup (bool): Whether warmup should be performed or only the initial state should
+                be constructed filled with the first true value and zeros.
+
+        Returns:
+            The normalized field prediction as a jax.Array with shape (n_batches, future_sequence_length)
+        """
+        if warmup and H_past_norm.shape[1] > 1:
+            warmup_out, init_hidden = self._warmup(B_past_norm, H_past_norm, B_future_norm, T_norm)
+        else:
+            warmup_out = None
+            init_hidden = self.model.construct_init_hidden(
+                out_true=H_past_norm[:, -1, None],
+                batch_size=H_past_norm.shape[0],
+            )
+
+        batch_x = self._prepare_model_input(B_past_norm, H_past_norm, B_future_norm, T_norm)
+        batch_H_pred = jax.vmap(self.model)(batch_x, init_hidden)
+
+        if debug:
+            return batch_H_pred[:, :, 0], warmup_out[:, :, 0]
+
+        return batch_H_pred[:, :, 0]
 
 
 class GRUaroundLinearModelInterface(GRUwLinearModelInterface):

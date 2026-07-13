@@ -37,18 +37,26 @@ if __name__ == "__main__":
     #     feature_type="reduce",
     # )
 
-    run_ablation_experiment(
-        gpu_id=args.gpu_id,
-        tag="ablation-actual-init-zeros",
-        loss_function="adapted_RMS",
-        init_type="force_zero_start_warmup",
-        feature_type="reduce",
-    )
+    # run_ablation_experiment(
+    #     gpu_id=args.gpu_id,
+    #     tag="ablation-actual-init-zeros",
+    #     loss_function="adapted_RMS",
+    #     init_type="force_zero_start_warmup",
+    #     feature_type="reduce",
+    # )
+
+    # run_ablation_experiment(
+    #     gpu_id=args.gpu_id,
+    #     tag="ablation-actual-init-zeros-lin-out",
+    #     loss_function="adapted_RMS",
+    #     init_type="force_zero_start_warmup_linear_out",
+    #     feature_type="reduce",
+    # )
 
     run_ablation_experiment(
         gpu_id=args.gpu_id,
-        tag="ablation-actual-init-zeros-lin-out",
+        tag="ablation-input-H",
         loss_function="adapted_RMS",
-        init_type="force_zero_start_warmup_linear_out",
+        init_type="H_as_input",
         feature_type="reduce",
     )
