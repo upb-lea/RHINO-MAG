@@ -102,6 +102,30 @@ def load_parameterization(exp_id):
     return params
 
 
+def get_params_from_file(filename):
+    filename = pathlib.Path(filename)
+
+    # append the '.eqx' suffix if it is missing
+    if filename.suffix == "":
+        filename = filename.with_name(f"{filename.name}.eqx")
+
+    # check for the filename in the 'MODEL_DUMP_ROOT' if it is not already an existing file
+    if filename.is_file():
+        filename = filename
+    else:
+        search_path = MODEL_DUMP_ROOT / filename
+        if search_path.is_file():
+            print(f"Found model file at '{search_path}'. Loading model..")
+            filename = search_path
+        else:
+            raise ValueError(f"No model could be found for the specified filepath: '{filename}'")
+
+    with open(filename, "rb") as f:
+        params = json.loads(f.readline().decode())
+
+    return params
+
+
 def reconstruct_model_from_file(filename: pathlib.Path) -> ModelInterface:
     """Reconstruct a model from its file stored on disk.
 

@@ -533,7 +533,7 @@ class GRUwLinearModelInterface(ModelInterface):
         return jnp.squeeze(batch_H_pred_norm)
 
 
-class RNNwInterfaceInputH(eqx.Module):
+class RNNwInterfaceInputH(ModelInterface):
     model: GRUwInputH
     normalizer: Normalizer
     featurize: Callable = eqx.field(static=True)
