@@ -13,7 +13,13 @@ import jax.numpy as jnp
 import equinox as eqx
 import optax
 
-from rhmag.losses import MSE_loss, adapted_RMS_loss, ja_pinn_gru_loss
+from rhmag.losses import (
+    MSE_loss,
+    adapted_RMS_loss,
+    ja_pinn_gru_loss,
+    adapted_RMS_only_delta_B,
+    adapted_RMS_only_seq_weighting,
+)
 from rhmag.features.features_jax import compute_fe_single, db_dt, d2b_dt2
 from rhmag.data_management import MaterialSet, Normalizer
 
@@ -25,7 +31,17 @@ from rhmag.model_interfaces.rnn_interfaces import (
     RNNwInterface,
 )
 from rhmag.models.NODE import HiddenStateNeuralEulerODE
-from rhmag.models.RNN import GRU, GRUwLinearModel, VectorfieldGRU, GRUaroundLinearModel, ExpGRU, LSTM, GRUwLinear
+from rhmag.models.RNN import (
+    GRU,
+    GRUwLinearModel,
+    GRUwInputH,
+    VectorfieldGRU,
+    GRUaroundLinearModel,
+    ExpGRU,
+    LSTM,
+    GRUwLinear,
+    GRUwZeroInit,
+)
 from rhmag.models.jiles_atherton import (
     JAStatic,
     JAStatic2,
@@ -55,6 +71,7 @@ from rhmag.model_interfaces.rnn_interfaces import (
     VectorfieldGRUInterface,
     GRUaroundLinearModelInterface,
     GRUWithPINNInterface,
+    RNNwInterfaceInputH,
 )
 from rhmag.model_interfaces.ja_interfaces import (
     JAwInterface,
@@ -261,11 +278,25 @@ def setup_model(
             model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
             model = GRU(**model_params_d)
             mdl_interface_cls = RNNwInterface
+        case label if label.startswith("GRUZeroStart") and label[12:].isdigit():
+            hidden_size = int(label[12:])
+            model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
+            model = GRUwZeroInit(**model_params_d)
+            mdl_interface_cls = RNNwInterface
         case label if label.startswith("GRULinearOut") and label[12:].isdigit():
             hidden_size = int(label[12:])
             model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, out_size=1, key=model_key)
             model = GRUwLinear(**model_params_d)
             mdl_interface_cls = RNNwInterface
+        case label if label.startswith("GRUwInputH") and label[10:].isdigit():
+            hidden_size = int(label[10:])
+            model_params_d = dict(
+                hidden_size=hidden_size,
+                in_size=model_in_size + 1,  # H is also an input for this model type
+                key=model_key,
+            )
+            model = GRUwInputH(**model_params_d)
+            mdl_interface_cls = RNNwInterfaceInputH
         case label if label.startswith("LSTM") and label[4:].isdigit():
             hidden_size = int(label[4:])
             model_params_d = dict(hidden_size=hidden_size, in_size=model_in_size, key=model_key)
@@ -407,6 +438,10 @@ def setup_loss(loss_label: str) -> Callable:
             loss_function = MSE_loss
         case "adapted_RMS":
             loss_function = adapted_RMS_loss
+        case "adapted_RMS_only_delta_B":
+            loss_function = adapted_RMS_only_delta_B
+        case "adapted_RMS_only_seq_weighting":
+            loss_function = adapted_RMS_only_seq_weighting
         case "JA_pinn":
             loss_function = ja_pinn_gru_loss
         case _:

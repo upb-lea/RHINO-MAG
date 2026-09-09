@@ -73,7 +73,7 @@ if __name__ == "__main__":
 
     ## Default setup
     train_model_jax(
-        material_name=args.material,
+        material_names=[args.material],
         model_types=model_types,
         seeds=[12, 53, 66, 105, 6],
         exp_name=f"final-reduced-features{accuracy_tag}",

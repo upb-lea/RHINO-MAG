@@ -24,6 +24,7 @@ def get_exp_ids(
     model_type: str | list[str] | None = None,
     exp_name: str | None = None,
     legacy_mode: bool = False,
+    enforce_identical_exp_name: bool = True,
 ) -> list[str]:
     if legacy_mode:
         model_paths = list((DATA_ROOT / "legacy_model_dump").glob("*.eqx"))
@@ -71,8 +72,13 @@ def get_exp_ids(
         for exp_id in exp_ids:
             if len(exp_id.split("_")) < 3:
                 continue
-            elif exp_id.split("_")[2] == exp_name:
-                relevant_exp_ids.append(exp_id)
+            else:
+                if enforce_identical_exp_name:
+                    if exp_name == exp_id.split("_")[2]:
+                        relevant_exp_ids.append(exp_id)
+                else:
+                    if exp_name in exp_id.split("_")[2]:
+                        relevant_exp_ids.append(exp_id)
     else:
         raise ValueError("'exp_name' needs to be a string or None.")
 
@@ -93,6 +99,30 @@ def load_parameterization(exp_id):
     experiment_path = EXPERIMENT_LOGS_ROOT / "jax_experiments"
     with open(experiment_path / f"{exp_id}.json", "r") as f:
         params = json.load(f)["params"]
+    return params
+
+
+def get_params_from_file(filename):
+    filename = pathlib.Path(filename)
+
+    # append the '.eqx' suffix if it is missing
+    if filename.suffix == "":
+        filename = filename.with_name(f"{filename.name}.eqx")
+
+    # check for the filename in the 'MODEL_DUMP_ROOT' if it is not already an existing file
+    if filename.is_file():
+        filename = filename
+    else:
+        search_path = MODEL_DUMP_ROOT / filename
+        if search_path.is_file():
+            print(f"Found model file at '{search_path}'. Loading model..")
+            filename = search_path
+        else:
+            raise ValueError(f"No model could be found for the specified filepath: '{filename}'")
+
+    with open(filename, "rb") as f:
+        params = json.loads(f.readline().decode())
+
     return params
 
 

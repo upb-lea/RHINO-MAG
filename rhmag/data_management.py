@@ -739,7 +739,6 @@ def load_data_into_pandas_based_on_path(
 ) -> dict:
     mat_folder = raw_path / material
     assert mat_folder.is_dir(), f"Folder does not exist: {mat_folder}"
-    assert mat_folder.is_dir(), f"Folder does not exist: {mat_folder}"
     if number is None:
         # load all sequences
         data_ret_d = {}
