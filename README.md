@@ -14,15 +14,19 @@ Official site for the second magnet challenge https://github.com/minjiechen/magn
 
 ## Citation
 
-If you found this useful in your research please cite the [corresponding preprint](https://arxiv.org/pdf/2603.29745), e.g., as:
+If you found this useful in your research please cite the [corresponding early access publication](https://ieeexplore.ieee.org/abstract/document/11686288), e.g., as:
 
 ```
-@article{arXiv:2603.29745
-    author    = {Vater, Hendrik and Schweins, Oliver and H{\"o}lsch, Lukas and Kirchg{\"a}ssner, Wilhelm and Piepenbrock, Till and Wallscheid, Oliver},
-    title     = {RHINO-MAG: Recursive H-Field Inference based on Observed Magnetic Flux under Dynamic Excitation},
-    journal   = {arXiv preprint arXiv:2603.29745},
-    year      = {2026},
-    doi       = {10.48550/arXiv.2603.29745}, 
+@article{TPEL.2026.3733311,
+  author={Vater, Hendrik and Schweins, Oliver and Hölsch, Lukas and Kirchgässner, Wilhelm and Piepenbrock, Till and Wallscheid, Oliver},
+  journal={IEEE Transactions on Power Electronics}, 
+  title={RHINO-MAG: Recursive H-Field Inference Based on Observed Magnetic Flux Density Under Dynamic Excitation}, 
+  year={2026},
+  volume={},
+  number={},
+  pages={1-16},
+  keywords={Modeling;Materials;Core loss;Training;Testing;Magnetization;Hysteresis;Timing;Sequences;Sequential analysis;Dynamic system modeling;machine learning;power magnetics},
+  doi={10.1109/TPEL.2026.3733311}
 }
 ```
 Within, you will also find detailed information about most of the supported model types and a comparison of their accuracy.
